@@ -1,0 +1,269 @@
+"""Serviço central: estado da biblioteca em memória + operações usadas pela interface."""
+from __future__ import annotations
+
+import os
+import traceback
+
+from PySide6.QtCore import QObject, Signal
+
+from . import images, player
+from .config import Settings
+from .db import Database
+from .library import sync_library
+from .metadata_service import find_candidates, process_movie
+from .tmdb import TMDBClient
+from .movie_fields import decorate
+from .workers import FuncWorker, UpdateWorker
+
+
+class LibraryService(QObject):
+    library_changed = Signal()          # lista, coleções ou ordem mudaram
+    movie_changed = Signal(int)         # um filme mudou (metadados ou marcações)
+    progress = Signal(int, int, str)    # feitos, total, título
+    busy_changed = Signal(bool, str)    # ocupado?, descrição
+    scan_finished = Signal(int, int)    # adicionados, removidos
+    update_finished = Signal(dict)      # resumo da atualização
+    message = Signal(str)               # aviso curto para a barra de status
+    error = Signal(str)
+
+    def __init__(self, db: Database, settings: Settings, parent=None):
+        super().__init__(parent)
+        self.db, self.settings = db, settings
+        self.movies: list[dict] = []
+        self.by_id: dict[int, dict] = {}
+        self.collections: list[dict] = []
+        self.membership: dict[int, set[int]] = {}
+        self._update_worker: UpdateWorker | None = None
+        self._jobs: set[FuncWorker] = set()
+        self._scanning = False
+
+    # -- estado ----------------------------------------------------------------
+    @property
+    def has_key(self) -> bool:
+        return bool(self.settings.get("tmdb_api_key").strip())
+
+    @property
+    def language(self) -> str:
+        return self.settings.get("language")
+
+    @property
+    def updating(self) -> bool:
+        return self._update_worker is not None
+
+    def reload(self) -> None:
+        self.movies = [decorate(m) for m in self.db.all_movies()]
+        self.by_id = {m["id"]: m for m in self.movies}
+        self.collections = self.db.all_collections()
+        self.membership = self.db.membership()
+
+    def _refresh_movie(self, movie_id: int) -> None:
+        fresh = self.db.get_movie(movie_id)
+        current = self.by_id.get(movie_id)
+        if fresh is None or current is None:
+            return
+        current.clear()
+        current.update(decorate(fresh))   # atualiza no lugar: o modelo da grade vê a mudança
+        self.movie_changed.emit(movie_id)
+
+    def _client(self) -> TMDBClient:
+        return TMDBClient(self.settings.get("tmdb_api_key"), self.language)
+
+    # -- execução assíncrona -----------------------------------------------------
+    def run_async(self, fn, on_result=None, on_error=None) -> None:
+        worker = FuncWorker(fn, on_result, on_error, self)
+        self._jobs.add(worker)
+        worker.done.connect(self._dispatch)
+        worker.finished.connect(lambda w=worker: self._jobs.discard(w))
+        worker.start()
+
+    def _dispatch(self, payload) -> None:
+        callback, value = payload
+        if callback is None:
+            return
+        try:
+            callback(value)
+        except RuntimeError:
+            pass  # widget de destino já foi destruído
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+
+    def _report(self, exc: Exception) -> None:
+        self.error.emit(str(exc))
+
+    # -- varredura ---------------------------------------------------------------
+    def start_scan(self) -> None:
+        root = self.settings.get("library_path")
+        if not root:
+            return
+        if not os.path.isdir(root):
+            self.error.emit(f"A pasta de filmes não está acessível:\n{root}")
+            return
+        if self._scanning:
+            return
+        self._scanning = True
+        self.busy_changed.emit(True, "Procurando filmes na pasta…")
+        self.run_async(lambda: sync_library(self.db, root), self._on_scan_done, self._on_scan_error)
+
+    def _on_scan_done(self, result) -> None:
+        added, removed = result
+        for movie_id in removed:
+            images.delete_images(movie_id)
+        self._scanning = False
+        self.reload()
+        self.library_changed.emit()
+        self.scan_finished.emit(len(added), len(removed))
+        if not self.updating:
+            self.busy_changed.emit(False, "")
+        if self.has_key and any(m["status"] == "pending" for m in self.movies):
+            self.start_update("pending")
+
+    def _on_scan_error(self, exc: Exception) -> None:
+        self._scanning = False
+        self.busy_changed.emit(False, "")
+        self._report(exc)
+
+    # -- atualização de metadados ----------------------------------------------------
+    def start_update(self, mode: str = "pending", ids: list[int] | None = None) -> bool:
+        """mode: 'pending' (só novos), 'all' (forçar todos) ou 'ids'."""
+        if self.updating:
+            self.message.emit("Já existe uma atualização em andamento.")
+            return False
+        if not self.has_key:
+            self.error.emit("Configure a chave da API do TMDB em Configurações para baixar os metadados.")
+            return False
+        if mode == "pending":
+            targets = [m for m in self.movies if m["status"] == "pending"]
+        elif mode == "ids":
+            targets = [self.by_id[i] for i in (ids or []) if i in self.by_id]
+        else:
+            targets = list(self.movies)
+        if not targets:
+            self.message.emit("Nenhum filme para atualizar.")
+            return False
+
+        # Filmes já identificados mantêm a correspondência (inclusive correções manuais).
+        forced = {m["id"]: m["tmdb_id"] for m in targets
+                  if m["status"] == "matched" and m["tmdb_id"]}
+        snapshot = [{k: m[k] for k in ("id", "clean_title", "year_guess", "tmdb_id", "status")}
+                    for m in targets]
+        worker = UpdateWorker(self.db, self.settings.get("tmdb_api_key"), self.language,
+                              snapshot, forced, self)
+        worker.progress.connect(self.progress)
+        worker.movie_done.connect(self._on_movie_done)
+        worker.finished_all.connect(self._on_update_done)
+        worker.failed.connect(self.error)
+        worker.finished.connect(self._on_worker_finished)
+        self._update_worker = worker
+        self.busy_changed.emit(True, "Buscando metadados…")
+        self.progress.emit(0, len(snapshot), "")
+        worker.start()
+        return True
+
+    def cancel_update(self) -> None:
+        if self._update_worker:
+            self._update_worker.cancel()
+
+    def _on_movie_done(self, movie_id: int, _outcome: str) -> None:
+        self._refresh_movie(movie_id)
+
+    def _on_update_done(self, summary: dict) -> None:
+        self.library_changed.emit()
+        self.update_finished.emit(summary)
+
+    def _on_worker_finished(self) -> None:
+        worker, self._update_worker = self._update_worker, None
+        if worker:
+            worker.deleteLater()
+        self.busy_changed.emit(False, "")
+
+    # -- ações sobre um filme ------------------------------------------------------------
+    def apply_match(self, movie_id: int, tmdb_id: int | None = None) -> None:
+        """Define (ou atualiza) a correspondência de um filme com o TMDB."""
+        if not self.has_key:
+            self.error.emit("Configure a chave da API do TMDB em Configurações.")
+            return
+        movie = self.by_id.get(movie_id)
+        if movie is None:
+            return
+        if tmdb_id is None and movie["status"] == "matched":
+            tmdb_id = movie["tmdb_id"]
+        snapshot = {k: movie[k] for k in ("id", "clean_title", "year_guess", "tmdb_id", "status")}
+
+        def job():
+            return process_movie(self.db, self._client(), snapshot, tmdb_id)
+
+        def done(outcome):
+            self._refresh_movie(movie_id)
+            self.library_changed.emit()
+            if outcome != "matched":
+                self.message.emit("Nenhuma correspondência segura; use “Corrigir correspondência”.")
+
+        self.message.emit(f"Atualizando “{movie['display_title']}”…")
+        self.run_async(job, done, self._report)
+
+    def search_tmdb(self, query: str, year: int | None, on_result, on_error) -> None:
+        self.run_async(lambda: find_candidates(self._client(), query, year), on_result, on_error)
+
+    def test_key(self, key: str, on_result, on_error) -> None:
+        def job():
+            TMDBClient(key, self.language).test_key()
+            return True
+        self.run_async(job, on_result, on_error)
+
+    def set_flag(self, movie_ids: list[int], column: str, value: bool) -> None:
+        self.db.set_flag_many(movie_ids, column, value)
+        for movie_id in movie_ids:
+            if movie_id in self.by_id:
+                self.by_id[movie_id][column] = value
+                self.movie_changed.emit(movie_id)
+
+    def play(self, movie_id: int) -> None:
+        player.play(self.by_id[movie_id]["path"], self.settings.get("player_command"))
+
+    def show_in_folder(self, movie_id: int) -> None:
+        player.show_in_folder(self.by_id[movie_id]["path"])
+
+    # -- coleções ------------------------------------------------------------------------
+    def create_collection(self, name: str) -> int:
+        name = name.strip()
+        if not name:
+            raise ValueError("Informe um nome para a coleção.")
+        collection_id = self.db.create_collection(name)
+        self._reload_collections()
+        return collection_id
+
+    def rename_collection(self, collection_id: int, name: str) -> None:
+        name = name.strip()
+        if not name:
+            raise ValueError("Informe um nome para a coleção.")
+        self.db.rename_collection(collection_id, name)
+        self._reload_collections()
+
+    def delete_collection(self, collection_id: int) -> None:
+        self.db.delete_collection(collection_id)
+        self._reload_collections()
+
+    def collection_name(self, collection_id: int) -> str:
+        return next((c["name"] for c in self.collections if c["id"] == collection_id), "")
+
+    def set_in_collection(self, collection_id: int, movie_ids: list[int], present: bool) -> None:
+        self.db.set_membership(collection_id, movie_ids, present)
+        members = self.membership.setdefault(collection_id, set())
+        if present:
+            members.update(movie_ids)
+        else:
+            members.difference_update(movie_ids)
+        self.library_changed.emit()
+
+    def _reload_collections(self) -> None:
+        self.collections = self.db.all_collections()
+        self.membership = self.db.membership()
+        self.library_changed.emit()
+
+    # -- encerramento ----------------------------------------------------------------------
+    def shutdown(self) -> None:
+        if self._update_worker:
+            self._update_worker.cancel()
+            self._update_worker.wait(5000)
+        for job in list(self._jobs):
+            job.wait(3000)
