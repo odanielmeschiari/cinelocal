@@ -1,9 +1,10 @@
 """Janela com os metadados do filme (capa, sinopse, nota, elenco...) e ações."""
 from __future__ import annotations
 
-from PySide6.QtCore import QUrl, Qt
-from PySide6.QtGui import QColor, QDesktopServices, QLinearGradient, QPainter, QPixmap
-from PySide6.QtWidgets import (QDialog, QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox,
+from PySide6.QtCore import QUrl, Qt, Signal
+from PySide6.QtGui import (QColor, QDesktopServices, QKeySequence, QLinearGradient, QPainter,
+                           QPixmap, QShortcut)
+from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox,
                                QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
 from .. import images
@@ -18,7 +19,9 @@ POSTER_SIZE = (240, 360)
 BACKDROP_HEIGHT = 380
 
 
-class MovieDialog(QDialog):
+class MovieDialog(QWidget):
+    back_requested = Signal()
+
     def __init__(self, service: LibraryService, movie_id: int, parent=None):
         super().__init__(parent)
         self.service = service
@@ -27,18 +30,24 @@ class MovieDialog(QDialog):
         self._backdrop_scaled: QPixmap | None = None
         self._heads: dict[QLabel, QLabel] = {}
         self.setWindowTitle(service.by_id[movie_id]["display_title"])
-        self.setModal(True)
-        self.resize(1000, 660)
-        self.setMinimumSize(860, 560)
         self._build()
+        QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self.back_requested.emit)
+        QShortcut(QKeySequence.Back, self, activated=self.back_requested.emit)
         self._populate()
         service.movie_changed.connect(self._on_movie_changed)
 
     # -- construção ------------------------------------------------------------------
     def _build(self) -> None:
-        root = QHBoxLayout(self)
-        root.setContentsMargins(34, 34, 34, 30)
+        page = QVBoxLayout(self)
+        page.setContentsMargins(34, 20, 34, 30)
+        page.setSpacing(14)
+        self.back_btn = QPushButton("←  Voltar")
+        self.back_btn.setToolTip("Voltar à lista (Esc)")
+        self.back_btn.clicked.connect(self.back_requested.emit)
+        page.addWidget(self.back_btn, 0, Qt.AlignLeft)
+        root = QHBoxLayout()
         root.setSpacing(30)
+        page.addLayout(root, 1)
 
         self.poster = QLabel()
         self.poster.setFixedSize(*POSTER_SIZE)
@@ -137,7 +146,7 @@ class MovieDialog(QDialog):
     def _populate(self) -> None:
         m = self.service.by_id.get(self.movie_id)
         if m is None:
-            self.reject()
+            self.back_requested.emit()
             return
         self.setWindowTitle(m["display_title"])
         self.title.setText(m["display_title"])

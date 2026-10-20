@@ -16,6 +16,13 @@ CONFIG_DIR = _xdg("XDG_CONFIG_HOME", ".config") / APP_ID
 DATA_DIR = _xdg("XDG_DATA_HOME", ".local/share") / APP_ID
 CACHE_DIR = _xdg("XDG_CACHE_HOME", ".cache") / APP_ID
 
+if os.name == "nt":  # Windows: AppData em vez de ~/.config, ~/.local/share e ~/.cache
+    _roaming = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    _local = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    CONFIG_DIR = _roaming / APP_ID
+    DATA_DIR = _local / APP_ID
+    CACHE_DIR = _local / APP_ID / "cache"
+
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
 DB_FILE = DATA_DIR / "library.db"
 

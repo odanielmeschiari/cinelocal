@@ -1,6 +1,6 @@
 # CineLocal
 
-Navegador de filmes locais para Linux, com visual estilo Netflix em preto e azul (modo noturno).
+Navegador de filmes locais para Linux e Windows, com visual estilo Netflix em preto e azul (modo noturno).
 Rápido e offline: a internet só é usada para baixar capas e informações de filmes novos
 (ou quando você força uma atualização).
 
@@ -15,6 +15,18 @@ O script instala as bibliotecas do sistema que faltarem (pede a senha de adminis
 cria um ambiente virtual com o PySide6 e adiciona o **CineLocal** ao menu de aplicativos.
 Para só testar sem instalar: `./run.sh`. Para remover: `./uninstall.sh` (`--purge` apaga também os dados).
 
+## Instalação (Windows 10/11)
+
+1. Instale o **Python 3.10 a 3.12** em [python.org/downloads/windows](https://www.python.org/downloads/windows/),
+   marcando **"Add python.exe to PATH"** no instalador.
+2. Extraia o zip do CineLocal e dê dois cliques em **`install.bat`** (ou rode `install.bat` no Prompt de Comando,
+   dentro da pasta extraída).
+3. Abra o **CineLocal** pelo Menu Iniciar.
+
+O script copia o app para `%LOCALAPPDATA%\Programs\cinelocal`, cria um ambiente virtual com o PySide6
+(precisa de internet, ~200 MB) e adiciona o atalho no Menu Iniciar. Não precisa de administrador.
+Para só testar sem instalar: `run.bat`. Para remover: `uninstall.bat` (`--purge` apaga também os dados).
+
 ## Primeiros passos
 
 1. Abra o app e clique em **Selecionar pasta de filmes** (a pasta é lida recursivamente).
@@ -25,14 +37,15 @@ Para só testar sem instalar: `./run.sh`. Para remover: `./uninstall.sh` (`--pur
 
 ## Uso
 
-- **Grade**: clique numa capa para abrir os detalhes. `Ctrl`/`Shift`+clique seleciona vários filmes;
+- **Grade**: clique numa capa para abrir os detalhes (na mesma janela; `←  Voltar`, `Esc` ou `Alt`+`←` voltam à lista
+  exatamente onde você estava). `Ctrl`/`Shift`+clique seleciona vários filmes;
   clique direito abre o menu (favoritar, assistido, coleções, atualizar, corrigir correspondência).
 - **Busca instantânea** (`Ctrl+F`) por título, ator, diretor ou gênero; **ordenação** por título, ano,
   nota ou adicionados recentemente.
 - **Barra lateral**: Todos, Favoritos, Assistidos/Não assistidos, **Coleções** (um filme pode estar em várias),
   Gêneros e Anos (décadas). Clique direito numa coleção para renomear ou excluir.
-- **Assistir** abre o filme no player padrão do sistema (`xdg-open`); em Configurações dá para escolher
-  outro (ex.: `mpv --fs`).
+- **Assistir** abre o filme no player padrão do sistema (`xdg-open` no Linux, o programa associado no Windows);
+  em Configurações dá para escolher outro (ex.: `mpv --fs`).
 - **Reescanear** (`F5`): roda ao abrir o app; detecta filmes novos e remove os que sumiram do disco.
   Arquivos movidos para outra subpasta mantêm metadados, coleções e marcações.
 - **Metadados ▾**: buscar pendentes, forçar atualização de todos (mantém correspondências confirmadas)
@@ -48,6 +61,9 @@ Para só testar sem instalar: `./run.sh`. Para remover: `./uninstall.sh` (`--pur
 | Biblioteca, coleções, marcações (SQLite) | `~/.local/share/cinelocal/library.db` |
 | Capas, miniaturas e fundos | `~/.cache/cinelocal/images/` |
 | Configurações (inclui a chave do TMDB) | `~/.config/cinelocal/settings.json` (permissão 600) |
+
+No Windows: biblioteca em `%LOCALAPPDATA%\cinelocal\library.db`, capas em `%LOCALAPPDATA%\cinelocal\cache\images\`
+e configurações em `%APPDATA%\cinelocal\settings.json`.
 
 Seus arquivos de vídeo nunca são modificados.
 

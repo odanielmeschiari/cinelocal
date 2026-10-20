@@ -25,6 +25,9 @@ def _icon() -> QIcon:
 
 def run() -> int:
     ensure_dirs()
+    if sys.platform == "win32":  # ícone próprio na barra de tarefas (em vez do do Python)
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setDesktopFileName(APP_ID)

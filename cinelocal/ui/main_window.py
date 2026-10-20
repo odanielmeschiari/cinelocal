@@ -1,7 +1,8 @@
 """Janela principal: barra lateral + busca/ordenação + grade de capas."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import (QEasingCurve, QParallelAnimationGroup, QPoint,
+                            QPropertyAnimation, Qt, QTimer)
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
                                QLineEdit, QMainWindow, QMenu, QMessageBox, QProgressBar,
@@ -25,6 +26,8 @@ class MainWindow(QMainWindow):
         self.flt: filters.Filter = ("all", None)
         self.query = ""
         self.sort_id = service.settings.get("sort_id")
+        self._detail: MovieDialog | None = None
+        self._sliding = False
         self.setWindowTitle("CineLocal")
         self.resize(1380, 860)
         self.setMinimumSize(920, 600)
@@ -326,7 +329,61 @@ class MainWindow(QMainWindow):
 
     # ---------------------------------------------------------------------- ações --
     def open_movie(self, movie_id: int) -> None:
-        MovieDialog(self.service, movie_id, self).exec()
+        if self._sliding:
+            return
+        self._discard_detail()
+        page = MovieDialog(self.service, movie_id, self)
+        page.back_requested.connect(self.close_movie)
+        self._detail = page
+        self.stack.addWidget(page)
+        self._slide_to(page, forward=True)
+
+    def close_movie(self) -> None:
+        if self._sliding or self._detail is None or self.stack.currentWidget() is not self._detail:
+            return
+
+        def done() -> None:
+            self._discard_detail()
+            self.grid.setFocus()
+
+        self._slide_to(self.stack.widget(1), forward=False, done=done)
+
+    def _discard_detail(self) -> None:
+        if self._detail is not None:
+            self.stack.removeWidget(self._detail)
+            self._detail.deleteLater()
+            self._detail = None
+
+    def _slide_to(self, target: QWidget, forward: bool, done=None) -> None:
+        """Troca a página do `stack` deslizando para o lado (a lista continua viva por baixo,
+        então rolagem, busca, filtro e seleção são preservados)."""
+        current = self.stack.currentWidget()
+        width, height = self.stack.width(), self.stack.height()
+        sign = 1 if forward else -1
+        target.setGeometry(sign * width, 0, width, height)
+        target.show()
+        target.raise_()
+        group = QParallelAnimationGroup()
+        for widget, start, end in ((current, 0, -sign * width), (target, sign * width, 0)):
+            anim = QPropertyAnimation(widget, b"pos")
+            anim.setStartValue(QPoint(start, 0))
+            anim.setEndValue(QPoint(end, 0))
+            anim.setDuration(280)
+            anim.setEasingCurve(QEasingCurve.OutCubic)
+            group.addAnimation(anim)
+
+        def finish() -> None:
+            self.stack.setCurrentWidget(target)
+            for widget in (current, target):
+                widget.setGeometry(self.stack.rect())
+            self._sliding = False
+            if done:
+                done()
+
+        group.finished.connect(finish)
+        self._anim = group
+        self._sliding = True
+        group.start()
 
     def open_settings(self, focus_key: bool = False, intro: str = "") -> None:
         s = self.service.settings
