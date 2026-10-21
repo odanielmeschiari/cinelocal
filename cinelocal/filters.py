@@ -25,10 +25,12 @@ def decade_of(movie: dict) -> int | None:
     return (year // 10) * 10 if year else None
 
 
-def matches(movie: dict, flt: Filter, membership: dict[int, set[int]]) -> bool:
+def matches(movie: dict, flt: Filter, membership: dict[int, set[int]], progress=None) -> bool:
     kind, value = flt
     if kind == "all":
         return True
+    if kind == "continue":   # começou a assistir e não terminou
+        return bool(progress and progress(movie) > 0)
     if kind == "favorites":
         return movie["favorite"]
     if kind == "watchlist":
@@ -47,11 +49,11 @@ def matches(movie: dict, flt: Filter, membership: dict[int, set[int]]) -> bool:
 
 
 def filter_movies(movies: list[dict], flt: Filter, membership: dict[int, set[int]],
-                  query: str = "") -> list[dict]:
+                  query: str = "", progress=None) -> list[dict]:
     terms = normalize_text(query).split()
     result = []
     for m in movies:
-        if not matches(m, flt, membership):
+        if not matches(m, flt, membership, progress):
             continue
         if terms and not all(t in m["search_text"] for t in terms):
             continue
@@ -84,7 +86,7 @@ def sort_movies(movies: list[dict], sort_id: str) -> list[dict]:
     return present + missing
 
 
-def sidebar_counts(movies: list[dict]) -> dict:
+def sidebar_counts(movies: list[dict], progress=None) -> dict:
     genres: Counter = Counter()
     decades: Counter = Counter()
     for m in movies:
@@ -94,6 +96,7 @@ def sidebar_counts(movies: list[dict]) -> dict:
             decades[d] += 1
     return {
         "all": len(movies),
+        "continue": sum(1 for m in movies if progress and progress(m) > 0),
         "favorites": sum(m["favorite"] for m in movies),
         "watchlist": sum(m["watchlist"] for m in movies),
         "watched": sum(m["watched"] for m in movies),

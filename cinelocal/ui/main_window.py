@@ -184,6 +184,7 @@ class MainWindow(QMainWindow):
         self.sort_combo.currentIndexChanged.connect(self._on_sort)
         self.grid.movie_opened.connect(self.open_movie)
         self.grid.context_requested.connect(self._context_menu)
+        self.grid.itemDelegate().progress_of = s.progress_of
 
         s.library_changed.connect(self._on_library_changed)
         s.movie_changed.connect(self._on_movie_changed)
@@ -231,8 +232,11 @@ class MainWindow(QMainWindow):
     def refresh_view(self) -> None:
         bar = self.grid.verticalScrollBar()
         position = bar.value()
-        visible = filters.filter_movies(self.service.movies, self.flt, self.service.membership, self.query)
+        visible = filters.filter_movies(self.service.movies, self.flt, self.service.membership,
+                                        self.query, self.service.progress_of)
         visible = filters.sort_movies(visible, self.sort_id)
+        if self.flt[0] == "continue":   # o último que você assistiu vem primeiro
+            visible.sort(key=lambda m: -self.service.resume_info(m["path"])[2])
         self.grid.movie_model.set_movies(visible)
         bar.setValue(position)
 
@@ -256,7 +260,7 @@ class MainWindow(QMainWindow):
     def _heading_text(self) -> str:
         kind, value = self.flt
         names = {"all": "Todos os filmes", "favorites": "Favoritos", "watchlist": "Watchlist",
-                 "review": "Precisam de revisão"}
+                 "review": "Precisam de revisão", "continue": "Continuar assistindo"}
         if kind in names:
             return names[kind]
         if kind == "watched":
@@ -268,7 +272,7 @@ class MainWindow(QMainWindow):
         return str(value)
 
     def _rebuild_sidebar(self) -> None:
-        counts = filters.sidebar_counts(self.service.movies)
+        counts = filters.sidebar_counts(self.service.movies, self.service.progress_of)
         self.sidebar.rebuild(counts, self.service.collections, self.service.membership, self.flt)
         if self.sidebar.current_filter != self.flt:   # seleção anterior deixou de existir
             self.flt = self.sidebar.current_filter
@@ -301,7 +305,8 @@ class MainWindow(QMainWindow):
 
     def _on_movie_changed(self, movie_id: int) -> None:
         self.grid.movie_model.refresh_movie(movie_id)
-        if self.flt[0] in ("favorites", "watchlist", "watched", "review"):
+        if self.flt[0] in ("favorites", "watchlist", "watched", "review") or (
+                self.flt[0] == "continue" and self._player is None):
             self.refresh_view()   # o filme pode ter entrado/saído da seção atual
         self._sidebar_timer.start()
 
@@ -388,27 +393,17 @@ class MainWindow(QMainWindow):
                      f" — T{movie['season']}E{movie['episode']} — {title}")
         page = VlcPlayerPage(title, self)
         page.back_requested.connect(self.close_player)
-        page.progress.connect(self._save_progress)
+        page.progress.connect(self.service.save_progress)
         page.external_requested.connect(lambda: self._open_external(movie_id))
         self._player, self._player_origin = page, self.stack.currentWidget()
         self.stack.addWidget(page)
-        resume = int((self.service.settings.get("resume") or {}).get(movie["path"], 0))
+        resume = self.service.resume_info(movie["path"])[0]
         self._slide_to(page, forward=True, done=lambda: page.start(movie["path"], resume))
 
     def _open_external(self, movie_id: int) -> None:
         """Fecha o player integrado (guardando a posição) e abre o filme no player externo."""
         self.close_player()
         self._play(movie_id)
-
-    def _save_progress(self, path: str, position: int, _length: int) -> None:
-        resume = dict(self.service.settings.get("resume") or {})
-        if position > 0:
-            resume[path] = position
-        elif path in resume:
-            del resume[path]
-        else:
-            return
-        self.service.settings.update(resume=resume)
 
     def close_player(self) -> None:
         if self._sliding or self._player is None or self.stack.currentWidget() is not self._player:
@@ -422,6 +417,9 @@ class MainWindow(QMainWindow):
             self._player.release()
             self._player.deleteLater()
             self._player = self._player_origin = None
+            self.grid.viewport().update()   # barras de progresso
+            if self.flt[0] == "continue":
+                self.refresh_view()
 
     def _discard_detail(self) -> None:
         if self._detail is not None:

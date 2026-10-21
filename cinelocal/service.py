@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import time
 import traceback
 
 from PySide6.QtCore import QObject, Signal
@@ -306,6 +307,37 @@ class LibraryService(QObject):
                 eps = self.episodes.get(series_id, [])
                 entry["watched"] = bool(eps) and all(e["watched"] for e in eps)
             self.movie_changed.emit(-series_id)
+
+    # -- continuar assistindo -----------------------------------------------------------
+    def resume_info(self, path: str) -> tuple[int, int, int]:
+        """(posição ms, duração ms, quando foi salvo) de um arquivo; zeros se não houver."""
+        value = (self.settings.get("resume") or {}).get(path)
+        if isinstance(value, (int, float)):   # formato antigo: só a posição
+            return int(value), 0, 0
+        if isinstance(value, list) and len(value) >= 3:
+            return int(value[0]), int(value[1]), int(value[2])
+        return 0, 0, 0
+
+    def progress_of(self, movie: dict) -> float:
+        """Fração já assistida (0 a 1) de um filme que foi deixado pela metade."""
+        position, length, _ = self.resume_info(movie.get("path") or "")
+        return min(1.0, position / length) if position > 0 and length > 0 else 0.0
+
+    def save_progress(self, path: str, position: int, length: int) -> None:
+        """Guarda onde o filme parou (posição 0, ou muito no início, apaga o registro)."""
+        resume = dict(self.settings.get("resume") or {})
+        had = path in resume
+        if position >= 10000:
+            resume[path] = [int(position), int(length), int(time.time())]
+        elif had:
+            del resume[path]
+        else:
+            return
+        self.settings.update(resume=resume)
+        if had != (path in resume):   # entrou ou saiu de "Continuar assistindo"
+            for movie in self.by_id.values():
+                if movie.get("path") == path:
+                    self.movie_changed.emit(movie["id"])
 
     def play(self, movie_id: int) -> None:
         player.play(self.by_id[movie_id]["path"], self.settings.get("player_command"))

@@ -57,6 +57,7 @@ class MovieDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._cache: OrderedDict = OrderedDict()
+        self.progress_of = None   # função(filme) -> fração assistida (0 a 1), definida pela janela
         self._title_font = QFont()
         self._title_font.setBold(True)
         self._title_font.setPointSize(10)
@@ -157,6 +158,14 @@ class MovieDelegate(QStyledItemDelegate):
         if movie["watched"]:
             self._pill(painter, QRect(poster.left() + 8, poster.top() + 8, 22, 22),
                        "✓", QColor(0, 0, 0, 185))
+        fraction = self.progress_of(movie) if self.progress_of else 0
+        if fraction > 0:   # mini-tracker: quanto do filme já foi visto
+            track = QRectF(poster.left() + 8, poster.bottom() - 6, POSTER_W - 16, 4)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(255, 255, 255, 90))
+            painter.drawRoundedRect(track, 2, 2)
+            painter.setBrush(QColor(COLORS["accent"]))
+            painter.drawRoundedRect(QRectF(track.left(), track.top(), max(4.0, track.width() * fraction), 4), 2, 2)
 
     def _paint_texts(self, painter, poster, movie, highlighted):
         title_rect = QRect(poster.left(), poster.bottom() + 8, POSTER_W, 20)
