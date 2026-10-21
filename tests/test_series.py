@@ -1,4 +1,4 @@
-"""Testes de séries: reconhecimento de episódios, agrupamento no banco e dados da API (sem Qt)."""
+"""Series tests: episode recognition, database grouping and API data (no Qt)."""
 import sys
 import tempfile
 import unittest

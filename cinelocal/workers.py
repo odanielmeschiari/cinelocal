@@ -1,4 +1,4 @@
-"""Threads de trabalho: tudo que acessa disco/rede fora da interface."""
+"""Worker threads: everything that touches disk/network outside the interface."""
 from __future__ import annotations
 
 import threading
@@ -13,7 +13,7 @@ from .tmdb import TMDBClient, TMDBError
 
 
 class FuncWorker(QThread):
-    """Executa uma função em segundo plano e devolve (callback, valor) pela thread da UI."""
+    """Runs a function in the background and returns (callback, value) on the UI thread."""
 
     done = Signal(object)
 
@@ -24,18 +24,18 @@ class FuncWorker(QThread):
     def run(self):
         try:
             value = self._fn()
-        except Exception as exc:  # noqa: BLE001 - repassado para a UI
+        except Exception as exc:  # noqa: BLE001 - passed on to the UI
             self.done.emit((self._on_error, exc))
             return
         self.done.emit((self._on_result, value))
 
 
 class UpdateWorker(QThread):
-    """Atualiza metadados de vários filmes em paralelo (4 conexões)."""
+    """Updates the metadata of several movies in parallel (4 connections)."""
 
-    progress = Signal(int, int, str)       # feitos, total, título atual
-    movie_done = Signal(int, str)          # id do filme, resultado
-    finished_all = Signal(dict)            # resumo
+    progress = Signal(int, int, str)       # done, total, current title
+    movie_done = Signal(int, str)          # movie id, result
+    finished_all = Signal(dict)            # summary
     failed = Signal(str)
 
     def __init__(self, db: Database, api_key: str, language: str,

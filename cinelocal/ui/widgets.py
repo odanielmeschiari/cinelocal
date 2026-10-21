@@ -1,4 +1,4 @@
-"""Pequenos componentes visuais reutilizáveis."""
+"""Small reusable visual components."""
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, Qt

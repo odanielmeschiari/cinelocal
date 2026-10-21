@@ -1,4 +1,4 @@
-"""Tela de uma série: metadados gerais, temporadas e episódios (cada um com seus metadados)."""
+"""Series page: general metadata, seasons and episodes (each with its own metadata)."""
 from __future__ import annotations
 
 from PySide6.QtCore import QTimer, QUrl, Qt, Signal
@@ -19,8 +19,7 @@ BACKDROP_HEIGHT = 340
 
 
 def _date(text) -> str:
-    parts = (text or "").split("-")
-    return "/".join(reversed(parts)) if len(parts) == 3 else (text or "")
+    return text or ""   # ISO date (YYYY-MM-DD), as returned by the API
 
 
 def _plural(n: int, one: str, many: str) -> str:
@@ -29,12 +28,12 @@ def _plural(n: int, one: str, many: str) -> str:
 
 class SeriesDialog(QWidget):
     back_requested = Signal()
-    play_requested = Signal(int)   # id do episódio (ou da série, para tocar o próximo)
+    play_requested = Signal(int)   # episode id (or series id, to play the next one)
 
     def __init__(self, service: LibraryService, movie_id: int, parent=None):
         super().__init__(parent)
         self.service = service
-        self.movie_id = movie_id          # id da série na interface (negativo)
+        self.movie_id = movie_id          # series id in the UI (negative)
         self.series_id = -movie_id
         self._backdrop: QPixmap | None = None
         self._backdrop_scaled: QPixmap | None = None
@@ -46,13 +45,13 @@ class SeriesDialog(QWidget):
         self._populate()
         service.movie_changed.connect(self._on_movie_changed)
 
-    # -- construção ------------------------------------------------------------------
+    # -- construction ------------------------------------------------------------------
     def _build(self) -> None:
         page = QVBoxLayout(self)
         page.setContentsMargins(34, 20, 34, 20)
         page.setSpacing(10)
-        self.back_btn = QPushButton("←  Voltar")
-        self.back_btn.setToolTip("Voltar à lista (Esc)")
+        self.back_btn = QPushButton("←  Back")
+        self.back_btn.setToolTip("Back to the list (Esc)")
         self.back_btn.clicked.connect(self.back_requested.emit)
         page.addWidget(self.back_btn, 0, Qt.AlignLeft)
 
@@ -109,13 +108,13 @@ class SeriesDialog(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self.watch_btn = QPushButton("Assistir")
+        self.watch_btn = QPushButton("Watch")
         self.watch_btn.setProperty("primary", True)
         self.watch_btn.clicked.connect(lambda: self.play_requested.emit(self.movie_id))
-        self.fav_btn = QPushButton("Favoritar")
+        self.fav_btn = QPushButton("Favorite")
         self.fav_btn.setCheckable(True)
         self.fav_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "favorite", on))
-        self.seen_btn = QPushButton("Assistida")
+        self.seen_btn = QPushButton("Watched")
         self.seen_btn.setCheckable(True)
         self.seen_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watched", on))
         self.list_btn = QPushButton("Watchlist")
@@ -123,10 +122,10 @@ class SeriesDialog(QWidget):
         self.list_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watchlist", on))
         self.trailer_btn = QPushButton("Trailer")
         self.trailer_btn.clicked.connect(self._open_trailer)
-        more = QPushButton("Mais")
+        more = QPushButton("More")
         more_menu = QMenu(more)
-        more_menu.addAction("Atualizar metadados", lambda: self.service.apply_match(self.movie_id))
-        more_menu.addAction("Corrigir correspondência…", self._fix_match)
+        more_menu.addAction("Refresh metadata", lambda: self.service.apply_match(self.movie_id))
+        more_menu.addAction("Fix match…", self._fix_match)
         more.setMenu(more_menu)
         for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.trailer_btn):
             actions.addWidget(w)
@@ -148,7 +147,7 @@ class SeriesDialog(QWidget):
         column.addLayout(self.ep_box)
         column.addStretch(1)
 
-    # -- dados -------------------------------------------------------------------------
+    # -- data -------------------------------------------------------------------------
     def _populate(self) -> None:
         s = self.service.by_id.get(self.movie_id)
         if s is None:
@@ -157,30 +156,30 @@ class SeriesDialog(QWidget):
         self.setWindowTitle(s["display_title"])
         self.title.setText(s["display_title"])
         parts = [str(s["display_year"] or ""),
-                 _plural(s["season_count"], "temporada", "temporadas"),
-                 _plural(s["episode_count"], "episódio", "episódios"),
+                 _plural(s["season_count"], "season", "seasons"),
+                 _plural(s["episode_count"], "episode", "episodes"),
                  format_runtime(s["runtime"]), ", ".join(s["genres"])]
         self.meta.setText("   •   ".join(p for p in parts if p))
         if s["rating"] and s["votes"]:
-            self.rating.setText(f"Nota {s['rating']:.1f}/10   "
+            self.rating.setText(f"Rating {s['rating']:.1f}/10   "
                                 f"<span style='color:{COLORS['muted']};font-weight:400;font-size:10pt'>"
-                                f"{format_votes(s['votes'])} votos</span>")
+                                f"{format_votes(s['votes'])} votes</span>")
         else:
             self.rating.setText("")
         self.rating.setVisible(bool(self.rating.text()))
         self.tagline.setText(f"“{s['tagline']}”" if s["tagline"] else "")
         self.tagline.setVisible(bool(s["tagline"]))
         banners = {
-            "pending": "Os metadados ainda não foram baixados para esta série.",
-            "ambiguous": "Várias séries combinam com estes arquivos. Use Mais → Corrigir correspondência.",
-            "not_found": "Esta série não foi encontrada. Use Mais → Corrigir correspondência.",
+            "pending": "Metadata has not been downloaded for this series yet.",
+            "ambiguous": "Several series match these files. Use More → Fix match.",
+            "not_found": "This series was not found. Use More → Fix match.",
         }
         self.banner.setText(banners.get(s["status"], ""))
         self.banner.setVisible(bool(self.banner.text()))
-        overview = s["overview"] or ("Sem sinopse disponível." if s["status"] == "matched" else "")
+        overview = s["overview"] or ("No overview available." if s["status"] == "matched" else "")
         for label, text in ((self.overview, overview),
-                            (self.creator, f"Criação: {s['director']}" if s["director"] else ""),
-                            (self.cast, "Elenco: " + ", ".join(c["name"] for c in s["cast"][:10])
+                            (self.creator, f"Created by: {s['director']}" if s["director"] else ""),
+                            (self.cast, "Cast: " + ", ".join(c["name"] for c in s["cast"][:10])
                              if s["cast"] else "")):
             label.setText(text)
             label.setVisible(bool(text))
@@ -192,9 +191,9 @@ class SeriesDialog(QWidget):
         self.update()
 
         for button, value, on_text, off_text in (
-                (self.fav_btn, s["favorite"], "Favorita", "Favoritar"),
-                (self.seen_btn, s["watched"], "Assistida", "Marcar como assistida"),
-                (self.list_btn, s["watchlist"], "Na Watchlist", "Watchlist")):
+                (self.fav_btn, s["favorite"], "Favorited", "Favorite"),
+                (self.seen_btn, s["watched"], "Watched", "Mark as watched"),
+                (self.list_btn, s["watchlist"], "On Watchlist", "Watchlist")):
             button.blockSignals(True)
             button.setChecked(value)
             button.setText(on_text if value else off_text)
@@ -202,14 +201,14 @@ class SeriesDialog(QWidget):
         self.trailer_btn.setVisible(bool(s["trailer_key"]))
         nxt = self.service.by_id.get(self.service.next_episode(self.series_id))
         self.watch_btn.setEnabled(nxt is not None)
-        self.watch_btn.setText(f"Assistir T{nxt['season']}E{nxt['episode']}" if nxt else "Assistir")
+        self.watch_btn.setText(f"Watch S{nxt['season']}E{nxt['episode']}" if nxt else "Watch")
         self._fill_seasons()
 
     def _fill_seasons(self) -> None:
         episodes = self.service.episodes.get(self.series_id, [])
         seasons = sorted({e["season"] for e in episodes if e["season"] is not None})
         wanted = self._season
-        if wanted not in seasons:   # primeira temporada com episódio ainda não assistido
+        if wanted not in seasons:   # first season with an unwatched episode
             wanted = next((n for n in seasons
                            if any(e["season"] == n and not e["watched"] for e in episodes)),
                           seasons[0] if seasons else None)
@@ -217,8 +216,8 @@ class SeriesDialog(QWidget):
         self.season_combo.clear()
         for n in seasons:
             count = sum(1 for e in episodes if e["season"] == n)
-            self.season_combo.addItem(f"{'Especiais' if n == 0 else f'Temporada {n}'}"
-                                      f"  ·  {_plural(count, 'episódio', 'episódios')}", n)
+            self.season_combo.addItem(f"{'Specials' if n == 0 else f'Season {n}'}"
+                                      f"  ·  {_plural(count, 'episode', 'episodes')}", n)
         self.season_combo.setCurrentIndex(max(0, self.season_combo.findData(wanted)))
         self.season_combo.blockSignals(False)
         self._fill_episodes()
@@ -234,7 +233,7 @@ class SeriesDialog(QWidget):
         for e in self.service.episodes.get(self.series_id, []):
             if e["season"] == self._season:
                 self.ep_box.addWidget(self._episode_row(e))
-        QTimer.singleShot(0, lambda: bar.setValue(position))   # mantém a rolagem ao atualizar
+        QTimer.singleShot(0, lambda: bar.setValue(position))   # keep the scroll position on refresh
 
     def _episode_row(self, e: dict) -> QFrame:
         row = QFrame()
@@ -256,7 +255,7 @@ class SeriesDialog(QWidget):
         name.setStyleSheet("font-weight: 700;")
         name.setWordWrap(True)
         details = [_date(e["ep_air_date"]), format_runtime(e["ep_runtime"]),
-                   f"Nota {e['ep_rating']:.1f}" if e["ep_rating"] else ""]
+                   f"Rating {e['ep_rating']:.1f}" if e["ep_rating"] else ""]
         meta = QLabel("   •   ".join(p for p in details if p))
         meta.setObjectName("muted")
         meta.setVisible(any(details))
@@ -267,13 +266,13 @@ class SeriesDialog(QWidget):
             info.addWidget(w)
         layout.addLayout(info, 1)
 
-        play = QPushButton("Assistir")
-        play.setToolTip("Assistir este episódio")
+        play = QPushButton("Watch")
+        play.setToolTip("Watch this episode")
         play.clicked.connect(lambda _checked=False, i=e["id"]: self.play_requested.emit(i))
-        seen = QPushButton("Visto")
+        seen = QPushButton("Watched")
         seen.setCheckable(True)
         seen.setChecked(e["watched"])
-        seen.setToolTip("Marcar como assistido")
+        seen.setToolTip("Mark as watched")
         seen.toggled.connect(lambda on, i=e["id"]: self.service.set_flag([i], "watched", on))
         layout.addWidget(play, 0, Qt.AlignTop)
         layout.addWidget(seen, 0, Qt.AlignTop)
@@ -286,7 +285,7 @@ class SeriesDialog(QWidget):
             self.poster.setPixmap(QPixmap())
             self.poster.setStyleSheet(
                 f"background:{COLORS['surface2']}; border-radius:12px; color:{COLORS['muted']};")
-            self.poster.setText("Sem capa")
+            self.poster.setText("No poster")
             return
         self.poster.setStyleSheet("")
         w, h = int(POSTER_SIZE[0] * dpr), int(POSTER_SIZE[1] * dpr)
@@ -299,7 +298,7 @@ class SeriesDialog(QWidget):
         if movie_id == self.movie_id:
             self._populate()
 
-    # -- fundo com backdrop ----------------------------------------------------------------
+    # -- backdrop background ----------------------------------------------------------------
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         bg = QColor(COLORS["bg"])
@@ -320,7 +319,7 @@ class SeriesDialog(QWidget):
         self._backdrop_scaled = None
         super().resizeEvent(event)
 
-    # -- ações ---------------------------------------------------------------------------------
+    # -- actions ---------------------------------------------------------------------------------
     def _open_trailer(self) -> None:
         key = self.service.by_id[self.movie_id]["trailer_key"]
         if key:

@@ -1,4 +1,4 @@
-"""Fileira rolável com título e setas (usada em "Continuar assistindo")."""
+"""Scrollable row with a title and arrows (used in "Continue watching")."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -8,7 +8,7 @@ from .grid import MovieRow
 
 
 class HomeSection(QWidget):
-    """Título + setas + uma única fileira de capas."""
+    """Title + arrows + a single row of posters."""
 
     def __init__(self, title: str, parent=None):
         super().__init__(parent)

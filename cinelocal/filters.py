@@ -1,23 +1,23 @@
-"""Filtros, ordenação e contagens da barra lateral (sem Qt)."""
+"""Filters, sorting and sidebar counts (no Qt)."""
 from __future__ import annotations
 
 from collections import Counter
 
 from .utils import normalize_text
 
-# (id, rótulo, campo, decrescente)
+# (id, label, field, descending)
 SORT_OPTIONS = [
-    ("title_asc", "Título (A–Z)", "title", False),
-    ("title_desc", "Título (Z–A)", "title", True),
-    ("year_desc", "Ano (mais recentes)", "year", True),
-    ("year_asc", "Ano (mais antigos)", "year", False),
-    ("rating_desc", "Nota (maior)", "rating", True),
-    ("rating_asc", "Nota (menor)", "rating", False),
-    ("added_desc", "Adicionados recentemente", "added", True),
+    ("title_asc", "Title (A–Z)", "title", False),
+    ("title_desc", "Title (Z–A)", "title", True),
+    ("year_desc", "Year (newest)", "year", True),
+    ("year_asc", "Year (oldest)", "year", False),
+    ("rating_desc", "Rating (highest)", "rating", True),
+    ("rating_asc", "Rating (lowest)", "rating", False),
+    ("added_desc", "Recently added", "added", True),
 ]
 _SORT_BY_ID = {o[0]: o for o in SORT_OPTIONS}
 
-Filter = tuple  # (tipo, valor)
+Filter = tuple  # (kind, value)
 
 
 def decade_of(movie: dict) -> int | None:
@@ -29,7 +29,7 @@ def matches(movie: dict, flt: Filter, membership: dict[int, set[int]], progress=
     kind, value = flt
     if kind == "all":
         return True
-    if kind == "continue":   # começou a assistir e não terminou
+    if kind == "continue":   # started watching but not finished
         return bool(progress and progress(movie) > 0)
     if kind == "favorites":
         return movie["favorite"]
@@ -75,8 +75,8 @@ def sort_movies(movies: list[dict], sort_id: str) -> list[dict]:
     _, _, field, desc = _SORT_BY_ID.get(sort_id, SORT_OPTIONS[0])
     present = [m for m in movies if _sort_value(m, field) is not None]
     missing = [m for m in movies if _sort_value(m, field) is None]
-    # Duas ordenações estáveis: primeiro por título, depois pelo campo escolhido,
-    # assim empates ficam em ordem alfabética.
+    # Two stable sorts: first by title, then by the chosen field,
+    # so ties stay in alphabetical order.
     present.sort(key=lambda m: m["sort_title"])
     if field != "title":
         present.sort(key=lambda m: _sort_value(m, field), reverse=desc)

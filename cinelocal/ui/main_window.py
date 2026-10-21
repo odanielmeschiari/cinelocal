@@ -1,4 +1,4 @@
-"""Janela principal: barra lateral + busca/ordenação + grade de capas."""
+"""Main window: sidebar + search/sorting + poster grid."""
 from __future__ import annotations
 
 import os
@@ -34,7 +34,7 @@ class MainWindow(QMainWindow):
         self._detail: MovieDialog | None = None
         self._player: VlcPlayerPage | None = None
         self._player_origin: QWidget | None = None
-        self._playing_id: int | None = None   # filme/episódio no player integrado
+        self._playing_id: int | None = None   # movie/episode in the built-in player
         self._sliding = False
         self.setWindowTitle("CineLocal")
         self.resize(1380, 860)
@@ -42,13 +42,13 @@ class MainWindow(QMainWindow):
 
         self._sidebar_timer = QTimer(self, singleShot=True, interval=350)
         self._sidebar_timer.timeout.connect(self._rebuild_sidebar)
-        self._home_timer = QTimer(self, singleShot=True, interval=300)   # agrupa várias mudanças seguidas
+        self._home_timer = QTimer(self, singleShot=True, interval=300)   # batches several changes in a row
         self._home_timer.timeout.connect(self._refresh_continue)
 
         self._build_ui()
         self._connect()
 
-    # ------------------------------------------------------------------ construção --
+    # ------------------------------------------------------------------ construction --
     def _build_ui(self) -> None:
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -65,19 +65,19 @@ class MainWindow(QMainWindow):
         title = QLabel("CineLocal")
         title.setObjectName("welcomeTitle")
         title.setAlignment(Qt.AlignCenter)
-        subtitle = QLabel("Sua videoteca pessoal, rápida e offline.\n"
-                          "Escolha a pasta onde estão seus filmes para começar.")
+        subtitle = QLabel("Your personal movie library, fast and offline.\n"
+                          "Choose the folder where your movies are to get started.")
         subtitle.setObjectName("muted")
         subtitle.setAlignment(Qt.AlignCenter)
-        choose = QPushButton("Selecionar pasta de filmes")
+        choose = QPushButton("Select movies folder")
         choose.setProperty("primary", True)
         choose.setMinimumHeight(46)
         choose.setMinimumWidth(280)
         choose.clicked.connect(self._choose_folder)
-        key = QPushButton("Configurar chave do TMDB")
+        key = QPushButton("Set up TMDB key")
         key.clicked.connect(lambda: self.open_settings(focus_key=True))
-        note = QLabel("Os arquivos nunca são alterados. A internet só é usada para baixar\n"
-                      "capas e informações dos filmes novos.")
+        note = QLabel("Your files are never modified. The internet is only used to download\n"
+                      "posters and info for new movies.")
         note.setObjectName("muted")
         note.setAlignment(Qt.AlignCenter)
         for w, align in ((title, Qt.AlignHCenter), (subtitle, Qt.AlignHCenter),
@@ -106,28 +106,28 @@ class MainWindow(QMainWindow):
         bar = QHBoxLayout()
         bar.setSpacing(8)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Buscar por título, ator, diretor ou gênero…  (Ctrl+F)")
+        self.search.setPlaceholderText("Search by title, actor, director or genre…  (Ctrl+F)")
         self.search.setClearButtonEnabled(True)
         self.search.setMinimumWidth(320)
         self.sort_combo = QComboBox()
         for sort_id, label, *_ in filters.SORT_OPTIONS:
             self.sort_combo.addItem(label, sort_id)
         self.sort_combo.setCurrentIndex(max(0, self.sort_combo.findData(self.sort_id)))
-        rescan = QPushButton("Reescanear")
+        rescan = QPushButton("Rescan")
         rescan.clicked.connect(self.service.start_scan)
-        meta = QPushButton("Metadados")
+        meta = QPushButton("Metadata")
         meta_menu = QMenu(meta)
-        meta_menu.addAction("Buscar metadados dos filmes pendentes",
+        meta_menu.addAction("Fetch metadata for pending movies",
                             lambda: self.service.start_update("pending"))
-        meta_menu.addAction("Forçar atualização de todos os filmes", self._confirm_update_all)
+        meta_menu.addAction("Force update of all movies", self._confirm_update_all)
         meta_menu.addSeparator()
-        meta_menu.addAction("Revisar filmes sem correspondência…", self.review_all)
+        meta_menu.addAction("Review unmatched movies…", self.review_all)
         meta.setMenu(meta_menu)
-        settings = QPushButton("Configurações")
-        settings.setToolTip("Configurações (Ctrl+,)")
+        settings = QPushButton("Settings")
+        settings.setToolTip("Settings (Ctrl+,)")
         settings.clicked.connect(lambda: self.open_settings())
         bar.addWidget(self.search, 1)
-        bar.addWidget(QLabel("Ordenar:"))
+        bar.addWidget(QLabel("Sort:"))
         bar.addWidget(self.sort_combo)
         bar.addWidget(rescan)
         bar.addWidget(meta)
@@ -138,14 +138,14 @@ class MainWindow(QMainWindow):
         self.infobar.setObjectName("infobar")
         info_row = QHBoxLayout(self.infobar)
         info_row.setContentsMargins(16, 10, 10, 10)
-        info_row.addWidget(QLabel("Para baixar capas e informações, configure sua chave gratuita do TMDB."), 1)
-        info_btn = QPushButton("Configurar")
+        info_row.addWidget(QLabel("To download posters and info, set up your free TMDB key."), 1)
+        info_btn = QPushButton("Set up")
         info_btn.clicked.connect(lambda: self.open_settings(focus_key=True))
         info_row.addWidget(info_btn)
         column.addWidget(self.infobar)
 
         head = QHBoxLayout()
-        self.heading = QLabel("Todos os filmes")
+        self.heading = QLabel("All movies")
         self.heading.setObjectName("heading")
         self.count_label = QLabel("")
         self.count_label.setObjectName("muted")
@@ -157,10 +157,10 @@ class MainWindow(QMainWindow):
 
         self.views = QStackedWidget()
         self.grid = MovieFlow()
-        self.continue_row = HomeSection("Continuar assistindo")   # só em "Todos os filmes", se houver itens
+        self.continue_row = HomeSection("Continue watching")   # only in "All movies", if there are items
         self.continue_row.row.itemDelegate().progress_of = self.service.progress_of
         self.continue_row.hide()
-        self.grid_page = QScrollArea()   # rola a fileira "Continuar assistindo" junto com a grade
+        self.grid_page = QScrollArea()   # scrolls the "Continue watching" row together with the grid
         self.grid_page.setWidgetResizable(True)
         self.grid_page.setFrameShape(QFrame.NoFrame)
         self.grid_page.verticalScrollBar().setSingleStep(48)
@@ -185,7 +185,7 @@ class MainWindow(QMainWindow):
         self.progress_bar = QProgressBar()
         self.progress_bar.setFixedWidth(220)
         self.progress_bar.setTextVisible(False)
-        self.cancel_btn = QPushButton("Cancelar")
+        self.cancel_btn = QPushButton("Cancel")
         self.cancel_btn.setStyleSheet("padding: 3px 12px;")
         self.cancel_btn.clicked.connect(self.service.cancel_update)
         for w in (self.progress_label, self.progress_bar, self.cancel_btn):
@@ -221,7 +221,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+,"), self, activated=self.open_settings)
         QShortcut(QKeySequence("Esc"), self.search, activated=self.search.clear)
 
-    # ---------------------------------------------------------------------- início --
+    # ---------------------------------------------------------------------- start --
     def start(self) -> None:
         self.service.reload()
         self._rebuild_sidebar()
@@ -236,7 +236,7 @@ class MainWindow(QMainWindow):
 
     def _choose_folder(self) -> None:
         import os
-        path = QFileDialog.getExistingDirectory(self, "Selecionar pasta de filmes", os.path.expanduser("~"))
+        path = QFileDialog.getExistingDirectory(self, "Select movies folder", os.path.expanduser("~"))
         if not path:
             return
         self.service.settings.update(library_path=path)
@@ -245,28 +245,28 @@ class MainWindow(QMainWindow):
         if not self.service.has_key:
             self.open_settings(
                 focus_key=True,
-                intro="Para baixar capas e informações dos filmes, cole sua chave gratuita do TMDB.\n"
-                      "Você pode pular esta etapa e configurá-la depois.")
+                intro="To download posters and movie info, paste your free TMDB key.\n"
+                      "You can skip this step and set it up later.")
         self.service.start_scan()
 
-    # ------------------------------------------------------------------ visualização --
+    # ------------------------------------------------------------------ view --
     def _refresh_continue(self) -> None:
-        """Fileira "Continuar assistindo" acima de "Todos os filmes"; some se vazia ou fora dessa tela."""
+        """\"Continue watching\" row above \"All movies\"; hidden when empty or outside that screen."""
         s = self.service
         items = []
         if self.flt[0] == "all" and not self.query:
             items = filters.filter_movies(s.movies, ("continue", None), s.membership, "", s.progress_of)
-            items.sort(key=lambda m: -s.last_played(m))   # o último que você assistiu vem primeiro
+            items.sort(key=lambda m: -s.last_played(m))   # the one you watched last comes first
         row = self.continue_row.row
         bar = row.horizontalScrollBar()
         position = bar.value()
         row.movie_model.set_movies(items)
-        QTimer.singleShot(0, lambda: bar.setValue(position))   # o layout só termina depois
+        QTimer.singleShot(0, lambda: bar.setValue(position))   # the layout only finishes later
         self.continue_row.count.setText(str(len(items)))
         self.continue_row.setVisible(bool(items))
 
     def _reveal_current(self, index) -> None:
-        """Navegação por teclado: rola a página até o filme atual."""
+        """Keyboard navigation: scrolls the page to the current movie."""
         if index.isValid():
             center = self.grid.viewport().mapTo(self.grid_content, self.grid.visualRect(index).center())
             self.grid_page.ensureVisible(center.x(), center.y(), 0, CELL_H // 2)
@@ -278,16 +278,16 @@ class MainWindow(QMainWindow):
         visible = filters.filter_movies(self.service.movies, self.flt, self.service.membership,
                                         self.query, self.service.progress_of)
         visible = filters.sort_movies(visible, self.sort_id)
-        if self.flt[0] == "continue":   # o último que você assistiu vem primeiro
+        if self.flt[0] == "continue":   # the one you watched last comes first
             visible.sort(key=lambda m: -self.service.last_played(m))
         self.grid.movie_model.set_movies(visible)
         bar.setValue(position)
-        QTimer.singleShot(0, lambda: bar.setValue(position))   # o layout só termina depois
+        QTimer.singleShot(0, lambda: bar.setValue(position))   # the layout only finishes later
 
         total = len(self.service.movies)
         self.heading.setText(self._heading_text())
-        self.count_label.setText(f"{len(visible)} de {total}" if len(visible) != total
-                                 else f"{total} filmes")
+        self.count_label.setText(f"{len(visible)} of {total}" if len(visible) != total
+                                 else f"{total} movie{'' if total == 1 else 's'}")
         if visible:
             self.views.setCurrentWidget(self.grid_page)
         else:
@@ -296,36 +296,36 @@ class MainWindow(QMainWindow):
 
     def _empty_text(self, total: int) -> str:
         if self.query:
-            return "Nenhum filme corresponde à busca."
+            return "No movies match your search."
         if total == 0:
-            return "Nenhum filme encontrado na pasta selecionada.\nUse o botão Configurações para escolher outra pasta."
-        return "Nenhum filme nesta seção."
+            return "No movies found in the selected folder.\nUse the Settings button to choose another folder."
+        return "No movies in this section."
 
     def _heading_text(self) -> str:
         kind, value = self.flt
-        names = {"all": "Todos os filmes", "favorites": "Favoritos", "watchlist": "Watchlist",
-                 "review": "Precisam de revisão", "continue": "Continuar assistindo"}
+        names = {"all": "All movies", "favorites": "Favorites", "watchlist": "Watchlist",
+                 "review": "Needs review", "continue": "Continue watching"}
         if kind in names:
             return names[kind]
         if kind == "watched":
-            return "Assistidos" if value else "Não assistidos"
+            return "Watched" if value else "Unwatched"
         if kind == "collection":
             return self.service.collection_name(value)
         if kind == "decade":
-            return f"Anos {value}"
+            return f"{value}s"
         return str(value)
 
     def _rebuild_sidebar(self) -> None:
         counts = filters.sidebar_counts(self.service.movies, self.service.progress_of)
         self.sidebar.rebuild(counts, self.service.collections, self.service.membership, self.flt)
-        if self.sidebar.current_filter != self.flt:   # seleção anterior deixou de existir
+        if self.sidebar.current_filter != self.flt:   # the previous selection no longer exists
             self.flt = self.sidebar.current_filter
             self.refresh_view()
 
     def _update_infobar(self) -> None:
         self.infobar.setVisible(not self.service.has_key)
 
-    # ---------------------------------------------------------------------- eventos --
+    # ---------------------------------------------------------------------- events --
     def _on_filter(self, flt) -> None:
         self.flt = flt
         self.refresh_view()
@@ -354,13 +354,13 @@ class MainWindow(QMainWindow):
             self._home_timer.start()
         if self.flt[0] in ("favorites", "watchlist", "watched", "review") or (
                 self.flt[0] == "continue" and self._player is None):
-            self.refresh_view()   # o filme pode ter entrado/saído da seção atual
+            self.refresh_view()   # the movie may have entered/left the current section
         self._sidebar_timer.start()
 
     def _on_progress(self, done: int, total: int, title: str) -> None:
         self.progress_bar.setMaximum(max(total, 1))
         self.progress_bar.setValue(done)
-        self.progress_label.setText(f"Metadados {done}/{total}" + (f" — {title}" if title else ""))
+        self.progress_label.setText(f"Metadata {done}/{total}" + (f" — {title}" if title else ""))
 
     def _on_busy(self, busy: bool, text: str) -> None:
         updating = self.service.updating
@@ -374,19 +374,19 @@ class MainWindow(QMainWindow):
 
     def _on_scan_finished(self, added: int, removed: int) -> None:
         if added or removed:
-            self.statusBar().showMessage(f"{added} filme(s) novo(s), {removed} removido(s).", 8000)
+            self.statusBar().showMessage(f"{added} new movie(s), {removed} removed.", 8000)
 
     def _on_update_finished(self, summary: dict) -> None:
-        text = (f"Metadados: {summary['matched']} atualizado(s), "
-                f"{summary['ambiguous'] + summary['not_found']} para revisar, {summary['failed']} com falha.")
+        text = (f"Metadata: {summary['matched']} updated, "
+                f"{summary['ambiguous'] + summary['not_found']} to review, {summary['failed']} failed.")
         if summary["cancelled"]:
-            text += " (cancelado)"
+            text += " (cancelled)"
         self.statusBar().showMessage(text, 12000)
         pending_review = summary["ambiguous"] + summary["not_found"]
         if pending_review and not summary["cancelled"]:
             QTimer.singleShot(400, lambda: self._offer_review(pending_review))
 
-    # ---------------------------------------------------------------------- ações --
+    # ---------------------------------------------------------------------- actions --
     def open_movie(self, movie_id: int) -> None:
         if self._sliding:
             return
@@ -414,24 +414,24 @@ class MainWindow(QMainWindow):
         return choice == "external"
 
     def play_movie(self, movie_id: int, external: bool | None = None) -> None:
-        """Toca no player padrão: o integrado (VLC) ou o externo (comando configurado ou padrão do
-        sistema). `external` força um dos dois; sem libVLC, usa o externo."""
+        """Plays in the default player: the built-in one (VLC) or the external one (configured command
+        or system default). `external` forces one of the two; without libVLC, uses the external one."""
         if self._sliding:
             return
         if external is None:
             external = self._use_external()
         self._discard_player()
-        if movie_id < 0:   # série: toca o próximo episódio a assistir
+        if movie_id < 0:   # series: plays the next episode to watch
             movie_id = self.service.next_episode(-movie_id)
             if movie_id is None:
-                self.statusBar().showMessage("Esta série não tem episódios.", 5000)
+                self.statusBar().showMessage("This series has no episodes.", 5000)
                 return
         movie = self.service.by_id[movie_id]
         if external or not os.path.exists(movie["path"]):
             return self._play(movie_id)
         reason = unavailable_reason()
         if reason:
-            self.statusBar().showMessage(reason + " Usando o player do sistema.", 10000)
+            self.statusBar().showMessage(reason + " Using the system player.", 10000)
             return self._play(movie_id)
         self._playing_id = movie_id
         page = VlcPlayerPage(self._movie_title(movie), self)
@@ -452,11 +452,11 @@ class MainWindow(QMainWindow):
         if movie.get("kind") == "episode":
             series = self.service.by_id.get(-movie["series_id"])
             title = (f"{series['display_title'] if series else movie['clean_title']}"
-                     f" — T{movie['season']}E{movie['episode']} — {title}")
+                     f" — S{movie['season']}E{movie['episode']} — {title}")
         return title
 
     def _offer_next(self, path: str) -> None:
-        """Terminou um episódio: oferece o próximo, tocando no mesmo player."""
+        """An episode ended: offers the next one, playing in the same player."""
         movie = self.service.by_path(path)
         if self._player is None or movie is None or movie.get("kind") != "episode":
             return
@@ -464,12 +464,12 @@ class MainWindow(QMainWindow):
         if nxt is None:
             return
         ask = QMessageBox.question(
-            self, "Próximo episódio",
-            f"Assistir o próximo episódio?\n\nT{nxt['season']}E{nxt['episode']} — {nxt['display_title']}")
+            self, "Next episode",
+            f"Watch the next episode?\n\nS{nxt['season']}E{nxt['episode']} — {nxt['display_title']}")
         if ask != QMessageBox.Yes or self._player is None:
             return
         if not os.path.exists(nxt["path"]):
-            self.statusBar().showMessage("O arquivo do próximo episódio não foi encontrado.", 6000)
+            self.statusBar().showMessage("The next episode's file was not found.", 6000)
             return
         self._playing_id = nxt["id"]
         self._player.set_title(self._movie_title(nxt))
@@ -480,7 +480,7 @@ class MainWindow(QMainWindow):
         self.play_movie(movie_id)
 
     def _open_external(self, movie_id: int) -> None:
-        """Fecha o player integrado (guardando a posição) e abre o filme no player externo."""
+        """Closes the built-in player (saving the position) and opens the movie in the external player."""
         self.close_player()
         self._play(movie_id)
 
@@ -496,7 +496,7 @@ class MainWindow(QMainWindow):
             self._player.release()
             self._player.deleteLater()
             self._player = self._player_origin = None
-            self.grid.viewport().update()   # barras de progresso
+            self.grid.viewport().update()   # progress bars
             if self.flt[0] in ("continue", "all"):
                 self.refresh_view()
 
@@ -507,8 +507,8 @@ class MainWindow(QMainWindow):
             self._detail = None
 
     def _slide_to(self, target: QWidget, forward: bool, done=None) -> None:
-        """Troca a página do `stack` deslizando para o lado (a lista continua viva por baixo,
-        então rolagem, busca, filtro e seleção são preservados)."""
+        """Switches the `stack` page by sliding sideways (the list stays alive underneath,
+        so scrolling, search, filter and selection are preserved)."""
         current = self.stack.currentWidget()
         width, height = self.stack.width(), self.stack.height()
         sign = 1 if forward else -1
@@ -557,31 +557,31 @@ class MainWindow(QMainWindow):
             self.service.start_scan()
         if language_changed:
             answer = QMessageBox.question(
-                self, "Idioma alterado",
-                "Atualizar agora os metadados de todos os filmes para o novo idioma?\n"
-                "(Isso usa a internet. Novos filmes já usarão o novo idioma.)")
+                self, "Language changed",
+                "Update the metadata of all movies to the new language now?\n"
+                "(This uses the internet. New movies will already use the new language.)")
             if answer == QMessageBox.Yes:
                 self.service.start_update("all")
 
     def _confirm_update_all(self) -> None:
         answer = QMessageBox.question(
-            self, "Atualizar metadados",
-            "Baixar novamente os metadados de todos os filmes?\n"
-            "As correspondências já confirmadas são mantidas.")
+            self, "Update metadata",
+            "Download the metadata of all movies again?\n"
+            "Matches that were already confirmed are kept.")
         if answer == QMessageBox.Yes:
             self.service.start_update("all")
 
     def _offer_review(self, count: int) -> None:
         answer = QMessageBox.question(
-            self, "Revisão necessária",
-            f"{count} filme(s) não puderam ser identificados com segurança.\nRevisar agora?")
+            self, "Review needed",
+            f"{count} movie(s) could not be identified with confidence.\nReview now?")
         if answer == QMessageBox.Yes:
             self.review_all()
 
     def review_all(self) -> None:
         ids = [m["id"] for m in self.service.movies if m["status"] in ("ambiguous", "not_found")]
         if not ids:
-            self.statusBar().showMessage("Nenhum filme precisa de revisão.", 5000)
+            self.statusBar().showMessage("No movies need review.", 5000)
             return
         for position, movie_id in enumerate(ids, start=1):
             movie = self.service.by_id.get(movie_id)
@@ -606,41 +606,41 @@ class MainWindow(QMainWindow):
         single = len(movies) == 1
         menu = QMenu(self)
         if single:
-            menu.addAction("Abrir detalhes", lambda: self.open_movie(ids[0]))
-            menu.addAction("Assistir", lambda: self.play_movie(ids[0]))
-            other = "player integrado" if self._use_external() else "outro player"
-            menu.addAction(f"Assistir no {other}",
+            menu.addAction("Open details", lambda: self.open_movie(ids[0]))
+            menu.addAction("Watch", lambda: self.play_movie(ids[0]))
+            other = "built-in player" if self._use_external() else "another player"
+            menu.addAction(f"Watch in {other}",
                            lambda: self.play_movie(ids[0], external=not self._use_external()))
             if s.progress_of(movies[0]) > 0:
-                menu.addAction("Assistir do início", lambda: self._play_from_start(ids[0]))
+                menu.addAction("Watch from the beginning", lambda: self._play_from_start(ids[0]))
             menu.addSeparator()
 
         all_fav = all(m["favorite"] for m in movies)
         all_seen = all(m["watched"] for m in movies)
-        menu.addAction("Remover dos favoritos" if all_fav else "Favoritar",
+        menu.addAction("Remove from favorites" if all_fav else "Add to favorites",
                        lambda: s.set_flag(ids, "favorite", not all_fav))
-        menu.addAction("Marcar como não assistido" if all_seen else "Marcar como assistido",
+        menu.addAction("Mark as unwatched" if all_seen else "Mark as watched",
                        lambda: s.set_flag(ids, "watched", not all_seen))
         all_listed = all(m["watchlist"] for m in movies)
-        menu.addAction("Remover da Watchlist" if all_listed else "Adicionar à Watchlist",
+        menu.addAction("Remove from Watchlist" if all_listed else "Add to Watchlist",
                        lambda: s.set_flag(ids, "watchlist", not all_listed))
-        if all(i > 0 for i in ids):   # coleções só guardam filmes
-            collections_menu = menu.addMenu("Coleções")
+        if all(i > 0 for i in ids):   # collections only hold movies
+            collections_menu = menu.addMenu("Collections")
             populate_collections_menu(collections_menu, s, ids, self)
         if self.flt[0] == "collection":
-            menu.addAction("Remover desta coleção",
+            menu.addAction("Remove from this collection",
                            lambda: s.set_in_collection(self.flt[1], ids, False))
         menu.addSeparator()
-        menu.addAction("Atualizar metadados", lambda: self._refresh_ids(ids))
+        menu.addAction("Update metadata", lambda: self._refresh_ids(ids))
         if single:
-            menu.addAction("Corrigir correspondência…", lambda: self._fix_match(ids[0]))
+            menu.addAction("Fix match…", lambda: self._fix_match(ids[0]))
         menu.exec(global_pos)
 
     def _play(self, movie_id: int) -> None:
         try:
             self.service.play(movie_id)
         except OSError as exc:
-            QMessageBox.warning(self, "Não foi possível abrir", str(exc))
+            QMessageBox.warning(self, "Could not open", str(exc))
 
     def _refresh_ids(self, ids: list[int]) -> None:
         if len(ids) == 1:

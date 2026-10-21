@@ -1,5 +1,5 @@
 @echo off
-rem Executa o CineLocal direto da pasta do projeto (sem instalar no Menu Iniciar).
+rem Runs CineLocal straight from the project folder (without installing to the Start Menu).
 setlocal EnableExtensions
 cd /d "%~dp0"
 if exist ".venv\Scripts\python.exe" goto run
@@ -8,7 +8,7 @@ set "PY="
 py -3 -c "import sys" >nul 2>nul && set "PY=py -3"
 if not defined PY python -c "import sys" >nul 2>nul && set "PY=python"
 if not defined PY (
-    echo Python 3 nao encontrado. Instale em https://www.python.org/downloads/windows/
+    echo Python 3 not found. Install it from https://www.python.org/downloads/windows/
     pause
     exit /b 1
 )
@@ -21,6 +21,6 @@ if not defined PY (
 exit /b %errorlevel%
 
 :fail
-echo A instalacao das dependencias falhou.
+echo Installing the dependencies failed.
 pause
 exit /b 1

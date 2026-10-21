@@ -1,13 +1,13 @@
-"""Campos derivados de um filme (busca, ordenação, exibição). Sem Qt."""
+"""Derived fields of a movie (search, sorting, display). No Qt."""
 from __future__ import annotations
 
 from .utils import normalize_text
 
 
 def decorate(movie: dict) -> dict:
-    """Campos derivados usados na busca, ordenação e exibição."""
+    """Derived fields used for searching, sorting and display."""
     if movie.get("kind") == "episode":
-        movie["display_title"] = movie.get("ep_title") or f"Episódio {movie.get('episode') or '?'}"
+        movie["display_title"] = movie.get("ep_title") or f"Episode {movie.get('episode') or '?'}"
     else:
         movie["display_title"] = movie["title"] or movie["clean_title"]
     movie["display_year"] = movie["year"] or movie["year_guess"]

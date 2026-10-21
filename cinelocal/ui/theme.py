@@ -1,4 +1,4 @@
-"""Tema escuro em preto e azul (paleta + QSS)."""
+"""Dark black-and-blue theme (palette + QSS)."""
 from __future__ import annotations
 
 from string import Template

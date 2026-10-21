@@ -1,4 +1,4 @@
-"""Escolha manual do filme correto no TMDB (ambiguidade, sem resultado ou correção)."""
+"""Manual choice of the correct movie on TMDB (ambiguous, no result, or correction)."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
@@ -17,7 +17,7 @@ class MatchDialog(QDialog):
         self.skipped = False
         self._series = movie.get("kind") == "series"
         self._closed = False
-        self.setWindowTitle("Corrigir correspondência")
+        self.setWindowTitle("Fix match")
         self.setModal(True)
         self.resize(640, 560)
 
@@ -25,17 +25,17 @@ class MatchDialog(QDialog):
         layout.setContentsMargins(24, 22, 24, 22)
         layout.setSpacing(12)
 
-        head = QLabel(f"{'Série' if self._series else 'Arquivo'}: <b>{movie['file_name']}</b>" + (f"  ({position})" if position else ""))
+        head = QLabel(f"{'Series' if self._series else 'File'}: <b>{movie['file_name']}</b>" + (f"  ({position})" if position else ""))
         head.setWordWrap(True)
         layout.addWidget(head)
 
         row = QHBoxLayout()
         self.title_edit = QLineEdit(movie["clean_title"])
-        self.title_edit.setPlaceholderText("Título do filme")
+        self.title_edit.setPlaceholderText("Movie title")
         self.year_edit = QLineEdit(str(movie["year_guess"] or ""))
-        self.year_edit.setPlaceholderText("Ano")
+        self.year_edit.setPlaceholderText("Year")
         self.year_edit.setMaximumWidth(90)
-        self.search_btn = QPushButton("Buscar")
+        self.search_btn = QPushButton("Search")
         self.search_btn.setProperty("primary", True)
         row.addWidget(self.title_edit, 1)
         row.addWidget(self.year_edit)
@@ -52,12 +52,12 @@ class MatchDialog(QDialog):
 
         buttons = QHBoxLayout()
         buttons.addStretch(1)
-        cancel = QPushButton("Cancelar")
-        self.confirm_btn = QPushButton("Usar este filme")
+        cancel = QPushButton("Cancel")
+        self.confirm_btn = QPushButton("Use this movie")
         self.confirm_btn.setProperty("primary", True)
         self.confirm_btn.setEnabled(False)
         if allow_skip:
-            skip = QPushButton("Pular")
+            skip = QPushButton("Skip")
             skip.clicked.connect(self._skip)
             buttons.addWidget(skip)
         buttons.addWidget(cancel)
@@ -76,7 +76,7 @@ class MatchDialog(QDialog):
         if service.has_key:
             QTimer.singleShot(0, self._search)
         else:
-            self.status.setText("Configure a chave da API para buscar.")
+            self.status.setText("Set your API key to search.")
             self.search_btn.setEnabled(False)
 
     def done(self, result: int) -> None:
@@ -93,7 +93,7 @@ class MatchDialog(QDialog):
             return
         year_text = self.year_edit.text().strip()
         year = int(year_text) if year_text.isdigit() else None
-        self.status.setText("Buscando…")
+        self.status.setText("Searching…")
         self.results.clear()
         self.search_btn.setEnabled(False)
         self.service.search_tmdb(query, year, self._on_results, self._on_error, series=self._series)
@@ -102,14 +102,14 @@ class MatchDialog(QDialog):
         if self._closed:
             return
         self.search_btn.setEnabled(True)
-        self.status.setText(f"{len(results)} resultado(s)." if results
-                            else "Nada encontrado. Tente outro título ou remova o ano.")
+        self.status.setText(f"{len(results)} result{'' if len(results) == 1 else 's'}." if results
+                            else "Nothing found. Try another title or remove the year.")
         for r in results:
             year = f" ({r['year']})" if r["year"] else ""
             original = (f"\n{r['original_title']}"
                         if r["original_title"] and r["original_title"] != r["title"] else "")
             overview = r["overview"][:160] + ("…" if len(r["overview"]) > 160 else "")
-            item = QListWidgetItem(f"{r['title']}{year}{original}\n{overview or 'Sem sinopse.'}")
+            item = QListWidgetItem(f"{r['title']}{year}{original}\n{overview or 'No overview.'}")
             item.setData(Qt.UserRole, r["id"])
             self.results.addItem(item)
         if results:

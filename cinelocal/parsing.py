@@ -1,4 +1,4 @@
-"""Interpretação das respostas do TMDB e escolha da melhor correspondência (sem Qt)."""
+"""Parsing of TMDB responses and choice of the best match (no Qt)."""
 from __future__ import annotations
 
 from .utils import comparable_title
@@ -23,7 +23,7 @@ def parse_search_result(raw: dict) -> dict:
 
 
 def choose_best(results: list[dict], title: str, year: int | None) -> dict | None:
-    """Devolve a correspondência segura ou None quando precisa de revisão manual."""
+    """Returns the confident match, or None when manual review is needed."""
     if not results:
         return None
     wanted = comparable_title(title)
@@ -48,7 +48,7 @@ def choose_best(results: list[dict], title: str, year: int | None) -> dict | Non
 
 
 def parse_season(raw: dict) -> dict[int, dict]:
-    """Converte /tv/{id}/season/{n} em {número do episódio: campos ep_* do banco}."""
+    """Converts /tv/{id}/season/{n} into {episode number: database ep_* fields}."""
     episodes = {}
     for e in raw.get("episodes") or []:
         if e.get("episode_number") is None:
@@ -79,8 +79,8 @@ def needs_fallback(raw: dict) -> bool:
 
 
 def parse_details(raw: dict, fallback: dict | None = None) -> dict:
-    """Converte a resposta de /movie/{id} em campos do banco.
-    `fallback` (em inglês) preenche o que faltar na tradução."""
+    """Converts the /movie/{id} response into database fields.
+    `fallback` (in English) fills in whatever the translation lacks."""
     fb = fallback or {}
 
     def pick(key):

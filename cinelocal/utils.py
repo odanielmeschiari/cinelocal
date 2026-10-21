@@ -1,4 +1,4 @@
-"""Funções utilitárias puras (sem dependência de Qt)."""
+"""Pure utility functions (no Qt dependency)."""
 from __future__ import annotations
 
 import re
@@ -9,7 +9,7 @@ _ARTICLES = {"the", "a", "an", "o", "os", "as", "um", "uma", "el", "la", "los", 
 
 
 def normalize_text(text) -> str:
-    """Minúsculas, sem acentos e sem pontuação (para busca e comparação)."""
+    """Lowercase, without accents or punctuation (for searching and comparing)."""
     if not text:
         return ""
     t = unicodedata.normalize("NFKD", str(text))
@@ -18,7 +18,7 @@ def normalize_text(text) -> str:
 
 
 def comparable_title(text) -> str:
-    """Como normalize_text, ignorando artigo inicial ('The Matrix' == 'Matrix')."""
+    """Like normalize_text, ignoring a leading article ('The Matrix' == 'Matrix')."""
     words = normalize_text(text).split()
     if len(words) > 1 and words[0] in _ARTICLES:
         words = words[1:]
@@ -33,4 +33,4 @@ def format_runtime(minutes) -> str:
 
 
 def format_votes(votes) -> str:
-    return f"{int(votes or 0):,}".replace(",", ".")
+    return f"{int(votes or 0):,}"

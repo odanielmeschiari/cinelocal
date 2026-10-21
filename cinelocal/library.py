@@ -1,4 +1,4 @@
-"""Sincroniza o banco de dados com os arquivos existentes na pasta (sem Qt)."""
+"""Syncs the database with the files present in the folder (no Qt)."""
 from __future__ import annotations
 
 import os
@@ -9,12 +9,12 @@ from .scanner import clean_filename, parse_episode, scan_folder
 
 
 def sync_library(db: Database, root: str) -> tuple[list[int], list[int]]:
-    """Adiciona arquivos novos e remove os ausentes. Retorna (ids_adicionados, ids_removidos).
+    """Adds new files and removes missing ones. Returns (added_ids, removed_ids).
 
-    Arquivos movidos de lugar (mesmo nome e tamanho) mantêm metadados, coleções e marcações.
+    Moved files (same name and size) keep their metadata, collections and flags.
     """
     if not os.path.isdir(root):
-        raise FileNotFoundError(f"Pasta não encontrada: {root}")
+        raise FileNotFoundError(f"Folder not found: {root}")
 
     found = scan_folder(root)
     known = db.known_files()
@@ -26,7 +26,7 @@ def sync_library(db: Database, root: str) -> tuple[list[int], list[int]]:
         if k["path"] not in found_paths:
             gone.setdefault((k["file_name"], k["size"]), []).append(k)
 
-    for k in known:   # arquivos já cadastrados como filme que na verdade são episódios
+    for k in known:   # files already registered as movies that are actually episodes
         if k["path"] in found_paths and k["kind"] != "episode":
             info = parse_episode(k["path"], root)
             if info:

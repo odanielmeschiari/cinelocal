@@ -1,4 +1,4 @@
-"""Cliente mínimo da API do TMDB (sem Qt, só biblioteca padrão)."""
+"""Minimal TMDB API client (no Qt, standard library only)."""
 from __future__ import annotations
 
 import json
@@ -21,7 +21,7 @@ class TMDBError(Exception):
 
 
 def _tv_as_movie(raw: dict) -> dict:
-    """Dá a uma série do TMDB o mesmo formato de um filme (parsing.py não precisa saber a diferença)."""
+    """Gives a TMDB series the same shape as a movie (parsing.py doesn't need to know the difference)."""
     out = dict(raw)
     out["title"] = raw.get("name") or raw.get("original_name")
     out["original_title"] = raw.get("original_name")
@@ -35,16 +35,16 @@ def _tv_as_movie(raw: dict) -> dict:
 
 
 class TMDBClient:
-    def __init__(self, api_key: str, language: str = "pt-BR", timeout: int = 15):
+    def __init__(self, api_key: str, language: str = "en-US", timeout: int = 15):
         self.api_key = (api_key or "").strip()
         self.language = language
         self.timeout = timeout
-        # Chave v3 tem 32 caracteres; o token de leitura v4 é um JWT bem mais longo.
+        # A v3 key has 32 characters; the v4 read token is a much longer JWT.
         self._use_bearer = len(self.api_key) > 40
 
     def _request(self, url: str, retries: int = 2) -> bytes:
         if not self.api_key:
-            raise TMDBError("Chave da API do TMDB não configurada.", "auth")
+            raise TMDBError("TMDB API key not set.", "auth")
         headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
         if self._use_bearer:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -55,9 +55,9 @@ class TMDBClient:
                     return response.read()
             except urllib.error.HTTPError as exc:
                 if exc.code == 401:
-                    raise TMDBError("Chave da API inválida ou sem permissão.", "auth") from None
+                    raise TMDBError("Invalid API key or insufficient permissions.", "auth") from None
                 if exc.code == 404:
-                    raise TMDBError("Item não encontrado no TMDB.", "notfound") from None
+                    raise TMDBError("Item not found on TMDB.", "notfound") from None
                 if exc.code in (429, 500, 502, 503) and attempt < retries:
                     try:
                         wait = float(exc.headers.get("Retry-After", 1 + attempt))
@@ -65,13 +65,13 @@ class TMDBClient:
                         wait = 1 + attempt
                     time.sleep(min(wait, 5))
                     continue
-                raise TMDBError(f"Erro HTTP {exc.code} do TMDB.", "other") from None
+                raise TMDBError(f"TMDB HTTP error {exc.code}.", "other") from None
             except (urllib.error.URLError, TimeoutError, OSError):
                 if attempt < retries:
                     time.sleep(1 + attempt)
                     continue
-                raise TMDBError("Sem conexão com o TMDB.", "network") from None
-        raise TMDBError("Falha ao consultar o TMDB.", "other")
+                raise TMDBError("Could not connect to TMDB.", "network") from None
+        raise TMDBError("Failed to query TMDB.", "other")
 
     def _get_json(self, path: str, **params) -> dict:
         query = {k: v for k, v in params.items() if v is not None}
@@ -81,7 +81,7 @@ class TMDBClient:
         try:
             return json.loads(self._request(url))
         except ValueError:
-            raise TMDBError("Resposta inválida do TMDB.", "other") from None
+            raise TMDBError("Invalid response from TMDB.", "other") from None
 
     # -- endpoints -----------------------------------------------------------
     def test_key(self) -> None:

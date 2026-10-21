@@ -1,4 +1,4 @@
-"""Caminhos, constantes e configurações persistentes do usuário."""
+"""Paths, constants and the user's persistent settings."""
 from __future__ import annotations
 
 import json
@@ -16,7 +16,7 @@ CONFIG_DIR = _xdg("XDG_CONFIG_HOME", ".config") / APP_ID
 DATA_DIR = _xdg("XDG_DATA_HOME", ".local/share") / APP_ID
 CACHE_DIR = _xdg("XDG_CACHE_HOME", ".cache") / APP_ID
 
-if os.name == "nt":  # Windows: AppData em vez de ~/.config, ~/.local/share e ~/.cache
+if os.name == "nt":  # Windows: AppData instead of ~/.config, ~/.local/share and ~/.cache
     _roaming = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
     _local = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     CONFIG_DIR = _roaming / APP_ID
@@ -31,9 +31,9 @@ VIDEO_EXTENSIONS = {
 }
 
 LANGUAGES = {
+    "en-US": "English (US)",
     "pt-BR": "Português (Brasil)",
     "pt-PT": "Português (Portugal)",
-    "en-US": "English (US)",
     "es-ES": "Español",
     "fr-FR": "Français",
     "de-DE": "Deutsch",
@@ -46,11 +46,11 @@ DEFAULT_SETTINGS = {
     "tmdb_api_key": "",
     "omdb_api_key": "",
     "provider": "tmdb",
-    "language": "pt-BR",
+    "language": "en-US",
     "player_command": "",
-    "default_player": "",     # "builtin", "external" ou "" (= externo só se houver comando)
-    "player_prefs": {},       # volume e ajustes de imagem lembrados entre filmes
-    "resume": {},             # caminho do arquivo -> posição (ms) onde parou
+    "default_player": "",     # "builtin", "external" or "" (= external only if a command is set)
+    "player_prefs": {},       # volume and picture settings remembered between movies
+    "resume": {},             # file path -> position (ms) where it stopped
     "sort_id": "title_asc",
 }
 
@@ -61,7 +61,7 @@ def ensure_dirs() -> None:
 
 
 class Settings:
-    """Configurações em JSON (~/.config/cinelocal/settings.json)."""
+    """Settings in JSON (~/.config/cinelocal/settings.json)."""
 
     def __init__(self, path: Path = SETTINGS_FILE):
         self.path = path
@@ -81,7 +81,7 @@ class Settings:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self._data, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.chmod(tmp, 0o600)  # contém a chave da API
+        os.chmod(tmp, 0o600)  # contains the API key
         os.replace(tmp, self.path)
 
     def get(self, key: str):

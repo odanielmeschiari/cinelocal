@@ -1,4 +1,4 @@
-"""Camada de acesso ao SQLite (sem Qt). Thread-safe via lock único."""
+"""SQLite access layer (no Qt). Thread-safe through a single lock."""
 from __future__ import annotations
 
 import json
@@ -90,7 +90,7 @@ METADATA_COLUMNS = {
 }
 FLAG_COLUMNS = {"watched", "favorite", "watchlist"}
 EPISODE_COLUMNS = {"ep_title", "ep_overview", "ep_air_date", "ep_runtime", "ep_rating"}
-# Colunas de séries/episódios acrescentadas a bancos criados em versões anteriores.
+# Series/episode columns added to databases created by earlier versions.
 _MIGRATIONS = (
     ("kind", "TEXT DEFAULT 'movie'"), ("series_id", "INTEGER"), ("season", "INTEGER"),
     ("episode", "INTEGER"), ("ep_title", "TEXT"), ("ep_overview", "TEXT"),
@@ -136,12 +136,12 @@ class Database:
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.executescript(SCHEMA)
-            try:   # migração: bancos criados antes da Watchlist não têm a coluna
+            try:   # migration: databases created before the Watchlist lack the column
                 self._conn.execute("ALTER TABLE movies ADD COLUMN watchlist INTEGER DEFAULT 0")
                 self._conn.commit()
             except sqlite3.OperationalError:
                 pass
-            for column, ddl in _MIGRATIONS:   # migração: séries e episódios
+            for column, ddl in _MIGRATIONS:   # migration: series and episodes
                 try:
                     self._conn.execute(f"ALTER TABLE movies ADD COLUMN {column} {ddl}")
                     self._conn.commit()
@@ -169,7 +169,7 @@ class Database:
         with self._lock:
             self._conn.close()
 
-    # -- filmes --------------------------------------------------------------
+    # -- movies --------------------------------------------------------------
     def all_movies(self) -> list[dict]:
         return [_row_to_movie(r) for r in self._query("SELECT * FROM movies")]
 
@@ -234,9 +234,9 @@ class Database:
         self._many(f"UPDATE movies SET {column} = ? WHERE id = ?",
                    [(int(value), i) for i in ids])
 
-    # -- séries e episódios -----------------------------------------------------
+    # -- series and episodes -----------------------------------------------------
     def ensure_series(self, title: str, year: int | None = None) -> int:
-        """Id da série com este título (cria se não existir). A chave ignora acentos e artigos."""
+        """Id of the series with this title (created if missing). The key ignores accents and articles."""
         key = comparable_title(title) or title.lower()
         with self._lock:
             rows = self._query("SELECT id, year_guess FROM series WHERE key = ?", (key,))
@@ -262,7 +262,7 @@ class Database:
 
     def convert_to_episode(self, movie_id: int, series_id: int, title: str,
                            year: int | None, season: int, episode: int) -> None:
-        """Transforma um 'filme' já cadastrado (arquivo de episódio) em episódio de série."""
+        """Turns an already registered 'movie' (an episode file) into a series episode."""
         self._run(
             "UPDATE movies SET kind = 'episode', series_id = ?, season = ?, episode = ?,"
             " clean_title = ?, year_guess = ?, status = 'pending', tmdb_id = NULL, title = NULL,"
@@ -284,7 +284,7 @@ class Database:
         self._many(f"UPDATE series SET {column} = ? WHERE id = ?", [(int(value), i) for i in series_ids])
 
     def prune_series(self) -> list[int]:
-        """Apaga séries que ficaram sem episódios. Retorna os ids apagados."""
+        """Deletes series left without episodes. Returns the deleted ids."""
         rows = self._query("SELECT id FROM series WHERE id NOT IN"
                            " (SELECT series_id FROM movies WHERE series_id IS NOT NULL)")
         ids = [r["id"] for r in rows]
@@ -292,7 +292,7 @@ class Database:
             self._many("DELETE FROM series WHERE id = ?", [(i,) for i in ids])
         return ids
 
-    # -- coleções ------------------------------------------------------------
+    # -- collections ------------------------------------------------------------
     def all_collections(self) -> list[dict]:
         rows = self._query("SELECT id, name FROM collections ORDER BY name COLLATE NOCASE")
         return [dict(r) for r in rows]
@@ -308,13 +308,13 @@ class Database:
             return self._run("INSERT INTO collections (name, created_at) VALUES (?, ?)",
                              (name, time.time())).lastrowid
         except sqlite3.IntegrityError:
-            raise ValueError(f"Já existe uma coleção chamada “{name}”.") from None
+            raise ValueError(f"A collection named “{name}” already exists.") from None
 
     def rename_collection(self, collection_id: int, name: str) -> None:
         try:
             self._run("UPDATE collections SET name = ? WHERE id = ?", (name, collection_id))
         except sqlite3.IntegrityError:
-            raise ValueError(f"Já existe uma coleção chamada “{name}”.") from None
+            raise ValueError(f"A collection named “{name}” already exists.") from None
 
     def delete_collection(self, collection_id: int) -> None:
         self._run("DELETE FROM collections WHERE id = ?", (collection_id,))

@@ -1,4 +1,4 @@
-"""Testes das partes sem interface gráfica. Rode com: python3 -m unittest discover -s tests"""
+"""Tests for the non-GUI parts. Run with: python3 -m unittest discover -s tests"""
 import os
 import sys
 import tempfile
@@ -104,7 +104,7 @@ class LibraryTests(unittest.TestCase):
         cid = self.db.create_collection("Clássicos")
         self.db.set_membership(cid, [movie_id], True)
 
-        # mover o arquivo preserva marcações e coleções
+        # moving the file preserves flags and collections
         new_path = self.root / "novo" / a.name
         new_path.parent.mkdir()
         a.rename(new_path)
@@ -115,7 +115,7 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(moved["path"], str(new_path))
         self.assertIn(movie_id, self.db.membership()[cid])
 
-        # arquivo apagado some, junto com a participação em coleções
+        # a deleted file disappears, along with its collection memberships
         new_path.unlink()
         _, removed = sync_library(self.db, str(self.root))
         self.assertEqual(removed, [movie_id])

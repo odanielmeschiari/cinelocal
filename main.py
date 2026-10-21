@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ponto de entrada do CineLocal."""
+"""CineLocal entry point."""
 import sys
 
 from cinelocal.app import run

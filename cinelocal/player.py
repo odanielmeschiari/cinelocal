@@ -1,4 +1,4 @@
-"""Abre o filme no player externo (padrão do sistema ou comando escolhido)."""
+"""Opens the movie in the external player (system default or chosen command)."""
 from __future__ import annotations
 
 import os
@@ -9,7 +9,7 @@ import subprocess
 def _split(command: str) -> list[str]:
     if os.name != "nt":
         return shlex.split(command)
-    # No Windows, shlex em modo POSIX come as barras invertidas dos caminhos.
+    # On Windows, shlex in POSIX mode swallows the backslashes in paths.
     return [a[1:-1] if len(a) > 1 and a[0] == a[-1] == '"' else a
             for a in shlex.split(command, posix=False)]
 
@@ -25,9 +25,9 @@ def _spawn(args: list[str]) -> None:
 
 
 def play(path: str, command: str = "") -> None:
-    """Levanta OSError se o arquivo ou o player não existirem."""
+    """Raises OSError if the file or the player does not exist."""
     if not os.path.exists(path):
-        raise FileNotFoundError(f"O arquivo não foi encontrado:\n{path}")
+        raise FileNotFoundError(f"The file was not found:\n{path}")
     if command.strip():
         _spawn(_split(command) + [path])
     elif os.name == "nt":

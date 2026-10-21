@@ -1,8 +1,8 @@
-"""Cliente mínimo da API do OMDb (omdbapi.com), adaptado ao formato do TMDB (sem Qt).
+"""Minimal OMDb API client (omdbapi.com), adapted to the TMDB format (no Qt).
 
-Devolve dicionários com as mesmas chaves do TMDB, então parsing.py e metadata_service.py
-funcionam sem mudanças. O id guardado no banco é OMDB_OFFSET + número do IMDb (tt0133093 ->
-OMDB_OFFSET + 133093), o que permite saber de qual provedor veio cada correspondência.
+Returns dictionaries with the same keys as TMDB, so parsing.py and metadata_service.py
+work unchanged. The id stored in the database is OMDB_OFFSET + the IMDb number (tt0133093 ->
+OMDB_OFFSET + 133093), which tells which provider each match came from.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _names(text) -> list[str]:
 class OMDbClient:
     def __init__(self, api_key: str, language: str = "en-US", timeout: int = 15):
         self.api_key = (api_key or "").strip()
-        self.language = "en-US"   # o OMDb só tem dados em inglês
+        self.language = "en-US"   # OMDb only has English data
         self.timeout = timeout
 
     def _request(self, url: str, retries: int = 2) -> bytes:
@@ -42,38 +42,38 @@ class OMDbClient:
                     return response.read()
             except urllib.error.HTTPError as exc:
                 if exc.code == 401:
-                    raise TMDBError("Chave da API do OMDb inválida ou não ativada.", "auth") from None
+                    raise TMDBError("OMDb API key invalid or not activated.", "auth") from None
                 if exc.code in (429, 500, 502, 503) and attempt < retries:
                     time.sleep(1 + attempt)
                     continue
-                raise TMDBError(f"Erro HTTP {exc.code} do OMDb.", "other") from None
+                raise TMDBError(f"OMDb HTTP error {exc.code}.", "other") from None
             except (urllib.error.URLError, TimeoutError, OSError):
                 if attempt < retries:
                     time.sleep(1 + attempt)
                     continue
-                raise TMDBError("Sem conexão com o OMDb.", "network") from None
-        raise TMDBError("Falha ao consultar o OMDb.", "other")
+                raise TMDBError("Could not connect to OMDb.", "network") from None
+        raise TMDBError("Failed to query OMDb.", "other")
 
     def _get_json(self, **params) -> dict:
         if not self.api_key:
-            raise TMDBError("Chave da API do OMDb não configurada.", "auth")
+            raise TMDBError("OMDb API key not set.", "auth")
         query = {k: v for k, v in params.items() if v is not None}
         url = f"{API_BASE}?{urllib.parse.urlencode({**query, 'apikey': self.api_key})}"
         try:
             data = json.loads(self._request(url))
         except ValueError:
-            raise TMDBError("Resposta inválida do OMDb.", "other") from None
+            raise TMDBError("Invalid response from OMDb.", "other") from None
         if data.get("Response") == "False":
-            error = data.get("Error") or "Erro do OMDb."
+            error = data.get("Error") or "OMDb error."
             low = error.lower()
             if "api key" in low:
-                raise TMDBError("Chave da API do OMDb inválida.", "auth")
+                raise TMDBError("Invalid OMDb API key.", "auth")
             if "limit" in low:
-                raise TMDBError("Limite diário de consultas do OMDb atingido.", "other")
+                raise TMDBError("OMDb daily request limit reached.", "other")
             raise TMDBError(error, "notfound" if "not found" in low else "other")
         return data
 
-    # -- mesma interface do TMDBClient ------------------------------------------
+    # -- same interface as TMDBClient ------------------------------------------
     def test_key(self) -> None:
         self._get_json(i="tt0133093")
 
@@ -121,10 +121,10 @@ class OMDbClient:
         }
 
     def tv_details(self, omdb_id: int, language: str | None = None) -> dict:
-        return self.movie_details(omdb_id, language)   # o OMDb usa a mesma consulta para séries
+        return self.movie_details(omdb_id, language)   # OMDb uses the same query for series
 
     def season(self, omdb_id: int, number: int, language: str | None = None) -> dict:
-        """Episódios de uma temporada no formato do TMDB (o OMDb não traz sinopse por episódio)."""
+        """Episodes of a season in TMDB format (OMDb has no per-episode overview)."""
         data = self._get_json(i=f"tt{omdb_id - OMDB_OFFSET:07d}", Season=number)
         episodes = []
         for e in data.get("Episodes") or []:
@@ -143,4 +143,4 @@ class OMDbClient:
         return {"episodes": episodes}
 
     def download_image(self, size: str, file_path: str) -> bytes:
-        return self._request(file_path)   # no OMDb o "caminho" já é a URL completa
+        return self._request(file_path)   # in OMDb the "path" is already the full URL

@@ -1,4 +1,4 @@
-"""Grade de capas: modelo, delegate (pintura própria, rápida) e view."""
+"""Poster grid: model, delegate (custom, fast painting) and view."""
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -58,7 +58,7 @@ class MovieDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._cache: OrderedDict = OrderedDict()
-        self.progress_of = None   # função(filme) -> fração assistida (0 a 1), definida pela janela
+        self.progress_of = None   # function(movie) -> watched fraction (0 to 1), set by the window
         self._title_font = QFont()
         self._title_font.setBold(True)
         self._title_font.setPointSize(10)
@@ -71,7 +71,7 @@ class MovieDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
         return QSize(CELL_W, CELL_H)
 
-    # -- cache de capas ---------------------------------------------------------
+    # -- poster cache ---------------------------------------------------------
     def _poster(self, movie: dict, dpr: float):
         key = (movie["id"], movie["updated_at"], dpr)
         if key in self._cache:
@@ -91,7 +91,7 @@ class MovieDelegate(QStyledItemDelegate):
             self._cache.popitem(last=False)
         return pixmap
 
-    # -- pintura ------------------------------------------------------------------
+    # -- painting ------------------------------------------------------------------
     def paint(self, painter: QPainter, option, index):
         movie = index.model().movie_at(index.row())
         widget = option.widget
@@ -152,15 +152,15 @@ class MovieDelegate(QStyledItemDelegate):
                        f"{movie['rating']:.1f}", QColor(0, 0, 0, 185), "#ffd25e")
         if movie["status"] in ("ambiguous", "not_found"):
             self._pill(painter, QRect(poster.right() - 70, poster.bottom() - 28, 62, 20),
-                       "Revisar", QColor(COLORS["warn"]), "#1b1200")
+                       "Review", QColor(COLORS["warn"]), "#1b1200")
         if movie["favorite"]:
             self._pill(painter, QRect(poster.right() - 70, poster.top() + 8, 62, 20),
-                       "Favorito", QColor(COLORS["accent"]))
+                       "Favorite", QColor(COLORS["accent"]))
         if movie["watched"]:
-            self._pill(painter, QRect(poster.left() + 8, poster.top() + 8, 46, 20),
-                       "Visto", QColor(0, 0, 0, 185))
+            self._pill(painter, QRect(poster.left() + 8, poster.top() + 8, 58, 20),
+                       "Watched", QColor(0, 0, 0, 185))
         fraction = self.progress_of(movie) if self.progress_of else 0
-        if fraction > 0:   # mini-tracker: quanto do filme já foi visto
+        if fraction > 0:   # mini-tracker: how much of the movie has been watched
             track = QRectF(poster.left() + 8, poster.bottom() - 6, POSTER_W - 16, 4)
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(255, 255, 255, 90))
@@ -182,9 +182,9 @@ class MovieDelegate(QStyledItemDelegate):
         if movie["genres"]:
             parts.append(movie["genres"][0])
         if not parts and movie["status"] == "pending":
-            parts.append("Sem metadados")
+            parts.append("No metadata")
         if movie.get("kind") == "series":
-            parts.insert(0, "Série")
+            parts.insert(0, "Series")
         painter.setFont(self._small_font)
         painter.setPen(QColor(COLORS["muted"]))
         painter.drawText(QRect(poster.left(), poster.bottom() + 28, POSTER_W, 18),
@@ -193,7 +193,7 @@ class MovieDelegate(QStyledItemDelegate):
 
 class MovieGrid(QListView):
     movie_opened = Signal(int)
-    context_requested = Signal(list, QPoint)   # ids selecionados, posição global
+    context_requested = Signal(list, QPoint)   # selected ids, global position
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -230,7 +230,7 @@ class MovieGrid(QListView):
     def _on_clicked(self, index):
         mods = QGuiApplication.keyboardModifiers()
         if mods & (Qt.ControlModifier | Qt.ShiftModifier):
-            return  # seleção múltipla
+            return  # multiple selection
         self.movie_opened.emit(self._model.movie_at(index.row())["id"])
 
     def _on_context(self, pos):
@@ -249,7 +249,7 @@ class MovieGrid(QListView):
 
 
 def _scroll_page(widget, event) -> None:
-    """Repassa a roda do mouse à área de rolagem que contém `widget`."""
+    """Forwards the mouse wheel to the scroll area that contains `widget`."""
     area = widget.parentWidget()
     while area is not None and not isinstance(area, QScrollArea):
         area = area.parentWidget()
@@ -260,7 +260,7 @@ def _scroll_page(widget, event) -> None:
 
 
 class MovieFlow(MovieGrid):
-    """Grade sem rolagem própria: cresce até a altura total e quem rola é a área que a contém."""
+    """Grid without its own scrolling: it grows to its full height and the containing area scrolls."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -280,7 +280,7 @@ class MovieFlow(MovieGrid):
 
 
 class MovieRow(MovieGrid):
-    """Uma única fileira horizontal de capas (usada na página inicial), rolada por setas."""
+    """A single horizontal row of posters (used on the home page), scrolled with arrows."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -299,7 +299,7 @@ class MovieRow(MovieGrid):
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
 
     def scroll_page(self, direction: int) -> None:
-        """Anda uma 'página' de capas inteiras para a esquerda (-1) ou direita (1)."""
+        """Moves one 'page' of whole posters to the left (-1) or right (1)."""
         bar = self.horizontalScrollBar()
         base = self._anim.endValue() if self._anim.state() == QAbstractAnimation.Running else bar.value()
         step = max(CELL_W, (self.viewport().width() // CELL_W) * CELL_W)
@@ -310,7 +310,7 @@ class MovieRow(MovieGrid):
         self._anim.start()
 
     def wheelEvent(self, event) -> None:
-        if event.angleDelta().x():   # rolagem horizontal (touchpad): anda a fileira
+        if event.angleDelta().x():   # horizontal scroll (touchpad): moves the row
             super().wheelEvent(event)
-        else:                        # roda comum: rola a página inteira
+        else:                        # regular wheel: scrolls the whole page
             _scroll_page(self, event)

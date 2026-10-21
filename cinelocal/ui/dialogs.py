@@ -1,4 +1,4 @@
-"""Diálogos e menus compartilhados (coleções)."""
+"""Shared dialogs and menus (collections)."""
 from __future__ import annotations
 
 from PySide6.QtWidgets import QInputDialog, QMessageBox, QMenu, QWidget
@@ -9,35 +9,35 @@ from ..service import LibraryService
 def ask_new_collection(parent: QWidget, service: LibraryService) -> int | None:
     text = ""
     while True:
-        name, ok = QInputDialog.getText(parent, "Nova coleção", "Nome da coleção:", text=text)
+        name, ok = QInputDialog.getText(parent, "New collection", "Collection name:", text=text)
         if not ok:
             return None
         try:
             return service.create_collection(name)
         except ValueError as exc:
-            QMessageBox.warning(parent, "Coleção", str(exc))
+            QMessageBox.warning(parent, "Collection", str(exc))
             text = name
 
 
 def ask_rename_collection(parent: QWidget, service: LibraryService, collection_id: int) -> None:
     text = service.collection_name(collection_id)
     while True:
-        name, ok = QInputDialog.getText(parent, "Renomear coleção", "Novo nome:", text=text)
+        name, ok = QInputDialog.getText(parent, "Rename collection", "New name:", text=text)
         if not ok:
             return
         try:
             service.rename_collection(collection_id, name)
             return
         except ValueError as exc:
-            QMessageBox.warning(parent, "Coleção", str(exc))
+            QMessageBox.warning(parent, "Collection", str(exc))
             text = name
 
 
 def confirm_delete_collection(parent: QWidget, service: LibraryService, collection_id: int) -> bool:
     name = service.collection_name(collection_id)
     answer = QMessageBox.question(
-        parent, "Excluir coleção",
-        f"Excluir a coleção “{name}”?\nOs filmes não serão apagados, apenas removidos da coleção.")
+        parent, "Delete collection",
+        f"Delete the collection “{name}”?\nThe movies will not be deleted, only removed from the collection.")
     if answer == QMessageBox.Yes:
         service.delete_collection(collection_id)
         return True
@@ -46,7 +46,7 @@ def confirm_delete_collection(parent: QWidget, service: LibraryService, collecti
 
 def populate_collections_menu(menu: QMenu, service: LibraryService,
                               movie_ids: list[int], parent: QWidget) -> None:
-    """Preenche `menu` com as coleções; marcar/desmarcar adiciona/remove os filmes."""
+    """Fills `menu` with the collections; checking/unchecking adds/removes the movies."""
     ids = list(movie_ids)
     id_set = set(ids)
     for collection in service.collections:
@@ -60,7 +60,7 @@ def populate_collections_menu(menu: QMenu, service: LibraryService,
             service.set_in_collection(cid, ids, present))
     if service.collections:
         menu.addSeparator()
-    new_action = menu.addAction("Nova coleção…")
+    new_action = menu.addAction("New collection…")
 
     def create_and_add():
         collection_id = ask_new_collection(parent, service)

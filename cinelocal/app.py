@@ -1,4 +1,4 @@
-"""Inicialização da aplicação Qt."""
+"""Qt application startup."""
 from __future__ import annotations
 
 import sys
@@ -25,7 +25,7 @@ def _icon() -> QIcon:
 
 def run() -> int:
     ensure_dirs()
-    if sys.platform == "win32":  # ícone próprio na barra de tarefas (em vez do do Python)
+    if sys.platform == "win32":  # own taskbar icon (instead of Python's)
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
     app = QApplication(sys.argv)

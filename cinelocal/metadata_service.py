@@ -1,4 +1,4 @@
-"""Regras de busca e gravação de metadados de um filme (executa em threads)."""
+"""Rules for finding and saving a movie's metadata (runs in threads)."""
 from __future__ import annotations
 
 from . import images
@@ -10,7 +10,7 @@ from .tmdb import TMDBClient, TMDBError
 
 
 def find_candidates(client: TMDBClient, title: str, year: int | None) -> list[dict]:
-    """Tenta as consultas de `search_attempts` até obter resultados."""
+    """Tries the `search_attempts` queries until some results come back."""
     for query, attempt_year in search_attempts(title, year):
         results = [parse_search_result(r) for r in client.search_movie(query, attempt_year)]
         if results:
@@ -55,13 +55,13 @@ def _season_data(client: TMDBClient, tmdb_id: int, number: int, language: str | 
 
 
 def _fill_episodes(db: Database, client: TMDBClient, series_id: int, tmdb_id: int) -> None:
-    """Baixa os dados de cada temporada que tem arquivo e grava nos episódios."""
+    """Downloads the data of each season that has files and saves it into the episodes."""
     episodes = db.episodes_of(series_id)
     for number in sorted({e["season"] for e in episodes if e["season"] is not None}):
         data = _season_data(client, tmdb_id, number)
         if client.language != "en-US" and any(
                 not d["ep_overview"] or not d["ep_title"] for d in data.values()):
-            fallback = _season_data(client, tmdb_id, number, "en-US")   # preenche o que falta na tradução
+            fallback = _season_data(client, tmdb_id, number, "en-US")   # fills in what the translation lacks
             for n, d in data.items():
                 d.update({k: v for k, v in fallback.get(n, {}).items() if d.get(k) is None})
         for e in episodes:
@@ -70,9 +70,9 @@ def _fill_episodes(db: Database, client: TMDBClient, series_id: int, tmdb_id: in
 
 
 def process_series(db: Database, client: TMDBClient, series: dict, tmdb_id: int | None = None) -> str:
-    """Como process_movie, para uma série. `series['id']` é negativo (id usado na interface).
+    """Like process_movie, for a series. `series['id']` is negative (the id used in the interface).
 
-    Identifica a série, baixa metadados e capa e preenche os episódios de cada temporada.
+    Identifies the series, downloads metadata and poster, and fills in each season's episodes.
     """
     series_id = abs(series["id"])
     if tmdb_id is None:
@@ -92,7 +92,7 @@ def process_series(db: Database, client: TMDBClient, series: dict, tmdb_id: int 
     fields = parse_details(raw, fallback)
     source = {"poster_path": raw.get("poster_path") or (fallback or {}).get("poster_path"),
               "backdrop_path": raw.get("backdrop_path") or (fallback or {}).get("backdrop_path")}
-    has_poster, has_backdrop = _download_images(client, -series_id, source)   # imagens de série: id negativo
+    has_poster, has_backdrop = _download_images(client, -series_id, source)   # series images: negative id
     images.delete_images(-series_id, poster=not has_poster, backdrop=not has_backdrop)
 
     fields.update(tmdb_id=tmdb_id, has_poster=has_poster, has_backdrop=has_backdrop, status="matched")
@@ -102,9 +102,9 @@ def process_series(db: Database, client: TMDBClient, series: dict, tmdb_id: int 
 
 
 def process_movie(db: Database, client: TMDBClient, movie: dict, tmdb_id: int | None = None) -> str:
-    """Identifica o filme (se preciso), baixa metadados e imagens e grava no banco.
+    """Identifies the movie (if needed), downloads metadata and images and saves them to the database.
 
-    Retorna 'matched', 'ambiguous' ou 'not_found'. Erros de rede/chave viram TMDBError.
+    Returns 'matched', 'ambiguous' or 'not_found'. Network/key errors become TMDBError.
     """
     movie_id = movie["id"]
     if tmdb_id is None:
@@ -125,7 +125,7 @@ def process_movie(db: Database, client: TMDBClient, movie: dict, tmdb_id: int | 
     source = {"poster_path": raw.get("poster_path") or (fallback or {}).get("poster_path"),
               "backdrop_path": raw.get("backdrop_path") or (fallback or {}).get("backdrop_path")}
     has_poster, has_backdrop = _download_images(client, movie_id, source)
-    # Sem imagem nova, descarta a antiga (ex.: correspondência corrigida para outro filme).
+    # With no new image, discard the old one (e.g. match corrected to another movie).
     images.delete_images(movie_id, poster=not has_poster, backdrop=not has_backdrop)
 
     fields.update(tmdb_id=tmdb_id, has_poster=has_poster,

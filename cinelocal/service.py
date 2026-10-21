@@ -1,4 +1,4 @@
-"""Serviço central: estado da biblioteca em memória + operações usadas pela interface."""
+"""Central service: in-memory library state plus the operations used by the interface."""
 from __future__ import annotations
 
 import os
@@ -18,20 +18,20 @@ from .workers import FuncWorker, UpdateWorker
 
 
 class LibraryService(QObject):
-    library_changed = Signal()          # lista, coleções ou ordem mudaram
-    movie_changed = Signal(int)         # um filme mudou (metadados ou marcações)
-    progress = Signal(int, int, str)    # feitos, total, título
-    busy_changed = Signal(bool, str)    # ocupado?, descrição
+    library_changed = Signal()          # list, collections or order changed
+    movie_changed = Signal(int)         # a movie changed (metadata or flags)
+    progress = Signal(int, int, str)    # done, total, title
+    busy_changed = Signal(bool, str)    # busy?, description
     scan_finished = Signal(int, int)    # adicionados, removidos
-    update_finished = Signal(dict)      # resumo da atualização
-    message = Signal(str)               # aviso curto para a barra de status
+    update_finished = Signal(dict)      # update summary
+    message = Signal(str)               # short notice for the status bar
     error = Signal(str)
 
     def __init__(self, db: Database, settings: Settings, parent=None):
         super().__init__(parent)
         self.db, self.settings = db, settings
-        self.movies: list[dict] = []        # filmes e séries (as séries têm id negativo)
-        self.episodes: dict[int, list[dict]] = {}   # id da série (positivo) -> episódios em ordem
+        self.movies: list[dict] = []        # movies and series (series have negative ids)
+        self.episodes: dict[int, list[dict]] = {}   # series id (positive) -> episodes in order
         self.by_id: dict[int, dict] = {}
         self.collections: list[dict] = []
         self.membership: dict[int, set[int]] = {}
@@ -77,7 +77,7 @@ class LibraryService(QObject):
         self.membership = self.db.membership()
 
     def _series_entry(self, row: dict) -> dict:
-        """Série no mesmo formato de um filme, para a grade, filtros e busca (id = -id da série)."""
+        """Series in the same format as a movie, for the grid, filters and search (id = -series id)."""
         eps = self.episodes.get(row["id"], [])
         entry = dict(row)
         entry.update(id=-row["id"], series_id=row["id"], kind="series", path="",
@@ -109,13 +109,13 @@ class LibraryService(QObject):
         self.movie_changed.emit(-series_id)
 
     def next_episode(self, series_id: int) -> int | None:
-        """Episódio para 'Assistir' na série: o primeiro não assistido (ou o primeiro de todos)."""
+        """Episode for 'Watch' on a series: the first unwatched one (or the first of all)."""
         eps = self.episodes.get(series_id, [])
         pick = next((e for e in eps if not e["watched"]), eps[0] if eps else None)
         return pick["id"] if pick else None
 
     def _pending(self) -> list[dict]:
-        """Itens que precisam de metadados: novos, e séries com episódios novos."""
+        """Items that need metadata: new ones, and series with new episodes."""
         return [m for m in self.movies if m["status"] == "pending"
                 or (m.get("kind") == "series" and m["status"] == "matched"
                     and any(e["status"] == "pending" for e in self.episodes.get(-m["id"], ())))]
@@ -128,13 +128,13 @@ class LibraryService(QObject):
         if fresh is None or current is None:
             return
         current.clear()
-        current.update(decorate(fresh))   # atualiza no lugar: o modelo da grade vê a mudança
+        current.update(decorate(fresh))   # update in place: the grid model sees the change
         self.movie_changed.emit(movie_id)
 
     def _client(self):
         return make_client(self.provider, self.api_key, self.language)
 
-    # -- execução assíncrona -----------------------------------------------------
+    # -- asynchronous execution -----------------------------------------------------
     def run_async(self, fn, on_result=None, on_error=None) -> None:
         worker = FuncWorker(fn, on_result, on_error, self)
         self._jobs.add(worker)
@@ -149,7 +149,7 @@ class LibraryService(QObject):
         try:
             callback(value)
         except RuntimeError:
-            pass  # widget de destino já foi destruído
+            pass  # target widget was already destroyed
         except Exception:  # noqa: BLE001
             traceback.print_exc()
 
@@ -162,12 +162,12 @@ class LibraryService(QObject):
         if not root:
             return
         if not os.path.isdir(root):
-            self.error.emit(f"A pasta de filmes não está acessível:\n{root}")
+            self.error.emit(f"The movies folder is not accessible:\n{root}")
             return
         if self._scanning:
             return
         self._scanning = True
-        self.busy_changed.emit(True, "Procurando filmes na pasta…")
+        self.busy_changed.emit(True, "Scanning the folder for movies…")
         self.run_async(lambda: sync_library(self.db, root), self._on_scan_done, self._on_scan_error)
 
     def _on_scan_done(self, result) -> None:
@@ -177,7 +177,7 @@ class LibraryService(QObject):
         old_series = {i for i in self.by_id if i < 0}
         self._scanning = False
         self.reload()
-        for series_id in old_series - set(self.by_id):   # série sem episódios: apaga a capa
+        for series_id in old_series - set(self.by_id):   # series without episodes: delete the poster
             images.delete_images(series_id)
         self.library_changed.emit()
         self.scan_finished.emit(len(added), len(removed))
@@ -191,14 +191,14 @@ class LibraryService(QObject):
         self.busy_changed.emit(False, "")
         self._report(exc)
 
-    # -- atualização de metadados ----------------------------------------------------
+    # -- metadata update ----------------------------------------------------
     def start_update(self, mode: str = "pending", ids: list[int] | None = None) -> bool:
-        """mode: 'pending' (só novos), 'all' (forçar todos) ou 'ids'."""
+        """mode: 'pending' (new only), 'all' (force all) or 'ids'."""
         if self.updating:
-            self.message.emit("Já existe uma atualização em andamento.")
+            self.message.emit("An update is already in progress.")
             return False
         if not self.has_key:
-            self.error.emit("Configure a chave da API em Configurações para baixar os metadados.")
+            self.error.emit("Set your API key in Settings to download metadata.")
             return False
         if mode == "pending":
             targets = self._pending()
@@ -207,10 +207,10 @@ class LibraryService(QObject):
         else:
             targets = list(self.movies)
         if not targets:
-            self.message.emit("Nenhum filme para atualizar.")
+            self.message.emit("No movies to update.")
             return False
 
-        # Filmes já identificados mantêm a correspondência (inclusive correções manuais).
+        # Movies already identified keep their match (including manual corrections).
         forced = {m["id"]: m["tmdb_id"] for m in targets
                   if m["status"] == "matched" and same_provider(self.provider, m["tmdb_id"])}
         snapshot = [{k: m[k] for k in ("id", "clean_title", "year_guess", "tmdb_id", "status", "kind")}
@@ -223,7 +223,7 @@ class LibraryService(QObject):
         worker.failed.connect(self.error)
         worker.finished.connect(self._on_worker_finished)
         self._update_worker = worker
-        self.busy_changed.emit(True, "Buscando metadados…")
+        self.busy_changed.emit(True, "Fetching metadata…")
         self.progress.emit(0, len(snapshot), "")
         worker.start()
         return True
@@ -245,11 +245,11 @@ class LibraryService(QObject):
             worker.deleteLater()
         self.busy_changed.emit(False, "")
 
-    # -- ações sobre um filme ------------------------------------------------------------
+    # -- actions on a movie ------------------------------------------------------------
     def apply_match(self, movie_id: int, tmdb_id: int | None = None) -> None:
-        """Define (ou atualiza) a correspondência de um filme com o TMDB."""
+        """Sets (or updates) a movie's match with TMDB."""
         if not self.has_key:
-            self.error.emit("Configure a chave da API em Configurações.")
+            self.error.emit("Set your API key in Settings.")
             return
         movie = self.by_id.get(movie_id)
         if movie is None:
@@ -266,9 +266,9 @@ class LibraryService(QObject):
             self._refresh_movie(movie_id)
             self.library_changed.emit()
             if outcome != "matched":
-                self.message.emit("Nenhuma correspondência segura; use “Corrigir correspondência”.")
+                self.message.emit("No confident match; use “Fix match”.")
 
-        self.message.emit(f"Atualizando “{movie['display_title']}”…")
+        self.message.emit(f"Updating “{movie['display_title']}”…")
         self.run_async(job, done, self._report)
 
     def search_tmdb(self, query: str, year: int | None, on_result, on_error, series: bool = False) -> None:
@@ -284,7 +284,7 @@ class LibraryService(QObject):
     def set_flag(self, movie_ids: list[int], column: str, value: bool) -> None:
         series_ids = [-i for i in movie_ids if i < 0]
         movie_ids = [i for i in movie_ids if i > 0]
-        if series_ids and column == "watched":   # série assistida = todos os episódios assistidos
+        if series_ids and column == "watched":   # watched series = all episodes watched
             movie_ids += [e["id"] for s in series_ids for e in self.episodes.get(s, [])]
         elif series_ids:
             self.db.set_series_flag(series_ids, column, value)
@@ -301,7 +301,7 @@ class LibraryService(QObject):
                     touched.add(self.by_id[movie_id]["series_id"])
                 else:
                     self.movie_changed.emit(movie_id)
-        for series_id in touched:   # o "assistido" da série vem dos episódios
+        for series_id in touched:   # the series' "watched" state comes from its episodes
             entry = self.by_id.get(-series_id)
             if entry is not None and column == "watched":
                 eps = self.episodes.get(series_id, [])
@@ -310,17 +310,17 @@ class LibraryService(QObject):
 
     # -- continuar assistindo -----------------------------------------------------------
     def resume_info(self, path: str) -> tuple[int, int, int]:
-        """(posição ms, duração ms, quando foi salvo) de um arquivo; zeros se não houver."""
+        """(position ms, duration ms, when it was saved) of a file; zeros if none."""
         value = (self.settings.get("resume") or {}).get(path)
-        if isinstance(value, (int, float)):   # formato antigo: só a posição
+        if isinstance(value, (int, float)):   # old format: position only
             return int(value), 0, 0
         if isinstance(value, list) and len(value) >= 3:
             return int(value[0]), int(value[1]), int(value[2])
         return 0, 0, 0
 
     def _resume_path(self, movie: dict) -> str:
-        """Arquivo cuja posição vale para este item: o próprio filme ou, numa série, o episódio
-        em andamento (o assistido por último)."""
+        """File whose position applies to this item: the movie itself or, for a series, the episode
+        in progress (the last one watched)."""
         if movie.get("kind") != "series":
             return movie.get("path") or ""
         best, best_when = "", -1
@@ -331,7 +331,7 @@ class LibraryService(QObject):
         return best
 
     def progress_of(self, movie: dict) -> float:
-        """Fração já assistida (0 a 1) de um filme (ou do episódio em andamento de uma série)."""
+        """Fraction already watched (0 to 1) of a movie (or of a series' episode in progress)."""
         position, length, _ = self.resume_info(self._resume_path(movie))
         return min(1.0, position / length) if position > 0 and length > 0 else 0.0
 
@@ -339,7 +339,7 @@ class LibraryService(QObject):
         return self.resume_info(self._resume_path(movie))[2]
 
     def restart(self, movie: dict) -> None:
-        """Esquece onde o filme parou, para assistir do início."""
+        """Forgets where the movie stopped, to watch from the start."""
         path = self._resume_path(movie)
         if path:
             self.save_progress(path, 0, 0)
@@ -349,7 +349,7 @@ class LibraryService(QObject):
                      if m.get("path") == path and m.get("kind") != "series"), None)
 
     def mark_finished(self, path: str) -> None:
-        """Chegou ao fim (95%+): marca como assistido."""
+        """Reached the end (95%+): marks as watched."""
         movie = self.by_path(path)
         if movie is not None and not movie["watched"]:
             self.set_flag([movie["id"]], "watched", True)
@@ -362,7 +362,7 @@ class LibraryService(QObject):
         return None
 
     def save_progress(self, path: str, position: int, length: int) -> None:
-        """Guarda onde o filme parou (posição 0, ou muito no início, apaga o registro)."""
+        """Stores where the movie stopped (position 0, or very early, deletes the record)."""
         resume = dict(self.settings.get("resume") or {})
         had = path in resume
         if position >= 10000:
@@ -372,11 +372,11 @@ class LibraryService(QObject):
         else:
             return
         self.settings.update(resume=resume)
-        if had != (path in resume):   # entrou ou saiu de "Continuar assistindo"
+        if had != (path in resume):   # entered or left "Continue watching"
             for movie in self.by_id.values():
                 if movie.get("path") == path:
                     self.movie_changed.emit(movie["id"])
-                    if movie.get("kind") == "episode":   # a capa da série mostra o episódio em andamento
+                    if movie.get("kind") == "episode":   # the series poster shows the episode in progress
                         self.movie_changed.emit(-movie["series_id"])
                     break
 
@@ -386,11 +386,11 @@ class LibraryService(QObject):
     def show_in_folder(self, movie_id: int) -> None:
         player.show_in_folder(self.by_id[movie_id]["path"])
 
-    # -- coleções ------------------------------------------------------------------------
+    # -- collections ------------------------------------------------------------------
     def create_collection(self, name: str) -> int:
         name = name.strip()
         if not name:
-            raise ValueError("Informe um nome para a coleção.")
+            raise ValueError("Enter a name for the collection.")
         collection_id = self.db.create_collection(name)
         self._reload_collections()
         return collection_id
@@ -398,7 +398,7 @@ class LibraryService(QObject):
     def rename_collection(self, collection_id: int, name: str) -> None:
         name = name.strip()
         if not name:
-            raise ValueError("Informe um nome para a coleção.")
+            raise ValueError("Enter a name for the collection.")
         self.db.rename_collection(collection_id, name)
         self._reload_collections()
 

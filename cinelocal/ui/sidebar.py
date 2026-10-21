@@ -1,4 +1,4 @@
-"""Barra lateral: biblioteca, coleções, gêneros e décadas."""
+"""Sidebar: library, collections, genres and decades."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
@@ -37,37 +37,37 @@ class Sidebar(QTreeWidget):
     def current_filter(self) -> Filter:
         return self._current
 
-    # -- construção -----------------------------------------------------------------
+    # -- construction -----------------------------------------------------------------
     def rebuild(self, counts: dict, collections: list[dict],
                 membership: dict[int, set[int]], current: Filter) -> None:
         self._rebuilding = True
         self.clear()
 
-        self._header("BIBLIOTECA")
+        self._header("LIBRARY")
         if counts["continue"]:
-            self._entry("Continuar assistindo", ("continue", None), counts["continue"])
-        self._entry("Todos os filmes", ("all", None), counts["all"])
-        self._entry("Favoritos", ("favorites", None), counts["favorites"])
+            self._entry("Continue watching", ("continue", None), counts["continue"])
+        self._entry("All movies", ("all", None), counts["all"])
+        self._entry("Favorites", ("favorites", None), counts["favorites"])
         self._entry("Watchlist", ("watchlist", None), counts["watchlist"])
-        self._entry("Assistidos", ("watched", True), counts["watched"])
-        self._entry("Não assistidos", ("watched", False), counts["unwatched"])
+        self._entry("Watched", ("watched", True), counts["watched"])
+        self._entry("Unwatched", ("watched", False), counts["unwatched"])
         if counts["review"]:
-            self._entry("Precisam de revisão", ("review", None), counts["review"])
+            self._entry("Needs review", ("review", None), counts["review"])
 
-        self._header("COLEÇÕES")
-        self._entry("Nova coleção", _NEW_COLLECTION, None)
+        self._header("COLLECTIONS")
+        self._entry("New collection", _NEW_COLLECTION, None)
         for c in collections:
             self._entry(c["name"], ("collection", c["id"]), len(membership.get(c["id"], ())))
 
         if counts["genres"]:
-            self._header("GÊNEROS")
+            self._header("GENRES")
             for name, n in counts["genres"]:
                 self._entry(name, ("genre", name), n)
 
         if counts["decades"]:
-            self._header("ANO")
+            self._header("YEAR")
             for decade, n in counts["decades"]:
-                self._entry(f"Anos {decade}", ("decade", decade), n)
+                self._entry(f"{decade}s", ("decade", decade), n)
 
         self._select(current)
         self._rebuilding = False
@@ -108,7 +108,7 @@ class Sidebar(QTreeWidget):
             self._current = self._filter_of(item)
             self.setCurrentItem(item)
 
-    # -- eventos --------------------------------------------------------------------------
+    # -- events --------------------------------------------------------------------------
     def _on_current_changed(self, item, _previous) -> None:
         if self._rebuilding or item is None:
             return
@@ -130,8 +130,8 @@ class Sidebar(QTreeWidget):
         if not data or data[0] != "collection":
             return
         menu = QMenu(self)
-        rename = menu.addAction("Renomear coleção…")
-        delete = menu.addAction("Excluir coleção")
+        rename = menu.addAction("Rename collection…")
+        delete = menu.addAction("Delete collection")
         chosen = menu.exec(self.viewport().mapToGlobal(pos))
         if chosen == rename:
             self.rename_collection_requested.emit(data[1])

@@ -1,4 +1,4 @@
-"""Cache de imagens em disco: capa original, miniatura (para a grade) e backdrop."""
+"""On-disk image cache: original poster, thumbnail (for the grid) and backdrop."""
 from __future__ import annotations
 
 import os

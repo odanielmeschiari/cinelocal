@@ -1,4 +1,4 @@
-"""Escolha da fonte de metadados (TMDB ou OMDb). Sem Qt."""
+"""Choice of metadata source (TMDB or OMDb). No Qt."""
 from __future__ import annotations
 
 from .omdb import OMDB_OFFSET, OMDbClient
@@ -14,5 +14,5 @@ def make_client(provider: str, api_key: str, language: str):
 
 
 def same_provider(provider: str, external_id) -> bool:
-    """True se o id guardado no banco (coluna tmdb_id) veio do provedor ativo."""
+    """True if the id stored in the database (tmdb_id column) came from the active provider."""
     return bool(external_id) and (external_id >= OMDB_OFFSET) == (provider == "omdb")

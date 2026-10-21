@@ -1,4 +1,4 @@
-"""Testes do provedor OMDb e da Watchlist (sem interface). Rode com: python3 -m unittest discover -s tests"""
+"""Tests for the OMDb provider and the Watchlist (no GUI). Run with: python3 -m unittest discover -s tests"""
 import sqlite3
 import sys
 import tempfile
@@ -61,7 +61,7 @@ class WatchlistTests(unittest.TestCase):
     def test_old_database_is_migrated_and_flag_works(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "library.db"
-            old = sqlite3.connect(path)   # banco da versão anterior: sem a coluna watchlist
+            old = sqlite3.connect(path)   # database from the previous version: no watchlist column
             old.execute("CREATE TABLE movies (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL UNIQUE,"
                         " file_name TEXT NOT NULL, size INTEGER DEFAULT 0, clean_title TEXT NOT NULL,"
                         " year_guess INTEGER, tmdb_id INTEGER, title TEXT, original_title TEXT, year INTEGER,"
@@ -85,7 +85,7 @@ class WatchlistTests(unittest.TestCase):
             movie.update(genres=[], year=None, year_guess=None)
             self.assertEqual(sidebar_counts([movie])["watchlist"], 1)
             db.close()
-            Database(path).close()   # abrir de novo não pode falhar (coluna já existe)
+            Database(path).close()   # opening again must not fail (column already exists)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Executa o CineLocal direto da pasta do projeto (sem instalar no menu).
+# Runs CineLocal straight from the project folder (without installing to the menu).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 if [ ! -x .venv/bin/python ]; then
