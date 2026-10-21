@@ -356,10 +356,18 @@ class MainWindow(QMainWindow):
 
         self._slide_to(self.stack.widget(1), forward=False, done=done)
 
-    def play_movie(self, movie_id: int) -> None:
-        """Toca no player integrado (VLC); com player externo configurado ou sem libVLC, usa o externo."""
+    def _use_external(self) -> bool:
+        s = self.service.settings
+        choice = s.get("default_player") or ("external" if s.get("player_command").strip() else "builtin")
+        return choice == "external"
+
+    def play_movie(self, movie_id: int, external: bool | None = None) -> None:
+        """Toca no player padrão: o integrado (VLC) ou o externo (comando configurado ou padrão do
+        sistema). `external` força um dos dois; sem libVLC, usa o externo."""
         if self._sliding:
             return
+        if external is None:
+            external = self._use_external()
         self._discard_player()
         if movie_id < 0:   # série: toca o próximo episódio a assistir
             movie_id = self.service.next_episode(-movie_id)
@@ -367,7 +375,7 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("Esta série não tem episódios.", 5000)
                 return
         movie = self.service.by_id[movie_id]
-        if self.service.settings.get("player_command").strip() or not os.path.exists(movie["path"]):
+        if external or not os.path.exists(movie["path"]):
             return self._play(movie_id)
         reason = unavailable_reason()
         if reason:
@@ -380,9 +388,27 @@ class MainWindow(QMainWindow):
                      f" — T{movie['season']}E{movie['episode']} — {title}")
         page = VlcPlayerPage(title, self)
         page.back_requested.connect(self.close_player)
+        page.progress.connect(self._save_progress)
+        page.external_requested.connect(lambda: self._open_external(movie_id))
         self._player, self._player_origin = page, self.stack.currentWidget()
         self.stack.addWidget(page)
-        self._slide_to(page, forward=True, done=lambda: page.start(movie["path"]))
+        resume = int((self.service.settings.get("resume") or {}).get(movie["path"], 0))
+        self._slide_to(page, forward=True, done=lambda: page.start(movie["path"], resume))
+
+    def _open_external(self, movie_id: int) -> None:
+        """Fecha o player integrado (guardando a posição) e abre o filme no player externo."""
+        self.close_player()
+        self._play(movie_id)
+
+    def _save_progress(self, path: str, position: int, _length: int) -> None:
+        resume = dict(self.service.settings.get("resume") or {})
+        if position > 0:
+            resume[path] = position
+        elif path in resume:
+            del resume[path]
+        else:
+            return
+        self.service.settings.update(resume=resume)
 
     def close_player(self) -> None:
         if self._sliding or self._player is None or self.stack.currentWidget() is not self._player:
@@ -505,6 +531,9 @@ class MainWindow(QMainWindow):
         if single:
             menu.addAction("Abrir detalhes", lambda: self.open_movie(ids[0]))
             menu.addAction("▶  Assistir", lambda: self.play_movie(ids[0]))
+            other = "player integrado" if self._use_external() else "outro player"
+            menu.addAction(f"↗  Assistir no {other}",
+                           lambda: self.play_movie(ids[0], external=not self._use_external()))
             menu.addSeparator()
 
         all_fav = all(m["favorite"] for m in movies)

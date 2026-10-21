@@ -86,8 +86,15 @@ class SettingsDialog(QDialog):
         self.language.setCurrentIndex(index)
         form.addRow("Idioma dos metadados", self.language)
 
+        self.default_player = QComboBox()
+        self.default_player.addItem("Integrado (VLC)", "builtin")
+        self.default_player.addItem("Externo", "external")
+        chosen = s.get("default_player") or ("external" if s.get("player_command").strip() else "builtin")
+        self.default_player.setCurrentIndex(max(0, self.default_player.findData(chosen)))
+        form.addRow("Player padrão", self.default_player)
+
         self.player_edit = QLineEdit(s.get("player_command"))
-        self.player_edit.setPlaceholderText("Vazio = player integrado (VLC) ou, sem o VLC, o padrão do sistema")
+        self.player_edit.setPlaceholderText("Vazio = player padrão do sistema")
         pbrowse = QPushButton("Procurar…")
         pbrowse.clicked.connect(self._browse_player)
         form.addRow("Player externo", self._with_button(self.player_edit, pbrowse))
@@ -171,4 +178,5 @@ class SettingsDialog(QDialog):
             "provider": self.provider.currentData(),
             "language": self.language.currentData(),
             "player_command": self.player_edit.text().strip(),
+            "default_player": self.default_player.currentData(),
         }

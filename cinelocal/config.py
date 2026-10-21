@@ -48,6 +48,8 @@ DEFAULT_SETTINGS = {
     "provider": "tmdb",
     "language": "pt-BR",
     "player_command": "",
+    "default_player": "",     # "builtin", "external" ou "" (= externo só se houver comando)
+    "resume": {},             # caminho do arquivo -> posição (ms) onde parou
     "sort_id": "title_asc",
 }
 

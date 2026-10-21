@@ -9,6 +9,7 @@ from PySide6.QtGui import QCursor, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
                                QSizePolicy, QSlider, QStyle, QVBoxLayout, QWidget, QWidgetAction)
 
+SAVE_EVERY_MS = 5000      # de quanto em quanto tempo a posição de reprodução é salva
 IDLE_HIDE_SECONDS = 2.5   # em tela cheia, controles e ponteiro somem depois deste tempo parado
 # chave, rótulo, mínimo, máximo, padrão (em %). Nitidez 0 = filtro desligado.
 _ADJUSTMENTS = (("brightness", "Brilho", 0, 200, 100), ("contrast", "Contraste", 0, 200, 100),
@@ -56,6 +57,8 @@ class _SeekSlider(QSlider):
 
 class VlcPlayerPage(QWidget):
     back_requested = Signal()
+    external_requested = Signal()     # abrir este filme em outro player
+    progress = Signal(str, int, int)  # caminho, posição (ms), duração (ms); posição 0 = apagar
 
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
@@ -72,6 +75,7 @@ class VlcPlayerPage(QWidget):
         self._chrome_hidden = False
         self._last_pos = QCursor.pos()
         self._last_activity = time.monotonic()
+        self._last_saved = 0
         self._build(title)
         self._timer = QTimer(self, interval=250)
         self._timer.timeout.connect(self._tick)
@@ -89,6 +93,21 @@ class VlcPlayerPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+
+        self.topbar = QWidget()          # voltar à esquerda (mesmo lugar da tela de detalhes), título ao centro
+        self.topbar.setObjectName("page")
+        top = QHBoxLayout(self.topbar)
+        top.setContentsMargins(34, 20, 34, 10)
+        back = self._button("←  Voltar", self.back_requested.emit)
+        back.setToolTip("Voltar (Esc)")
+        name = QLabel(title)
+        name.setObjectName("muted")
+        name.setAlignment(Qt.AlignCenter)
+        top.addWidget(back, 0, Qt.AlignLeft)
+        top.addWidget(name, 1)
+        top.addSpacing(back.sizeHint().width())   # equilibra o botão, para o título ficar centralizado
+        layout.addWidget(self.topbar)
+
         self.video = QWidget()
         self.video.setAttribute(Qt.WA_NativeWindow)    # o VLC desenha nesta janela
         self.video.setAttribute(Qt.WA_StyledBackground)
@@ -114,17 +133,22 @@ class VlcPlayerPage(QWidget):
         self.volume.setFixedWidth(90)
         self.volume.setToolTip("Volume")
         self.volume.valueChanged.connect(self._mp.audio_set_volume)
-        name = QLabel(title)
-        name.setObjectName("muted")
-        self.audio_btn = self._menu_button("🔊  Áudio", self._fill_audio_menu)
-        self.sub_btn = self._menu_button("💬  Legendas", self._fill_subtitle_menu)
-        self.image_btn = QPushButton("🎨  Imagem")
-        self.image_btn.setFocusPolicy(Qt.NoFocus)
-        self.image_btn.setMenu(self._build_image_menu())
-        for w in (self._button("←  Voltar", self.back_requested.emit), self.play_btn,
-                  self.elapsed, self.seek, self.total, self.volume,
-                  self.audio_btn, self.sub_btn, self.image_btn,
-                  self._button("⛶", self.toggle_fullscreen), name):
+        self.volume_label = QLabel("100%")
+        self.volume_label.setFixedWidth(42)
+        self.volume.valueChanged.connect(lambda v: self.volume_label.setText(f"{v}%"))
+        self.settings_btn = QPushButton("⚙")      # áudio, legendas e imagem ficam todos aqui
+        self.settings_btn.setToolTip("Configurações")
+        self.settings_btn.setFocusPolicy(Qt.NoFocus)
+        menu = QMenu(self.settings_btn)
+        for text, fill in (("🔊  Áudio", self._fill_audio_menu), ("💬  Legendas", self._fill_subtitle_menu)):
+            sub = menu.addMenu(text)
+            sub.aboutToShow.connect(lambda m=sub, f=fill: f(m))   # a lista é montada na hora de abrir
+        self._build_image_menu(menu.addMenu("🎨  Imagem"))
+        menu.addSeparator()
+        menu.addAction("↗  Abrir em outro player", lambda: self.external_requested.emit())
+        self.settings_btn.setMenu(menu)
+        for w in (self.play_btn, self.elapsed, self.seek, self.total, self.volume, self.volume_label,
+                  self.settings_btn, self._button("⛶", self.toggle_fullscreen)):
             row.addWidget(w, 1 if w is self.seek else 0)
         layout.addWidget(self.controls)
 
@@ -132,14 +156,6 @@ class VlcPlayerPage(QWidget):
         button = QPushButton(text)
         button.setFocusPolicy(Qt.NoFocus)   # a barra de espaço é atalho do player, não do botão
         button.clicked.connect(lambda _checked=False: slot())
-        return button
-
-    def _menu_button(self, text: str, fill) -> QPushButton:
-        button = QPushButton(text)
-        button.setFocusPolicy(Qt.NoFocus)
-        menu = QMenu(button)
-        menu.aboutToShow.connect(lambda m=menu: fill(m))   # a lista é montada na hora de abrir
-        button.setMenu(menu)
         return button
 
     # -- áudio e legendas (faixas que já vêm no arquivo) ---------------------------------
@@ -171,8 +187,7 @@ class VlcPlayerPage(QWidget):
         self._mp.video_set_spu(track_id)
 
     # -- brilho, contraste, cor e nitidez --------------------------------------------------
-    def _build_image_menu(self) -> QMenu:
-        menu = QMenu(self.image_btn)
+    def _build_image_menu(self, menu: QMenu) -> None:
         panel = QWidget()
         grid = QGridLayout(panel)
         grid.setContentsMargins(10, 8, 10, 8)
@@ -199,7 +214,6 @@ class VlcPlayerPage(QWidget):
         action = QWidgetAction(menu)
         action.setDefaultWidget(panel)
         menu.addAction(action)
-        return menu
 
     def _on_adjust(self, key: str, value: int, label: QLabel) -> None:
         label.setText(f"{value}%")
@@ -235,8 +249,10 @@ class VlcPlayerPage(QWidget):
         self._mp.play()
 
     # -- reprodução ---------------------------------------------------------------
-    def start(self, path: str) -> None:
+    def start(self, path: str, resume_ms: int = 0) -> None:
         self._path = path
+        if resume_ms > 0:
+            self._pending_start = (resume_ms, False)   # aplicado quando a reprodução começa
         self._open_media()
         handle = int(self.video.winId())
         if sys.platform.startswith("linux"):
@@ -291,6 +307,21 @@ class VlcPlayerPage(QWidget):
             if not self._dragging:
                 self.seek.setValue(int(self._mp.get_position() * 1000))
         self.play_btn.setText("⏸" if self._mp.is_playing() else "▶")
+        now = time.monotonic()
+        if now - self._last_saved >= SAVE_EVERY_MS / 1000:
+            self._last_saved = now
+            self._save_progress()
+
+    def _save_progress(self) -> None:
+        """Informa a posição atual (ou 0, perto do fim) para o filme poder ser retomado depois."""
+        state = self._mp.get_state()
+        if not self._playing_seen or self._pending_start is not None:
+            return
+        length, pos = self._mp.get_length(), self._mp.get_time()
+        if state == self._vlc.State.Ended or (length > 0 and pos >= length - 30000):
+            self.progress.emit(self._path, 0, length)
+        elif state in (self._vlc.State.Playing, self._vlc.State.Paused) and pos > 0:
+            self.progress.emit(self._path, pos, length)
 
     # -- tela cheia / saída ---------------------------------------------------------
     def toggle_fullscreen(self) -> None:
@@ -309,6 +340,7 @@ class VlcPlayerPage(QWidget):
         if self._chrome_hidden:
             self._chrome_hidden = False
             self.controls.show()
+            self.topbar.show()
             self.unsetCursor()
 
     def _autohide(self) -> None:
@@ -319,10 +351,12 @@ class VlcPlayerPage(QWidget):
         if (not self._fullscreen or self._chrome_hidden
                 or time.monotonic() - self._last_activity < IDLE_HIDE_SECONDS
                 or QApplication.activePopupWidget() is not None   # menu aberto (áudio, legendas...)
-                or self.controls.rect().contains(self.controls.mapFromGlobal(pos))):
+                or self.controls.rect().contains(self.controls.mapFromGlobal(pos))
+                or self.topbar.rect().contains(self.topbar.mapFromGlobal(pos))):
             return
         self._chrome_hidden = True
         self.controls.hide()
+        self.topbar.hide()
         self.setCursor(Qt.BlankCursor)
 
     def _escape(self) -> None:
@@ -336,11 +370,13 @@ class VlcPlayerPage(QWidget):
         if self._fullscreen:
             self._set_fullscreen(False)
         self._wake()
+        self._save_progress()
         self._timer.stop()
         self._sharp_timer.stop()
         self._mp.stop()
 
     def release(self) -> None:
+        self._save_progress()   # no-op se leave() já parou o vídeo (ex.: app fechado durante a reprodução)
         self._timer.stop()
         self._sharp_timer.stop()
         self._mp.stop()

@@ -50,8 +50,10 @@ Para só testar sem instalar: `run.bat`. Para remover: `uninstall.bat` (`--purge
   volume, `M` muda o mudo, `F` tela cheia e `Esc` volta. Precisa do VLC instalado (no Linux o `install.sh` instala) e,
   no Linux, de uma sessão X11. Sem isso, ou se você definir um player em Configurações (ex.: `mpv --fs`),
   o filme abre no player externo (`xdg-open` no Linux, o programa associado no Windows).
-  No player, **🔊 Áudio** e **💬 Legendas** listam as faixas que vêm no arquivo e **🎨 Imagem** ajusta brilho, contraste,
-  cor e nitidez. Em tela cheia, os controles e o ponteiro somem depois de alguns segundos sem mexer o mouse.
+  Em Configurações você escolhe o **player padrão** (integrado ou externo); clique direito num filme (ou ⚙ no player)
+  para abrir no outro. O player integrado lembra onde você parou e retoma de lá, mesmo após fechar o app.
+  No player, a engrenagem **⚙** reúne **🔊 Áudio** e **💬 Legendas** (faixas que vêm no arquivo) e **🎨 Imagem**
+  (brilho, contraste, cor e nitidez). Em tela cheia, os controles e o ponteiro somem depois de alguns segundos sem mexer o mouse.
 - **Séries**: arquivos com `S01E02`, `1x02` ou `Temporada 1 Episódio 2` no nome (ou dentro de pastas `Temporada N`)
   são agrupados numa única capa de série, que abre a lista de temporadas e episódios, cada um com seus metadados.
   Séries aparecem com o selo “Série” na grade e ficam fora das coleções.
