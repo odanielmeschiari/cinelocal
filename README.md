@@ -13,6 +13,10 @@ No need to download the source zip: get just the file for your system from the [
 - **Linux (x86_64)**: `CineLocal-linux-x86_64` — right-click → *Properties → Permissions → Allow executing*
   (or `chmod +x CineLocal-linux-x86_64`), then double-click it.
 
+On the first launch, CineLocal offers to **install itself** (copies the file to your user folder and adds it to the
+Start Menu / application menu; no administrator rights). After that, open it from the menu and delete the download.
+Running a newer download offers to update the installed copy.
+
 No Python or VLC needed: the built-in player is already inside the file. If Linux complains about the Qt `xcb`
 plugin, run `sudo apt install libxcb-cursor0`.
 
@@ -55,7 +59,8 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
 
 ### Downloaded executable
 
-The executable installs nothing: it runs from wherever you saved it, so to remove the app just delete the file
+If you accepted the install offer, run `uninstall.bat` / `uninstall.sh` (see below; they remove the same files).
+If you declined it, the executable runs from wherever you saved it, so just delete the file
 (`CineLocal-windows-x86_64.exe` or `CineLocal-linux-x86_64`). To also remove the data (library, posters, API key and
 saved positions, with no way back), delete these folders yourself:
 

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication
 from . import APP_ID, APP_NAME
 from .config import DB_FILE, Settings, ensure_dirs
 from .db import Database
+from .selfinstall import maybe_install
 from .service import LibraryService
 from .ui.main_window import MainWindow
 from .ui.theme import apply_theme
@@ -47,6 +48,7 @@ def run() -> int:
     apply_theme(app)
 
     settings = Settings()
+    maybe_install(settings)
     db = Database(DB_FILE)
     service = LibraryService(db, settings)
     window = MainWindow(service)
