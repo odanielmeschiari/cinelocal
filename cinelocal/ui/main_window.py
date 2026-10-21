@@ -8,13 +8,13 @@ from PySide6.QtCore import (QEasingCurve, QParallelAnimationGroup, QPoint,
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
                                QLineEdit, QMainWindow, QMenu, QMessageBox, QProgressBar,
-                               QPushButton, QStackedWidget, QVBoxLayout, QWidget)
+                               QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
 from .. import filters
 from ..service import LibraryService
 from .dialogs import (ask_new_collection, ask_rename_collection, confirm_delete_collection,
                       populate_collections_menu)
-from .grid import MovieGrid
+from .grid import CELL_H, MovieFlow
 from .home import HomeSection
 from .match_dialog import MatchDialog
 from .movie_dialog import MovieDialog
@@ -156,16 +156,22 @@ class MainWindow(QMainWindow):
         column.addLayout(head)
 
         self.views = QStackedWidget()
-        self.grid = MovieGrid()
+        self.grid = MovieFlow()
         self.continue_row = HomeSection("Continuar assistindo")   # só em "Todos os filmes", se houver itens
         self.continue_row.row.itemDelegate().progress_of = self.service.progress_of
         self.continue_row.hide()
-        self.grid_page = QWidget()
-        grid_col = QVBoxLayout(self.grid_page)
+        self.grid_page = QScrollArea()   # rola a fileira "Continuar assistindo" junto com a grade
+        self.grid_page.setWidgetResizable(True)
+        self.grid_page.setFrameShape(QFrame.NoFrame)
+        self.grid_page.verticalScrollBar().setSingleStep(48)
+        self.grid_content = QWidget()
+        self.grid_page.setWidget(self.grid_content)
+        grid_col = QVBoxLayout(self.grid_content)
         grid_col.setContentsMargins(0, 0, 0, 0)
         grid_col.setSpacing(10)
         grid_col.addWidget(self.continue_row)
-        grid_col.addWidget(self.grid, 1)
+        grid_col.addWidget(self.grid)
+        grid_col.addStretch(1)
         self.empty = QLabel("")
         self.empty.setObjectName("muted")
         self.empty.setAlignment(Qt.AlignCenter)
@@ -199,6 +205,7 @@ class MainWindow(QMainWindow):
         self.continue_row.row.movie_opened.connect(self.open_movie)
         self.continue_row.row.context_requested.connect(self._context_menu)
         self.grid.itemDelegate().progress_of = s.progress_of
+        self.grid.selectionModel().currentChanged.connect(self._reveal_current)
 
         s.library_changed.connect(self._on_library_changed)
         s.movie_changed.connect(self._on_movie_changed)
@@ -258,9 +265,15 @@ class MainWindow(QMainWindow):
         self.continue_row.count.setText(str(len(items)))
         self.continue_row.setVisible(bool(items))
 
+    def _reveal_current(self, index) -> None:
+        """Navegação por teclado: rola a página até o filme atual."""
+        if index.isValid():
+            center = self.grid.viewport().mapTo(self.grid_content, self.grid.visualRect(index).center())
+            self.grid_page.ensureVisible(center.x(), center.y(), 0, CELL_H // 2)
+
     def refresh_view(self) -> None:
         self._refresh_continue()
-        bar = self.grid.verticalScrollBar()
+        bar = self.grid_page.verticalScrollBar()
         position = bar.value()
         visible = filters.filter_movies(self.service.movies, self.flt, self.service.membership,
                                         self.query, self.service.progress_of)
@@ -269,6 +282,7 @@ class MainWindow(QMainWindow):
             visible.sort(key=lambda m: -self.service.last_played(m))
         self.grid.movie_model.set_movies(visible)
         bar.setValue(position)
+        QTimer.singleShot(0, lambda: bar.setValue(position))   # o layout só termina depois
 
         total = len(self.service.movies)
         self.heading.setText(self._heading_text())

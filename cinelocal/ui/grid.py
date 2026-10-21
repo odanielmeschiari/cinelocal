@@ -7,7 +7,8 @@ from PySide6.QtCore import (QAbstractAnimation, QAbstractListModel, QEasingCurve
                             QPropertyAnimation, QRect, QRectF, QSize, Qt, Signal)
 from PySide6.QtGui import (QColor, QFont, QFontMetrics, QGuiApplication, QLinearGradient,
                            QPainter, QPainterPath, QPen, QPixmap)
-from PySide6.QtWidgets import QAbstractItemView, QListView, QStyle, QStyledItemDelegate
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QListView, QScrollArea, QStyle,
+                               QStyledItemDelegate)
 
 from .. import images
 from .theme import COLORS
@@ -247,6 +248,37 @@ class MovieGrid(QListView):
         super().keyPressEvent(event)
 
 
+def _scroll_page(widget, event) -> None:
+    """Repassa a roda do mouse à área de rolagem que contém `widget`."""
+    area = widget.parentWidget()
+    while area is not None and not isinstance(area, QScrollArea):
+        area = area.parentWidget()
+    if area is None:
+        event.ignore()
+    else:
+        QApplication.sendEvent(area.viewport(), event)
+
+
+class MovieFlow(MovieGrid):
+    """Grade sem rolagem própria: cresce até a altura total e quem rola é a área que a contém."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.movie_model.modelReset.connect(self._fit)
+
+    def _fit(self) -> None:
+        per_row = max(1, self.viewport().width() // CELL_W)
+        self.setFixedHeight(-(-self.movie_model.rowCount() // per_row) * CELL_H)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit()
+
+    def wheelEvent(self, event) -> None:
+        _scroll_page(self, event)
+
+
 class MovieRow(MovieGrid):
     """Uma única fileira horizontal de capas (usada na página inicial), rolada por setas."""
 
@@ -281,4 +313,4 @@ class MovieRow(MovieGrid):
         if event.angleDelta().x():   # rolagem horizontal (touchpad): anda a fileira
             super().wheelEvent(event)
         else:                        # roda comum: rola a página inteira
-            event.ignore()
+            _scroll_page(self, event)
