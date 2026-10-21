@@ -1,6 +1,7 @@
 """Built-in player, based on libVLC (python-vlc). Appears inside the main window."""
 from __future__ import annotations
 
+import re
 import sys
 import time
 
@@ -9,11 +10,14 @@ from PySide6.QtGui import QCursor, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QApplication, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
                                QSizePolicy, QSlider, QStyle, QToolTip, QVBoxLayout, QWidget, QWidgetAction)
 
+from ..config import TRACK_LANGUAGES
+
 SAVE_EVERY_MS = 5000      # how often the playback position is saved
 PREFS_DELAY_MS = 800       # waits for volume/adjustments to stop changing before saving
 FINISH_FRACTION = 0.95    # from here on the movie counts as watched
 RATES = (0.5, 0.75, 1.0, 1.25, 1.5, 2.0)   # playback speeds
 SPU_STEP_US = 250_000     # subtitle delay step (microseconds)
+ICON_BOX = 46             # side (px) of the square icon buttons (play, settings, fullscreen)
 FADE_MS = 500             # duration of the controls' fade-out
 IDLE_HIDE_SECONDS = 2.5   # in fullscreen, controls and pointer disappear after this much idle time
 # key, label, minimum, maximum, default (in %). Sharpness 0 = filter off.
@@ -94,6 +98,8 @@ class VlcPlayerPage(QWidget):
         self._pending_start = None       # (position in ms, paused?) to restore after reopening the media
         self._playing_seen = False
         self._chosen_audio = self._chosen_spu = None
+        self._want_audio = self._want_spu = ""   # preferred languages from the settings
+        self._lang_tries = 0             # ticks left to look for those tracks
         self._chrome_hidden = False
         self._last_pos = QCursor.pos()
         self._last_activity = time.monotonic()
@@ -154,7 +160,7 @@ class VlcPlayerPage(QWidget):
         row = QHBoxLayout(self.controls)
         row.setContentsMargins(14, 8, 14, 8)
         row.setSpacing(10)
-        self.play_btn = self._button("⏸", self.toggle_pause)
+        self.play_btn = self._icon_button("❚❚", self.toggle_pause)
         self.play_btn.setToolTip("Pause / play (Space)")
         self.elapsed, self.total = QLabel("0:00"), QLabel("0:00")
         self.seek = _SeekSlider(Qt.Horizontal)
@@ -172,11 +178,10 @@ class VlcPlayerPage(QWidget):
         self.volume_label.setFixedWidth(42)
         self.volume.valueChanged.connect(lambda v: self.volume_label.setText(f"{v}%"))
         self.volume.valueChanged.connect(lambda _v: self._prefs_changed())
-        self.settings_btn = QPushButton("⚙")      # audio, subtitles and picture all live here
+        self.settings_btn = self._icon_button("⚙", None)      # audio, subtitles and picture all live here
         self.settings_btn.setToolTip("Settings")
-        self.fullscreen_btn = self._button("⛶", self.toggle_fullscreen)
+        self.fullscreen_btn = self._icon_button("⛶", self.toggle_fullscreen)
         self.fullscreen_btn.setToolTip("Fullscreen (F)")
-        self.settings_btn.setFocusPolicy(Qt.NoFocus)
         menu = QMenu(self.settings_btn)
         for text, fill in (("Audio", self._fill_audio_menu), ("Subtitles", self._fill_subtitle_menu),
                            ("Subtitle delay", self._fill_delay_menu),
@@ -198,6 +203,13 @@ class VlcPlayerPage(QWidget):
         button.clicked.connect(lambda _checked=False: slot())
         return button
 
+    def _icon_button(self, symbol: str, slot) -> QPushButton:
+        """Square, borderless button whose symbol fills almost the whole box (look defined in theme.py)."""
+        button = self._button(symbol, slot or (lambda: None))
+        button.setObjectName("iconBtn")
+        button.setFixedSize(ICON_BOX, ICON_BOX)
+        return button
+
     # -- audio and subtitles (tracks already in the file) ---------------------------------
     def _fill_tracks(self, menu: QMenu, tracks, current, choose) -> None:
         menu.clear()
@@ -217,6 +229,43 @@ class VlcPlayerPage(QWidget):
     def _fill_subtitle_menu(self, menu: QMenu) -> None:
         self._fill_tracks(menu, self._mp.video_get_spu_description() or [],
                           self._mp.video_get_spu(), self._choose_subtitle)
+
+    def set_track_languages(self, audio: str, subtitles: str) -> None:
+        """Preferred audio and subtitle languages ('' = file default, subtitles also 'off')."""
+        self._want_audio, self._want_spu = audio or "", subtitles or ""
+        self._lang_tries = 40 if (self._want_audio or self._want_spu) else 0
+
+    @staticmethod
+    def _match_track(code: str, tracks):
+        aliases = TRACK_LANGUAGES[code][1]
+        for track_id, name in tracks or []:
+            if track_id >= 0 and any(w in aliases for w in re.findall(r"\w+", _track_name(name).lower())):
+                return track_id
+        return None
+
+    def _apply_track_languages(self) -> None:
+        """Picks the preferred tracks once VLC lists them (never overrides a manual choice)."""
+        done = True
+        if self._chosen_audio is None and self._want_audio in TRACK_LANGUAGES:
+            track = self._match_track(self._want_audio, self._mp.audio_get_track_description())
+            if track is None:
+                done = False
+            else:
+                self._choose_audio(track)
+        if self._chosen_spu is None and self._want_spu:
+            tracks = self._mp.video_get_spu_description() or []
+            if self._want_spu == "off":
+                if any(t >= 0 for t, _n in tracks):   # only once the file's subtitles are known
+                    self._choose_subtitle(-1)
+                else:
+                    done = False
+            elif self._want_spu in TRACK_LANGUAGES:
+                track = self._match_track(self._want_spu, tracks)
+                if track is None:
+                    done = False
+                else:
+                    self._choose_subtitle(track)
+        self._lang_tries = self._lang_tries - 1 if not done else 0
 
     def _choose_audio(self, track_id: int) -> None:
         self._chosen_audio = track_id
@@ -400,6 +449,8 @@ class VlcPlayerPage(QWidget):
         if not self._playing_seen and self._mp.get_state() == self._vlc.State.Playing:
             self._playing_seen = True
             self._on_playing()
+        if self._lang_tries and self._playing_seen:
+            self._apply_track_languages()
         self._autohide()
         length = self._mp.get_length()
         if length > 0:
@@ -408,7 +459,7 @@ class VlcPlayerPage(QWidget):
             self.elapsed.setText(_clock(self._mp.get_time()))
             if not self._dragging:
                 self.seek.setValue(int(self._mp.get_position() * 1000))
-        self.play_btn.setText("⏸" if self._mp.is_playing() else "▶")
+        self.play_btn.setText("❚❚" if self._mp.is_playing() else "▶")
         now = time.monotonic()
         if now - self._last_saved >= SAVE_EVERY_MS / 1000:
             self._last_saved = now

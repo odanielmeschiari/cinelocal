@@ -4,8 +4,8 @@ from __future__ import annotations
 from PySide6.QtCore import QUrl, Qt, Signal
 from PySide6.QtGui import (QColor, QDesktopServices, QKeySequence, QLinearGradient, QPainter,
                            QPixmap, QShortcut)
-from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox,
-                               QPushButton, QScrollArea, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox, QPushButton,
+                               QScrollArea, QTextEdit, QVBoxLayout, QWidget)
 
 from .. import images
 from ..service import LibraryService
@@ -17,6 +17,45 @@ from .widgets import rounded_pixmap
 
 POSTER_SIZE = (240, 360)
 BACKDROP_HEIGHT = 380
+DETAILS_OFFSET = 150      # empty space above the details, so they leave the backdrop image visible
+STAR_COLOR = "#ffd25e"
+# Bigger text than the global theme (widget-level rules beat the application's, so other pages are unaffected)
+_STYLE = """
+QLabel#movieTitle { font-size: 30pt; }
+QLabel#rating { font-size: 15pt; }
+QLabel#section { font-size: 11pt; }
+QLabel#detailText, QLabel#muted { font-size: 13pt; }
+QTextEdit { font-size: 13pt; }
+"""
+
+
+class _Stars(QWidget):
+    """Five clickable stars (1-5); clicking the current rating again clears it."""
+    changed = Signal(int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.value = 0
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        self._buttons = []
+        for n in range(1, 6):
+            button = QPushButton("★")
+            button.setObjectName("iconBtn")
+            button.setFixedSize(46, 46)
+            button.setFocusPolicy(Qt.NoFocus)
+            button.setToolTip(f"{n} of 5 (click again to clear)")
+            button.clicked.connect(lambda _checked=False, n=n: self.changed.emit(0 if n == self.value else n))
+            row.addWidget(button)
+            self._buttons.append(button)
+        row.addStretch(1)
+        self.set_value(0)
+
+    def set_value(self, value: int) -> None:
+        self.value = value
+        for n, button in enumerate(self._buttons, 1):
+            button.setStyleSheet(f"color: {STAR_COLOR if n <= value else COLORS['muted']};")
 
 
 class MovieDialog(QWidget):
@@ -30,9 +69,10 @@ class MovieDialog(QWidget):
         self._backdrop: QPixmap | None = None
         self._backdrop_scaled: QPixmap | None = None
         self._heads: dict[QLabel, QLabel] = {}
+        self.setStyleSheet(_STYLE)
         self.setWindowTitle(service.by_id[movie_id]["display_title"])
         self._build()
-        QShortcut(QKeySequence("Esc"), self, activated=self.back_requested.emit)
+        QShortcut(QKeySequence("Esc"), self, activated=self._escape)
         QShortcut(QKeySequence.Back, self, activated=self.back_requested.emit)
         self._populate()
         service.movie_changed.connect(self._on_movie_changed)
@@ -60,6 +100,7 @@ class MovieDialog(QWidget):
 
         right = QVBoxLayout()
         right.setSpacing(8)
+        right.addSpacing(DETAILS_OFFSET)
         root.addLayout(right, 1)
 
         self.title = QLabel()
@@ -89,6 +130,21 @@ class MovieDialog(QWidget):
         self.overview = self._text_block(body_layout, "OVERVIEW")
         self.director = self._text_block(body_layout, "DIRECTOR")
         self.cast = self._text_block(body_layout, "CAST")
+        review_head = QLabel("YOUR REVIEW")
+        review_head.setObjectName("section")
+        self.stars = _Stars()
+        self.stars.changed.connect(self._set_rating)
+        self.comment = QTextEdit()
+        self.comment.setAcceptRichText(False)
+        self.comment.setPlaceholderText("Write your own comments about this movie…")
+        self.comment.setFixedHeight(100)
+        self.save_comment_btn = QPushButton("Save comment")
+        self.save_comment_btn.setEnabled(False)
+        self.save_comment_btn.clicked.connect(self._save_comment)
+        self.comment.document().modificationChanged.connect(self.save_comment_btn.setEnabled)
+        for w in (review_head, self.stars, self.comment):
+            body_layout.addWidget(w)
+        body_layout.addWidget(self.save_comment_btn, 0, Qt.AlignLeft)
         self.file_info = self._text_block(body_layout, "FILE", muted=True)
         body_layout.addStretch(1)
         scroll.setWidget(body)
@@ -132,8 +188,7 @@ class MovieDialog(QWidget):
         text = QLabel()
         text.setWordWrap(True)
         text.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        if muted:
-            text.setObjectName("muted")
+        text.setObjectName("muted" if muted else "detailText")
         layout.addWidget(head)
         layout.addWidget(text)
         head.hide()
@@ -162,7 +217,7 @@ class MovieDialog(QWidget):
 
         if m["rating"] and m["votes"]:
             self.rating.setText(f"Rating {m['rating']:.1f}/10   "
-                                f"<span style='color:{COLORS['muted']};font-weight:400;font-size:10pt'>"
+                                f"<span style='color:{COLORS['muted']};font-weight:400;font-size:12pt'>"
                                 f"{format_votes(m['votes'])} votes on TMDB</span>")
         else:
             self.rating.setText("")
@@ -183,6 +238,12 @@ class MovieDialog(QWidget):
         self._set_block(self.director, m["director"] or "")
         self._set_block(self.cast, ", ".join(c["name"] for c in m["cast"][:10]))
         self._set_block(self.file_info, m["path"])
+
+        self.stars.set_value(m.get("user_rating") or 0)
+        comment = m.get("user_comment") or ""
+        if not self.comment.document().isModified() and self.comment.toPlainText() != comment:
+            self.comment.setPlainText(comment)   # an unsaved draft is never overwritten
+            self.comment.document().setModified(False)
 
         self._load_poster(m)
         self._load_backdrop(m)
@@ -245,7 +306,23 @@ class MovieDialog(QWidget):
         self._backdrop_scaled = None
         super().resizeEvent(event)
 
+    def _escape(self) -> None:
+        if self.comment.hasFocus():   # Esc while typing a comment only leaves the field
+            self.comment.clearFocus()
+        else:
+            self.back_requested.emit()
+
     # -- actions ---------------------------------------------------------------------------------
+    def _set_rating(self, value: int) -> None:
+        m = self.service.by_id[self.movie_id]
+        self.service.set_review(self.movie_id, value, m.get("user_comment") or "")
+
+    def _save_comment(self) -> None:
+        m = self.service.by_id[self.movie_id]
+        self.comment.document().setModified(False)
+        self.service.set_review(self.movie_id, m.get("user_rating") or 0,
+                                self.comment.toPlainText().strip())
+
     def _watch(self) -> None:
         self.play_requested.emit(self.movie_id)
 

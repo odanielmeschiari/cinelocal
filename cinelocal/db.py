@@ -95,6 +95,7 @@ _MIGRATIONS = (
     ("kind", "TEXT DEFAULT 'movie'"), ("series_id", "INTEGER"), ("season", "INTEGER"),
     ("episode", "INTEGER"), ("ep_title", "TEXT"), ("ep_overview", "TEXT"),
     ("ep_air_date", "TEXT"), ("ep_runtime", "INTEGER"), ("ep_rating", "REAL"),
+    ("user_rating", "INTEGER DEFAULT 0"), ("user_comment", "TEXT DEFAULT ''"),
 )
 
 
@@ -233,6 +234,10 @@ class Database:
             raise ValueError(column)
         self._many(f"UPDATE movies SET {column} = ? WHERE id = ?",
                    [(int(value), i) for i in ids])
+
+    def set_review(self, movie_id: int, rating: int, comment: str) -> None:
+        self._run("UPDATE movies SET user_rating = ?, user_comment = ? WHERE id = ?",
+                  (rating, comment, movie_id))
 
     # -- series and episodes -----------------------------------------------------
     def ensure_series(self, title: str, year: int | None = None) -> int:

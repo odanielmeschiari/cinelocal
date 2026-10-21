@@ -41,6 +41,17 @@ LANGUAGES = {
     "ja-JP": "日本語",
 }
 
+# Preferred audio/subtitle languages for the built-in player: code -> (label, name fragments VLC may use)
+TRACK_LANGUAGES = {
+    "en": ("English", ("english", "eng", "en")),
+    "pt": ("Português", ("portuguese", "português", "portugues", "por", "pt")),
+    "es": ("Español", ("spanish", "español", "espanol", "spa", "es")),
+    "fr": ("Français", ("french", "français", "francais", "fre", "fra", "fr")),
+    "de": ("Deutsch", ("german", "deutsch", "ger", "deu", "de")),
+    "it": ("Italiano", ("italian", "italiano", "ita", "it")),
+    "ja": ("日本語", ("japanese", "日本語", "jpn", "ja")),
+}
+
 DEFAULT_SETTINGS = {
     "library_path": "",
     "tmdb_api_key": "",
@@ -48,6 +59,8 @@ DEFAULT_SETTINGS = {
     "provider": "tmdb",
     "language": "en-US",
     "player_command": "",
+    "audio_language": "",     # "" = whatever the file defaults to, or a key of TRACK_LANGUAGES
+    "subtitle_language": "",  # "" = file default, "off" = no subtitles, or a key of TRACK_LANGUAGES
     "default_player": "",     # "builtin", "external" or "" (= external only if a command is set)
     "player_prefs": {},       # volume and picture settings remembered between movies
     "resume": {},             # file path -> position (ms) where it stopped

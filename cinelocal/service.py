@@ -308,6 +308,13 @@ class LibraryService(QObject):
                 entry["watched"] = bool(eps) and all(e["watched"] for e in eps)
             self.movie_changed.emit(-series_id)
 
+    def set_review(self, movie_id: int, rating: int, comment: str) -> None:
+        """Saves the user's own rating (0 = none, 1-5 stars) and comment for a movie."""
+        self.db.set_review(movie_id, rating, comment)
+        if movie_id in self.by_id:
+            self.by_id[movie_id].update(user_rating=rating, user_comment=comment)
+            self.movie_changed.emit(movie_id)
+
     # -- continuar assistindo -----------------------------------------------------------
     def resume_info(self, path: str) -> tuple[int, int, int]:
         """(position ms, duration ms, when it was saved) of a file; zeros if none."""

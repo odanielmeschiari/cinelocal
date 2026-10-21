@@ -441,6 +441,8 @@ class MainWindow(QMainWindow):
         page.ended.connect(lambda path: QTimer.singleShot(0, lambda: self._offer_next(path)))
         page.prefs_changed.connect(lambda prefs: self.service.settings.update(player_prefs=prefs))
         page.apply_prefs(self.service.settings.get("player_prefs") or {})
+        page.set_track_languages(self.service.settings.get("audio_language"),
+                                 self.service.settings.get("subtitle_language"))
         page.external_requested.connect(lambda: self._open_external(self._playing_id))
         self._player, self._player_origin = page, self.stack.currentWidget()
         self.stack.addWidget(page)

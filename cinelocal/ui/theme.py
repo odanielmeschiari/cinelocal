@@ -26,11 +26,11 @@ QMainWindow, QDialog, QStackedWidget { background: $bg; }
 QWidget#page, QWidget#content { background: $bg; }
 QToolTip { background: $surface2; color: $text; border: 1px solid $border; padding: 4px 8px; }
 
-QLineEdit, QComboBox {
+QLineEdit, QComboBox, QTextEdit {
     background: $surface; border: 1px solid $border; border-radius: 9px;
     padding: 8px 12px; selection-background-color: $accent;
 }
-QLineEdit:focus, QComboBox:focus { border-color: $accent; }
+QLineEdit:focus, QComboBox:focus, QTextEdit:focus { border-color: $accent; }
 QComboBox::drop-down { border: none; width: 26px; }
 QComboBox QAbstractItemView {
     background: $surface2; border: 1px solid $border; outline: 0;
@@ -46,6 +46,9 @@ QPushButton:checked { background: $accent_dark; border-color: $accent; }
 QPushButton:disabled { color: $muted; background: $surface; border-color: $surface2; }
 QPushButton[primary="true"] { background: $accent; border-color: $accent; color: white; font-weight: 600; }
 QPushButton[primary="true"]:hover { background: $accent_hover; border-color: $accent_hover; }
+QPushButton#iconBtn { background: transparent; border: none; border-radius: 10px; padding: 0; font-size: 26pt; }
+QPushButton#iconBtn:hover { background: $surface2; border: none; }
+QPushButton#iconBtn:pressed { background: $surface3; }
 QPushButton::menu-indicator, QToolButton::menu-indicator { image: none; width: 0; }
 
 QTreeWidget#sidebar { background: $surface; border: none; outline: 0; padding: 10px 6px; }

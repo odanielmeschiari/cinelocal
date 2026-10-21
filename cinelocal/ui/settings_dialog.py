@@ -6,7 +6,7 @@ import os
 from PySide6.QtWidgets import (QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
                                QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget)
 
-from ..config import LANGUAGES
+from ..config import LANGUAGES, TRACK_LANGUAGES
 from ..providers import PROVIDERS
 from ..service import LibraryService
 
@@ -93,6 +93,13 @@ class SettingsDialog(QDialog):
         self.default_player.setCurrentIndex(max(0, self.default_player.findData(chosen)))
         form.addRow("Default player", self.default_player)
 
+        self.audio_language = self._track_combo(s.get("audio_language"), "File default")
+        form.addRow("Audio language", self.audio_language)
+        self.subtitle_language = self._track_combo(s.get("subtitle_language"), "File default")
+        self.subtitle_language.insertItem(1, "Off (no subtitles)", "off")
+        self.subtitle_language.setCurrentIndex(max(0, self.subtitle_language.findData(s.get("subtitle_language"))))
+        form.addRow("Subtitle language", self.subtitle_language)
+
         self.player_edit = QLineEdit(s.get("player_command"))
         self.player_edit.setPlaceholderText("Empty = system default player")
         pbrowse = QPushButton("Browse…")
@@ -114,6 +121,15 @@ class SettingsDialog(QDialog):
 
         if focus_key:
             self.key_edit.setFocus()
+
+    @staticmethod
+    def _track_combo(current: str, default_label: str) -> QComboBox:
+        combo = QComboBox()
+        combo.addItem(default_label, "")
+        for code, (name, _aliases) in TRACK_LANGUAGES.items():
+            combo.addItem(name, code)
+        combo.setCurrentIndex(max(0, combo.findData(current)))
+        return combo
 
     @staticmethod
     def _with_button(edit: QLineEdit, button: QPushButton) -> QWidget:
@@ -179,4 +195,6 @@ class SettingsDialog(QDialog):
             "language": self.language.currentData(),
             "player_command": self.player_edit.text().strip(),
             "default_player": self.default_player.currentData(),
+            "audio_language": self.audio_language.currentData(),
+            "subtitle_language": self.subtitle_language.currentData(),
         }
