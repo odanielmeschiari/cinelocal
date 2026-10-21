@@ -4,12 +4,13 @@ from __future__ import annotations
 import sys
 import time
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QCursor, QGuiApplication, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
+from PySide6.QtWidgets import (QApplication, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
                                QSizePolicy, QSlider, QStyle, QVBoxLayout, QWidget, QWidgetAction)
 
 SAVE_EVERY_MS = 5000      # de quanto em quanto tempo a posição de reprodução é salva
+FADE_MS = 500             # duração do desaparecimento suave dos controles
 IDLE_HIDE_SECONDS = 2.5   # em tela cheia, controles e ponteiro somem depois deste tempo parado
 # chave, rótulo, mínimo, máximo, padrão (em %). Nitidez 0 = filtro desligado.
 _ADJUSTMENTS = (("brightness", "Brilho", 0, 200, 100), ("contrast", "Contraste", 0, 200, 100),
@@ -79,6 +80,12 @@ class VlcPlayerPage(QWidget):
         self._build(title)
         self._timer = QTimer(self, interval=250)
         self._timer.timeout.connect(self._tick)
+        self._fade = QVariantAnimation(self)
+        self._fade.setStartValue(1.0)
+        self._fade.setEndValue(0.0)
+        self._fade.setDuration(FADE_MS)
+        self._fade.valueChanged.connect(self._set_chrome_opacity)
+        self._fade.finished.connect(self._finish_fade)
         self._sharp_timer = QTimer(self, singleShot=True, interval=600)   # espera o slider parar
         self._sharp_timer.timeout.connect(self._apply_sharpness)
         for keys, action in (("Space", self.toggle_pause), ("F", self.toggle_fullscreen),
@@ -235,8 +242,9 @@ class VlcPlayerPage(QWidget):
         media = self._instance.media_new(self._path)
         sharpness = self._adjust["sharpness"]
         if sharpness > 0:
+            media.add_option(":avcodec-hw=none")   # decodificação por GPU ignora os filtros de vídeo
             media.add_option(":video-filter=sharpen")
-            media.add_option(f":sharpen-sigma={sharpness / 50:.2f}")   # 0–100% -> sigma 0–2
+            media.add_option(f":sharpen-sigma={0.2 + sharpness * 0.018:.2f}")   # 1–100% -> sigma 0,2–2,0
         self._sharp_applied = sharpness
         self._playing_seen = False
         self._mp.set_media(media)
@@ -339,6 +347,7 @@ class VlcPlayerPage(QWidget):
         self._last_activity = time.monotonic()
         if self._chrome_hidden:
             self._chrome_hidden = False
+            self._cancel_fade()
             self.controls.show()
             self.topbar.show()
             self.unsetCursor()
@@ -355,9 +364,26 @@ class VlcPlayerPage(QWidget):
                 or self.topbar.rect().contains(self.topbar.mapFromGlobal(pos))):
             return
         self._chrome_hidden = True
-        self.controls.hide()
-        self.topbar.hide()
+        for w in (self.topbar, self.controls):
+            w.setGraphicsEffect(QGraphicsOpacityEffect(w))
+        self._fade.start()
+
+    def _set_chrome_opacity(self, value) -> None:
+        for w in (self.topbar, self.controls):
+            if w.graphicsEffect() is not None:
+                w.graphicsEffect().setOpacity(float(value))
+
+    def _finish_fade(self) -> None:
+        """Fim do desaparecimento: só agora os controles saem do layout (o vídeo ocupa a tela toda)."""
+        for w in (self.topbar, self.controls):
+            w.hide()
+            w.setGraphicsEffect(None)
         self.setCursor(Qt.BlankCursor)
+
+    def _cancel_fade(self) -> None:
+        self._fade.stop()
+        for w in (self.topbar, self.controls):
+            w.setGraphicsEffect(None)
 
     def _escape(self) -> None:
         if self._fullscreen:
