@@ -76,6 +76,47 @@ class ReviewDatabaseTests(unittest.TestCase):
         self.assertEqual(db.get_movie(1)["user_rating"], 3)
         db.close()
 
+    def test_series_review_round_trip(self):
+        db = Database(self.path)
+        series_id = db.ensure_series("Severance", 2022)
+        series = db.get_series(series_id)
+        self.assertEqual((series["user_rating"], series["user_comment"]), (0, ""))
+        db.set_review(series_id, 5, "Obra-prima", "series")
+        series = db.get_series(series_id)
+        self.assertEqual((series["user_rating"], series["user_comment"]), (5, "Obra-prima"))
+        db.save_metadata(series_id, {"title": "Severance", "status": "matched"}, "series")
+        self.assertEqual(db.get_series(series_id)["user_rating"], 5)   # a metadata refresh keeps it
+        db.close()
+
+    def test_series_review_does_not_touch_movies(self):
+        db = Database(self.path)
+        (movie_id,) = db.add_movies([_movie("A")])
+        series_id = db.ensure_series("A", 2000)   # same numeric id as the movie
+        db.set_review(series_id, 4, "x", "series")
+        self.assertEqual(db.get_movie(movie_id)["user_rating"], 0)
+        with self.assertRaises(ValueError):
+            db.set_review(series_id, 4, "x", "episodes")
+        db.close()
+
+    def test_series_table_from_an_older_version_is_migrated(self):
+        conn = sqlite3.connect(self.path)
+        conn.executescript(OLD_SCHEMA + """
+            CREATE TABLE series (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE,
+                clean_title TEXT NOT NULL, year_guess INTEGER, tmdb_id INTEGER, title TEXT, original_title TEXT,
+                year INTEGER, release_date TEXT, overview TEXT, tagline TEXT, runtime INTEGER, rating REAL,
+                votes INTEGER, genres_json TEXT DEFAULT '[]', director TEXT, cast_json TEXT DEFAULT '[]',
+                trailer_key TEXT, has_poster INTEGER DEFAULT 0, has_backdrop INTEGER DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending', favorite INTEGER DEFAULT 0, watchlist INTEGER DEFAULT 0,
+                added_at REAL NOT NULL, updated_at REAL NOT NULL);
+            INSERT INTO series (key, clean_title, added_at, updated_at) VALUES ('old', 'Old', 1, 1);""")
+        conn.commit()
+        conn.close()
+        db = Database(self.path)
+        self.assertEqual(db.get_series(1)["user_rating"], 0)
+        db.set_review(1, 2, "ok", "series")
+        self.assertEqual(db.get_series(1)["user_rating"], 2)
+        db.close()
+
 
 class RatingFilterTests(unittest.TestCase):
     def setUp(self):

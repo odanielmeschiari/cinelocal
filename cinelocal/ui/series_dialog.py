@@ -10,11 +10,11 @@ from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QMenu, QP
 from .. import images
 from ..service import LibraryService
 from ..utils import format_runtime, format_votes
+from .detail_widgets import DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, ReviewBox, cap_offset
 from .match_dialog import MatchDialog
 from .theme import COLORS
 from .widgets import rounded_pixmap
 
-POSTER_SIZE = (180, 270)
 BACKDROP_HEIGHT = 340
 
 
@@ -38,10 +38,12 @@ class SeriesDialog(QWidget):
         self._backdrop: QPixmap | None = None
         self._backdrop_scaled: QPixmap | None = None
         self._season = None
+        self._heads: dict[QLabel, QLabel] = {}
+        self.setStyleSheet(DETAIL_STYLE)
         self.setWindowTitle(service.by_id[movie_id]["display_title"])
         self._build()
-        QShortcut(QKeySequence("Esc"), self, activated=self.back_requested.emit)
-        QShortcut(QKeySequence.Back, self, activated=self.back_requested.emit)
+        QShortcut(QKeySequence("Esc"), self, activated=self._escape)
+        QShortcut(QKeySequence.Back, self, activated=self._leave)
         self._populate()
         service.movie_changed.connect(self._on_movie_changed)
 
@@ -52,7 +54,7 @@ class SeriesDialog(QWidget):
         page.setSpacing(10)
         self.back_btn = QPushButton("←  Back")
         self.back_btn.setToolTip("Back to the list (Esc)")
-        self.back_btn.clicked.connect(self.back_requested.emit)
+        self.back_btn.clicked.connect(self._leave)
         page.addWidget(self.back_btn, 0, Qt.AlignLeft)
 
         self.scroll = QScrollArea()
@@ -78,6 +80,7 @@ class SeriesDialog(QWidget):
 
         right = QVBoxLayout()
         right.setSpacing(8)
+        right.addSpacing(DETAILS_OFFSET)
         top.addLayout(right, 1)
         self.title = QLabel()
         self.title.setObjectName("movieTitle")
@@ -93,18 +96,12 @@ class SeriesDialog(QWidget):
         self.banner = QLabel()
         self.banner.setObjectName("warn")
         self.banner.setWordWrap(True)
-        self.overview = QLabel()
-        self.overview.setWordWrap(True)
-        self.overview.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.creator = QLabel()
-        self.creator.setObjectName("muted")
-        self.creator.setWordWrap(True)
-        self.cast = QLabel()
-        self.cast.setObjectName("muted")
-        self.cast.setWordWrap(True)
-        for w in (self.title, self.meta, self.rating, self.tagline, self.banner,
-                  self.overview, self.creator, self.cast):
+        for w in (self.title, self.meta, self.rating, self.tagline, self.banner):
             right.addWidget(w)
+        left.insertSpacing(0, DETAILS_OFFSET + cap_offset(self.title))   # the poster's top lines up with the title's letters
+        self.overview = self._text_block(right, "OVERVIEW")
+        self.creator = self._text_block(right, "CREATED BY")
+        self.cast = self._text_block(right, "CAST")
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
@@ -132,6 +129,11 @@ class SeriesDialog(QWidget):
         actions.addStretch(1)
         actions.addWidget(more)
         right.addLayout(actions)
+        self.review = ReviewBox("Write your own comments about this series…")
+        self.review.rating_changed.connect(self._set_rating)
+        self.review.comment_saved.connect(self._save_comment)
+        right.addSpacing(6)
+        right.addWidget(self.review)
         right.addStretch(1)
 
         self.season_combo = QComboBox()
@@ -146,6 +148,25 @@ class SeriesDialog(QWidget):
         self.ep_box.setSpacing(8)
         column.addLayout(self.ep_box)
         column.addStretch(1)
+
+    def _text_block(self, layout: QVBoxLayout, heading: str) -> QLabel:
+        head = QLabel(heading)
+        head.setObjectName("section")
+        text = QLabel()
+        text.setObjectName("detailText")
+        text.setWordWrap(True)
+        text.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(head)
+        layout.addWidget(text)
+        head.hide()
+        text.hide()
+        self._heads[text] = head
+        return text
+
+    def _set_block(self, label: QLabel, text: str) -> None:
+        label.setText(text)
+        label.setVisible(bool(text))
+        self._heads[label].setVisible(bool(text))
 
     # -- data -------------------------------------------------------------------------
     def _populate(self) -> None:
@@ -162,7 +183,7 @@ class SeriesDialog(QWidget):
         self.meta.setText("   •   ".join(p for p in parts if p))
         if s["rating"] and s["votes"]:
             self.rating.setText(f"Rating {s['rating']:.1f}/10   "
-                                f"<span style='color:{COLORS['muted']};font-weight:400;font-size:10pt'>"
+                                f"<span style='color:{COLORS['muted']};font-weight:400;font-size:12pt'>"
                                 f"{format_votes(s['votes'])} votes</span>")
         else:
             self.rating.setText("")
@@ -177,12 +198,10 @@ class SeriesDialog(QWidget):
         self.banner.setText(banners.get(s["status"], ""))
         self.banner.setVisible(bool(self.banner.text()))
         overview = s["overview"] or ("No overview available." if s["status"] == "matched" else "")
-        for label, text in ((self.overview, overview),
-                            (self.creator, f"Created by: {s['director']}" if s["director"] else ""),
-                            (self.cast, "Cast: " + ", ".join(c["name"] for c in s["cast"][:10])
-                             if s["cast"] else "")):
-            label.setText(text)
-            label.setVisible(bool(text))
+        self._set_block(self.overview, overview)
+        self._set_block(self.creator, s["director"] or "")
+        self._set_block(self.cast, ", ".join(c["name"] for c in s["cast"][:10]))
+        self.review.set_values(s.get("user_rating") or 0, s.get("user_comment") or "")
 
         self._load_poster(s)
         pixmap = QPixmap(str(images.backdrop_file(s["id"]))) if s["has_backdrop"] else QPixmap()
@@ -239,7 +258,8 @@ class SeriesDialog(QWidget):
         row = QFrame()
         row.setObjectName("episode")
         row.setStyleSheet(f"QFrame#episode {{ background: {COLORS['surface']};"
-                          f" border: 1px solid {COLORS['border']}; border-radius: 10px; }}")
+                          f" border: 1px solid {COLORS['border']}; border-radius: 10px; }}"
+                          f" QFrame#episode QLabel {{ font-size: 10pt; }}")   # compact, unlike the details above
         layout = QHBoxLayout(row)
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(14)
@@ -318,6 +338,22 @@ class SeriesDialog(QWidget):
     def resizeEvent(self, event) -> None:
         self._backdrop_scaled = None
         super().resizeEvent(event)
+
+    def _leave(self) -> None:
+        self.review.autosave()
+        self.back_requested.emit()
+
+    def _escape(self) -> None:
+        if not self.review.release_focus():   # Esc while typing a comment only leaves the field
+            self._leave()
+
+    def _set_rating(self, value: int) -> None:
+        s = self.service.by_id[self.movie_id]
+        self.service.set_review(self.movie_id, value, s.get("user_comment") or "")
+
+    def _save_comment(self, text: str) -> None:
+        s = self.service.by_id[self.movie_id]
+        self.service.set_review(self.movie_id, s.get("user_rating") or 0, text)
 
     # -- actions ---------------------------------------------------------------------------------
     def _open_trailer(self) -> None:

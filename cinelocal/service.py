@@ -309,8 +309,11 @@ class LibraryService(QObject):
             self.movie_changed.emit(-series_id)
 
     def set_review(self, movie_id: int, rating: int, comment: str) -> None:
-        """Saves the user's own rating (0 = none, 1-5 stars) and comment for a movie."""
-        self.db.set_review(movie_id, rating, comment)
+        """Saves the user's own rating (0 = none, 1-5 stars) and comment for a movie or a whole series."""
+        if movie_id < 0:
+            self.db.set_review(-movie_id, rating, comment, "series")
+        else:
+            self.db.set_review(movie_id, rating, comment)
         if movie_id in self.by_id:
             self.by_id[movie_id].update(user_rating=rating, user_comment=comment)
             self.movie_changed.emit(movie_id)
