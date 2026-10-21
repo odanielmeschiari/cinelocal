@@ -1,7 +1,7 @@
 # CineLocal
 
-Local movie browser for Linux and Windows, with a Netflix-style black and blue look (night mode).
-Fast and offline: the internet is only used to download posters and information for new movies
+Local movie browser for Linux and Windows.
+Fast and offline: the internet is only used to download posters and metadata for new movies
 (or when you force an update).
 
 ![Home screen](home.png "Home Screen")
