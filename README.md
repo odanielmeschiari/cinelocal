@@ -162,6 +162,9 @@ saved positions, with no way back), delete these folders yourself:
 - **Metadata source** (Settings): TMDB (default) or OMDb. OMDb is free (1,000 requests/day), only has data in
   English and provides no backdrop image or trailer. When you switch sources, use **Metadata → Force update**
   to re-identify the movies already downloaded.
+
+  ![Description](description.png "Description")
+  
 - **Rescan** (`F5`): runs when the app opens; detects new movies and removes the ones that disappeared from disk.
   Files moved to another subfolder keep their metadata, collections and flags.
 - **Metadata**: fetch pending items, force an update of all (keeps confirmed matches)
