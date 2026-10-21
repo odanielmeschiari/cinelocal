@@ -29,6 +29,53 @@ O script copia o app para `%LOCALAPPDATA%\Programs\cinelocal`, cria um ambiente 
 (precisa de internet, ~200 MB) e adiciona o atalho no Menu Iniciar. Não precisa de administrador.
 Para só testar sem instalar: `run.bat`. Para remover: `uninstall.bat` (`--purge` apaga também os dados).
 
+## Desinstalação
+
+Seus filmes **nunca são apagados**: o uninstall só remove o app e, se você pedir, os dados do CineLocal.
+
+### Linux
+
+1. Abra um terminal na pasta extraída do CineLocal (a mesma do `install.sh`).
+2. Se aparecer `Permissão negada`, dê permissão de execução ao script (alguns extratores de zip perdem essa permissão):
+
+   ```bash
+   chmod +x uninstall.sh
+   ```
+
+3. **Uninstall** — remove o app, o atalho do menu e o ícone, mas mantém biblioteca, capas e configurações
+   (se reinstalar depois, tudo continua como estava):
+
+   ```bash
+   ./uninstall.sh
+   ```
+
+4. **Purge** (opcional) — remove também todos os dados. Isso apaga a biblioteca, as capas em cache, a chave da API
+   e as posições salvas de "continuar assistindo", e não tem volta:
+
+   ```bash
+   ./uninstall.sh --purge
+   ```
+
+   Pastas removidas pelo purge: `~/.config/cinelocal`, `~/.local/share/cinelocal` e `~/.cache/cinelocal`.
+
+### Windows
+
+1. Abra o Prompt de Comando na pasta extraída do CineLocal (a mesma do `install.bat`). Não precisa de `chmod`
+   nem de administrador.
+2. **Uninstall** — remove o app e o atalho do Menu Iniciar, mantendo os dados:
+
+   ```bat
+   uninstall.bat
+   ```
+
+3. **Purge** (opcional) — remove também biblioteca, capas, chave da API e posições salvas, sem volta:
+
+   ```bat
+   uninstall.bat --purge
+   ```
+
+   Pastas removidas pelo purge: `%APPDATA%\cinelocal` e `%LOCALAPPDATA%\cinelocal`.
+
 ## Primeiros passos
 
 1. Abra o app e clique em **Selecionar pasta de filmes** (a pasta é lida recursivamente).
