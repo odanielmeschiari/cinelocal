@@ -7,6 +7,8 @@ import threading
 import time
 from pathlib import Path
 
+from .utils import comparable_title
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS movies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +41,34 @@ CREATE TABLE IF NOT EXISTS movies (
 );
 CREATE INDEX IF NOT EXISTS idx_movies_status ON movies(status);
 
+CREATE TABLE IF NOT EXISTS series (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    clean_title TEXT NOT NULL,
+    year_guess INTEGER,
+    tmdb_id INTEGER,
+    title TEXT,
+    original_title TEXT,
+    year INTEGER,
+    release_date TEXT,
+    overview TEXT,
+    tagline TEXT,
+    runtime INTEGER,
+    rating REAL,
+    votes INTEGER,
+    genres_json TEXT DEFAULT '[]',
+    director TEXT,
+    cast_json TEXT DEFAULT '[]',
+    trailer_key TEXT,
+    has_poster INTEGER DEFAULT 0,
+    has_backdrop INTEGER DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    favorite INTEGER DEFAULT 0,
+    watchlist INTEGER DEFAULT 0,
+    added_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS collections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -59,6 +89,13 @@ METADATA_COLUMNS = {
     "status",
 }
 FLAG_COLUMNS = {"watched", "favorite", "watchlist"}
+EPISODE_COLUMNS = {"ep_title", "ep_overview", "ep_air_date", "ep_runtime", "ep_rating"}
+# Colunas de séries/episódios acrescentadas a bancos criados em versões anteriores.
+_MIGRATIONS = (
+    ("kind", "TEXT DEFAULT 'movie'"), ("series_id", "INTEGER"), ("season", "INTEGER"),
+    ("episode", "INTEGER"), ("ep_title", "TEXT"), ("ep_overview", "TEXT"),
+    ("ep_air_date", "TEXT"), ("ep_runtime", "INTEGER"), ("ep_rating", "REAL"),
+)
 
 
 def _loads(text, default):
@@ -80,6 +117,15 @@ def _row_to_movie(row: sqlite3.Row) -> dict:
     return m
 
 
+def _row_to_series(row: sqlite3.Row) -> dict:
+    s = dict(row)
+    s["genres"] = _loads(s.pop("genres_json", None), [])
+    s["cast"] = _loads(s.pop("cast_json", None), [])
+    for key in ("favorite", "watchlist", "has_poster", "has_backdrop"):
+        s[key] = bool(s[key])
+    return s
+
+
 class Database:
     def __init__(self, path: Path):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -95,6 +141,13 @@ class Database:
                 self._conn.commit()
             except sqlite3.OperationalError:
                 pass
+            for column, ddl in _MIGRATIONS:   # migração: séries e episódios
+                try:
+                    self._conn.execute(f"ALTER TABLE movies ADD COLUMN {column} {ddl}")
+                    self._conn.commit()
+                except sqlite3.OperationalError:
+                    pass
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_series ON movies(series_id)")
 
     # -- infra ---------------------------------------------------------------
     def _run(self, sql: str, params=()):
@@ -125,7 +178,7 @@ class Database:
         return _row_to_movie(rows[0]) if rows else None
 
     def known_files(self) -> list[dict]:
-        rows = self._query("SELECT id, path, file_name, size FROM movies")
+        rows = self._query("SELECT id, path, file_name, size, kind FROM movies")
         return [dict(r) for r in rows]
 
     def add_movies(self, rows: list[dict]) -> list[int]:
@@ -134,9 +187,11 @@ class Database:
             for r in rows:
                 cur = self._conn.execute(
                     "INSERT INTO movies (path, file_name, size, clean_title, year_guess,"
-                    " added_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    " added_at, updated_at, kind, series_id, season, episode)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (r["path"], r["file_name"], r["size"], r["clean_title"],
-                     r["year_guess"], r["added_at"], r["added_at"]),
+                     r["year_guess"], r["added_at"], r["added_at"], r.get("kind", "movie"),
+                     r.get("series_id"), r.get("season"), r.get("episode")),
                 )
                 ids.append(cur.lastrowid)
             self._conn.commit()
@@ -149,7 +204,9 @@ class Database:
         if ids:
             self._many("DELETE FROM movies WHERE id = ?", [(i,) for i in ids])
 
-    def save_metadata(self, movie_id: int, fields: dict) -> None:
+    def save_metadata(self, movie_id: int, fields: dict, table: str = "movies") -> None:
+        if table not in ("movies", "series"):
+            raise ValueError(table)
         sets, values = [], []
         for key, value in fields.items():
             if key == "genres":
@@ -163,10 +220,12 @@ class Database:
                 values.append(value)
         sets.append("updated_at = ?")
         values.extend([time.time(), movie_id])
-        self._run(f"UPDATE movies SET {', '.join(sets)} WHERE id = ?", values)
+        self._run(f"UPDATE {table} SET {', '.join(sets)} WHERE id = ?", values)
 
-    def set_status(self, movie_id: int, status: str) -> None:
-        self._run("UPDATE movies SET status = ?, updated_at = ? WHERE id = ?",
+    def set_status(self, movie_id: int, status: str, table: str = "movies") -> None:
+        if table not in ("movies", "series"):
+            raise ValueError(table)
+        self._run(f"UPDATE {table} SET status = ?, updated_at = ? WHERE id = ?",
                   (status, time.time(), movie_id))
 
     def set_flag_many(self, ids: list[int], column: str, value: bool) -> None:
@@ -174,6 +233,64 @@ class Database:
             raise ValueError(column)
         self._many(f"UPDATE movies SET {column} = ? WHERE id = ?",
                    [(int(value), i) for i in ids])
+
+    # -- séries e episódios -----------------------------------------------------
+    def ensure_series(self, title: str, year: int | None = None) -> int:
+        """Id da série com este título (cria se não existir). A chave ignora acentos e artigos."""
+        key = comparable_title(title) or title.lower()
+        with self._lock:
+            rows = self._query("SELECT id, year_guess FROM series WHERE key = ?", (key,))
+            if rows:
+                if year and not rows[0]["year_guess"]:
+                    self._run("UPDATE series SET year_guess = ? WHERE id = ?", (year, rows[0]["id"]))
+                return rows[0]["id"]
+            now = time.time()
+            return self._run("INSERT INTO series (key, clean_title, year_guess, added_at, updated_at)"
+                             " VALUES (?, ?, ?, ?, ?)", (key, title, year, now, now)).lastrowid
+
+    def all_series(self) -> list[dict]:
+        return [_row_to_series(r) for r in self._query("SELECT * FROM series")]
+
+    def get_series(self, series_id: int) -> dict | None:
+        rows = self._query("SELECT * FROM series WHERE id = ?", (series_id,))
+        return _row_to_series(rows[0]) if rows else None
+
+    def episodes_of(self, series_id: int) -> list[dict]:
+        rows = self._query("SELECT * FROM movies WHERE series_id = ? ORDER BY season, episode, path",
+                           (series_id,))
+        return [_row_to_movie(r) for r in rows]
+
+    def convert_to_episode(self, movie_id: int, series_id: int, title: str,
+                           year: int | None, season: int, episode: int) -> None:
+        """Transforma um 'filme' já cadastrado (arquivo de episódio) em episódio de série."""
+        self._run(
+            "UPDATE movies SET kind = 'episode', series_id = ?, season = ?, episode = ?,"
+            " clean_title = ?, year_guess = ?, status = 'pending', tmdb_id = NULL, title = NULL,"
+            " original_title = NULL, year = NULL, release_date = NULL, overview = NULL,"
+            " tagline = NULL, runtime = NULL, rating = NULL, votes = NULL, genres_json = '[]',"
+            " director = NULL, cast_json = '[]', trailer_key = NULL, has_poster = 0,"
+            " has_backdrop = 0, updated_at = ? WHERE id = ?",
+            (series_id, season, episode, title, year, time.time(), movie_id))
+
+    def save_episode(self, movie_id: int, fields: dict) -> None:
+        sets = [f"{k} = ?" for k in fields if k in EPISODE_COLUMNS]
+        values = [v for k, v in fields.items() if k in EPISODE_COLUMNS]
+        self._run(f"UPDATE movies SET {', '.join(sets + ['status = ?', 'updated_at = ?'])} WHERE id = ?",
+                  values + ["matched", time.time(), movie_id])
+
+    def set_series_flag(self, series_ids: list[int], column: str, value: bool) -> None:
+        if column not in ("favorite", "watchlist"):
+            raise ValueError(column)
+        self._many(f"UPDATE series SET {column} = ? WHERE id = ?", [(int(value), i) for i in series_ids])
+
+    def prune_series(self) -> list[int]:
+        """Apaga séries que ficaram sem episódios. Retorna os ids apagados."""
+        rows = self._query("SELECT id FROM series WHERE id NOT IN"
+                           " (SELECT series_id FROM movies WHERE series_id IS NOT NULL)")
+        ids = [r["id"] for r in rows]
+        if ids:
+            self._many("DELETE FROM series WHERE id = ?", [(i,) for i in ids])
+        return ids
 
     # -- coleções ------------------------------------------------------------
     def all_collections(self) -> list[dict]:

@@ -15,6 +15,7 @@ class MatchDialog(QDialog):
         self.service = service
         self.selected_tmdb_id: int | None = None
         self.skipped = False
+        self._series = movie.get("kind") == "series"
         self._closed = False
         self.setWindowTitle("Corrigir correspondência")
         self.setModal(True)
@@ -24,7 +25,7 @@ class MatchDialog(QDialog):
         layout.setContentsMargins(24, 22, 24, 22)
         layout.setSpacing(12)
 
-        head = QLabel(f"Arquivo: <b>{movie['file_name']}</b>" + (f"  ({position})" if position else ""))
+        head = QLabel(f"{'Série' if self._series else 'Arquivo'}: <b>{movie['file_name']}</b>" + (f"  ({position})" if position else ""))
         head.setWordWrap(True)
         layout.addWidget(head)
 
@@ -95,7 +96,7 @@ class MatchDialog(QDialog):
         self.status.setText("Buscando…")
         self.results.clear()
         self.search_btn.setEnabled(False)
-        self.service.search_tmdb(query, year, self._on_results, self._on_error)
+        self.service.search_tmdb(query, year, self._on_results, self._on_error, series=self._series)
 
     def _on_results(self, results: list[dict]) -> None:
         if self._closed:

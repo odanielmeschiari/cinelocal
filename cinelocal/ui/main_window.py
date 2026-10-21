@@ -18,6 +18,7 @@ from .grid import MovieGrid
 from .match_dialog import MatchDialog
 from .movie_dialog import MovieDialog
 from .player_page import VlcPlayerPage, unavailable_reason
+from .series_dialog import SeriesDialog
 from .settings_dialog import SettingsDialog
 from .sidebar import Sidebar
 
@@ -338,7 +339,7 @@ class MainWindow(QMainWindow):
         if self._sliding:
             return
         self._discard_detail()
-        page = MovieDialog(self.service, movie_id, self)
+        page = (SeriesDialog if movie_id < 0 else MovieDialog)(self.service, movie_id, self)
         page.back_requested.connect(self.close_movie)
         page.play_requested.connect(self.play_movie)
         self._detail = page
@@ -360,6 +361,11 @@ class MainWindow(QMainWindow):
         if self._sliding:
             return
         self._discard_player()
+        if movie_id < 0:   # série: toca o próximo episódio a assistir
+            movie_id = self.service.next_episode(-movie_id)
+            if movie_id is None:
+                self.statusBar().showMessage("Esta série não tem episódios.", 5000)
+                return
         movie = self.service.by_id[movie_id]
         if self.service.settings.get("player_command").strip() or not os.path.exists(movie["path"]):
             return self._play(movie_id)
@@ -367,7 +373,12 @@ class MainWindow(QMainWindow):
         if reason:
             self.statusBar().showMessage(reason + " Usando o player do sistema.", 10000)
             return self._play(movie_id)
-        page = VlcPlayerPage(movie["display_title"], self)
+        title = movie["display_title"]
+        if movie.get("kind") == "episode":
+            series = self.service.by_id.get(-movie["series_id"])
+            title = (f"{series['display_title'] if series else movie['clean_title']}"
+                     f" — T{movie['season']}E{movie['episode']} — {title}")
+        page = VlcPlayerPage(title, self)
         page.back_requested.connect(self.close_player)
         self._player, self._player_origin = page, self.stack.currentWidget()
         self.stack.addWidget(page)
@@ -505,8 +516,9 @@ class MainWindow(QMainWindow):
         all_listed = all(m["watchlist"] for m in movies)
         menu.addAction("Remover da Watchlist" if all_listed else "＋  Adicionar à Watchlist",
                        lambda: s.set_flag(ids, "watchlist", not all_listed))
-        collections_menu = menu.addMenu("Coleções")
-        populate_collections_menu(collections_menu, s, ids, self)
+        if all(i > 0 for i in ids):   # coleções só guardam filmes
+            collections_menu = menu.addMenu("Coleções")
+            populate_collections_menu(collections_menu, s, ids, self)
         if self.flt[0] == "collection":
             menu.addAction("Remover desta coleção",
                            lambda: s.set_in_collection(self.flt[1], ids, False))

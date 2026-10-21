@@ -20,6 +20,20 @@ class TMDBError(Exception):
         self.kind = kind
 
 
+def _tv_as_movie(raw: dict) -> dict:
+    """Dá a uma série do TMDB o mesmo formato de um filme (parsing.py não precisa saber a diferença)."""
+    out = dict(raw)
+    out["title"] = raw.get("name") or raw.get("original_name")
+    out["original_title"] = raw.get("original_name")
+    out["release_date"] = raw.get("first_air_date")
+    out["runtime"] = (raw.get("episode_run_time") or [None])[0]
+    credits = dict(raw.get("credits") or {})
+    credits["crew"] = list(credits.get("crew") or []) + [
+        {"name": c["name"], "job": "Director"} for c in raw.get("created_by") or [] if c.get("name")]
+    out["credits"] = credits
+    return out
+
+
 class TMDBClient:
     def __init__(self, api_key: str, language: str = "pt-BR", timeout: int = 15):
         self.api_key = (api_key or "").strip()
@@ -86,6 +100,23 @@ class TMDBClient:
             append_to_response="credits,videos",
             include_video_language=f"{lang[:2]},en,null",
         )
+
+    def search_tv(self, query: str, year: int | None = None) -> list[dict]:
+        data = self._get_json("/search/tv", query=query, first_air_date_year=year,
+                              language=self.language, include_adult="false")
+        return [_tv_as_movie(r) for r in data.get("results", [])]
+
+    def tv_details(self, tmdb_id: int, language: str | None = None) -> dict:
+        lang = language or self.language
+        return _tv_as_movie(self._get_json(
+            f"/tv/{tmdb_id}",
+            language=lang,
+            append_to_response="credits,videos",
+            include_video_language=f"{lang[:2]},en,null",
+        ))
+
+    def season(self, tmdb_id: int, number: int, language: str | None = None) -> dict:
+        return self._get_json(f"/tv/{tmdb_id}/season/{number}", language=language or self.language)
 
     def download_image(self, size: str, file_path: str) -> bytes:
         return self._request(f"{IMAGE_BASE}/{size}{file_path}")

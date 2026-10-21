@@ -173,6 +173,8 @@ class MovieDelegate(QStyledItemDelegate):
             parts.append(movie["genres"][0])
         if not parts and movie["status"] == "pending":
             parts.append("Sem metadados")
+        if movie.get("kind") == "series":
+            parts.insert(0, "Série")
         painter.setFont(self._small_font)
         painter.setPen(QColor(COLORS["muted"]))
         painter.drawText(QRect(poster.left(), poster.bottom() + 28, POSTER_W, 18),

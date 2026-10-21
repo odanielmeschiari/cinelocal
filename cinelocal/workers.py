@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from PySide6.QtCore import QThread, Signal
 
 from .db import Database
-from .metadata_service import process_movie
+from .metadata_service import process_movie, process_series
 from .providers import make_client
 from .tmdb import TMDBClient, TMDBError
 
@@ -55,7 +55,8 @@ class UpdateWorker(QThread):
     def _one(self, client: TMDBClient, movie: dict) -> str:
         if self._cancel.is_set():
             return "cancelled"
-        return process_movie(self._db, client, movie, self._forced.get(movie["id"]))
+        process = process_series if movie.get("kind") == "series" else process_movie
+        return process(self._db, client, movie, self._forced.get(movie["id"]))
 
     def run(self):
         summary = {"matched": 0, "ambiguous": 0, "not_found": 0, "failed": 0, "cancelled": False}

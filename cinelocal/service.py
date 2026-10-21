@@ -10,7 +10,7 @@ from . import images, player
 from .config import Settings
 from .db import Database
 from .library import sync_library
-from .metadata_service import find_candidates, process_movie
+from .metadata_service import find_candidates, find_series_candidates, process_movie, process_series
 from .providers import make_client, same_provider
 from .movie_fields import decorate
 from .workers import FuncWorker, UpdateWorker
@@ -29,7 +29,8 @@ class LibraryService(QObject):
     def __init__(self, db: Database, settings: Settings, parent=None):
         super().__init__(parent)
         self.db, self.settings = db, settings
-        self.movies: list[dict] = []
+        self.movies: list[dict] = []        # filmes e séries (as séries têm id negativo)
+        self.episodes: dict[int, list[dict]] = {}   # id da série (positivo) -> episódios em ordem
         self.by_id: dict[int, dict] = {}
         self.collections: list[dict] = []
         self.membership: dict[int, set[int]] = {}
@@ -59,12 +60,68 @@ class LibraryService(QObject):
         return self._update_worker is not None
 
     def reload(self) -> None:
-        self.movies = [decorate(m) for m in self.db.all_movies()]
+        movies, self.episodes = [], {}
+        for m in map(decorate, self.db.all_movies()):
+            if m.get("kind") == "episode":
+                self.episodes.setdefault(m["series_id"], []).append(m)
+            else:
+                movies.append(m)
+        for items in self.episodes.values():
+            items.sort(key=lambda e: (e["season"] or 0, e["episode"] or 0, e["path"]))
+        self.movies = movies + [self._series_entry(s) for s in self.db.all_series()]
         self.by_id = {m["id"]: m for m in self.movies}
+        for items in self.episodes.values():
+            self.by_id.update({e["id"]: e for e in items})
         self.collections = self.db.all_collections()
         self.membership = self.db.membership()
 
+    def _series_entry(self, row: dict) -> dict:
+        """Série no mesmo formato de um filme, para a grade, filtros e busca (id = -id da série)."""
+        eps = self.episodes.get(row["id"], [])
+        entry = dict(row)
+        entry.update(id=-row["id"], series_id=row["id"], kind="series", path="",
+                     file_name=row["clean_title"], size=0,
+                     watched=bool(eps) and all(e["watched"] for e in eps),
+                     season_count=len({e["season"] for e in eps}), episode_count=len(eps))
+        return decorate(entry)
+
+    def _refresh_series(self, series_id: int) -> None:
+        row = self.db.get_series(series_id)
+        if row is None:
+            return
+        old = {e["id"]: e for e in self.episodes.get(series_id, [])}
+        fresh_eps = []
+        for fresh in self.db.episodes_of(series_id):
+            episode = old.get(fresh["id"], {})
+            episode.clear()
+            episode.update(decorate(fresh))
+            self.by_id[episode["id"]] = episode
+            fresh_eps.append(episode)
+        self.episodes[series_id] = fresh_eps
+        entry, current = self._series_entry(row), self.by_id.get(-series_id)
+        if current is None:
+            self.movies.append(entry)
+            self.by_id[entry["id"]] = entry
+        else:
+            current.clear()
+            current.update(entry)
+        self.movie_changed.emit(-series_id)
+
+    def next_episode(self, series_id: int) -> int | None:
+        """Episódio para 'Assistir' na série: o primeiro não assistido (ou o primeiro de todos)."""
+        eps = self.episodes.get(series_id, [])
+        pick = next((e for e in eps if not e["watched"]), eps[0] if eps else None)
+        return pick["id"] if pick else None
+
+    def _pending(self) -> list[dict]:
+        """Itens que precisam de metadados: novos, e séries com episódios novos."""
+        return [m for m in self.movies if m["status"] == "pending"
+                or (m.get("kind") == "series" and m["status"] == "matched"
+                    and any(e["status"] == "pending" for e in self.episodes.get(-m["id"], ())))]
+
     def _refresh_movie(self, movie_id: int) -> None:
+        if movie_id < 0:
+            return self._refresh_series(-movie_id)
         fresh = self.db.get_movie(movie_id)
         current = self.by_id.get(movie_id)
         if fresh is None or current is None:
@@ -116,13 +173,16 @@ class LibraryService(QObject):
         added, removed = result
         for movie_id in removed:
             images.delete_images(movie_id)
+        old_series = {i for i in self.by_id if i < 0}
         self._scanning = False
         self.reload()
+        for series_id in old_series - set(self.by_id):   # série sem episódios: apaga a capa
+            images.delete_images(series_id)
         self.library_changed.emit()
         self.scan_finished.emit(len(added), len(removed))
         if not self.updating:
             self.busy_changed.emit(False, "")
-        if self.has_key and any(m["status"] == "pending" for m in self.movies):
+        if self.has_key and self._pending():
             self.start_update("pending")
 
     def _on_scan_error(self, exc: Exception) -> None:
@@ -140,7 +200,7 @@ class LibraryService(QObject):
             self.error.emit("Configure a chave da API em Configurações para baixar os metadados.")
             return False
         if mode == "pending":
-            targets = [m for m in self.movies if m["status"] == "pending"]
+            targets = self._pending()
         elif mode == "ids":
             targets = [self.by_id[i] for i in (ids or []) if i in self.by_id]
         else:
@@ -152,7 +212,7 @@ class LibraryService(QObject):
         # Filmes já identificados mantêm a correspondência (inclusive correções manuais).
         forced = {m["id"]: m["tmdb_id"] for m in targets
                   if m["status"] == "matched" and same_provider(self.provider, m["tmdb_id"])}
-        snapshot = [{k: m[k] for k in ("id", "clean_title", "year_guess", "tmdb_id", "status")}
+        snapshot = [{k: m[k] for k in ("id", "clean_title", "year_guess", "tmdb_id", "status", "kind")}
                     for m in targets]
         worker = UpdateWorker(self.db, self.api_key, self.language,
                               snapshot, forced, self, provider=self.provider)
@@ -195,10 +255,11 @@ class LibraryService(QObject):
             return
         if tmdb_id is None and movie["status"] == "matched" and same_provider(self.provider, movie["tmdb_id"]):
             tmdb_id = movie["tmdb_id"]
-        snapshot = {k: movie[k] for k in ("id", "clean_title", "year_guess", "tmdb_id", "status")}
+        snapshot = {k: movie[k] for k in ("id", "clean_title", "year_guess", "tmdb_id", "status", "kind")}
+        process = process_series if movie_id < 0 else process_movie
 
         def job():
-            return process_movie(self.db, self._client(), snapshot, tmdb_id)
+            return process(self.db, self._client(), snapshot, tmdb_id)
 
         def done(outcome):
             self._refresh_movie(movie_id)
@@ -209,8 +270,9 @@ class LibraryService(QObject):
         self.message.emit(f"Atualizando “{movie['display_title']}”…")
         self.run_async(job, done, self._report)
 
-    def search_tmdb(self, query: str, year: int | None, on_result, on_error) -> None:
-        self.run_async(lambda: find_candidates(self._client(), query, year), on_result, on_error)
+    def search_tmdb(self, query: str, year: int | None, on_result, on_error, series: bool = False) -> None:
+        find = find_series_candidates if series else find_candidates
+        self.run_async(lambda: find(self._client(), query, year), on_result, on_error)
 
     def test_key(self, key: str, on_result, on_error, provider: str | None = None) -> None:
         def job():
@@ -219,11 +281,31 @@ class LibraryService(QObject):
         self.run_async(job, on_result, on_error)
 
     def set_flag(self, movie_ids: list[int], column: str, value: bool) -> None:
+        series_ids = [-i for i in movie_ids if i < 0]
+        movie_ids = [i for i in movie_ids if i > 0]
+        if series_ids and column == "watched":   # série assistida = todos os episódios assistidos
+            movie_ids += [e["id"] for s in series_ids for e in self.episodes.get(s, [])]
+        elif series_ids:
+            self.db.set_series_flag(series_ids, column, value)
+            for series_id in series_ids:
+                if -series_id in self.by_id:
+                    self.by_id[-series_id][column] = value
+                    self.movie_changed.emit(-series_id)
         self.db.set_flag_many(movie_ids, column, value)
+        touched = set()
         for movie_id in movie_ids:
             if movie_id in self.by_id:
                 self.by_id[movie_id][column] = value
-                self.movie_changed.emit(movie_id)
+                if self.by_id[movie_id].get("kind") == "episode":
+                    touched.add(self.by_id[movie_id]["series_id"])
+                else:
+                    self.movie_changed.emit(movie_id)
+        for series_id in touched:   # o "assistido" da série vem dos episódios
+            entry = self.by_id.get(-series_id)
+            if entry is not None and column == "watched":
+                eps = self.episodes.get(series_id, [])
+                entry["watched"] = bool(eps) and all(e["watched"] for e in eps)
+            self.movie_changed.emit(-series_id)
 
     def play(self, movie_id: int) -> None:
         player.play(self.by_id[movie_id]["path"], self.settings.get("player_command"))

@@ -47,6 +47,22 @@ def choose_best(results: list[dict], title: str, year: int | None) -> dict | Non
     return results[0] if len(results) == 1 else None
 
 
+def parse_season(raw: dict) -> dict[int, dict]:
+    """Converte /tv/{id}/season/{n} em {número do episódio: campos ep_* do banco}."""
+    episodes = {}
+    for e in raw.get("episodes") or []:
+        if e.get("episode_number") is None:
+            continue
+        episodes[e["episode_number"]] = {
+            "ep_title": e.get("name") or None,
+            "ep_overview": e.get("overview") or None,
+            "ep_air_date": e.get("air_date") or None,
+            "ep_runtime": e.get("runtime") or None,
+            "ep_rating": e.get("vote_average") or None,
+        }
+    return episodes
+
+
 def _pick_trailer(videos: list[dict]) -> str | None:
     youtube = [v for v in videos if v.get("site") == "YouTube" and v.get("key")]
     for kind in ("Trailer", "Teaser"):

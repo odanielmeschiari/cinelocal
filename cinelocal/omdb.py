@@ -78,8 +78,14 @@ class OMDbClient:
         self._get_json(i="tt0133093")
 
     def search_movie(self, query: str, year: int | None = None) -> list[dict]:
+        return self._search(query, year, "movie")
+
+    def search_tv(self, query: str, year: int | None = None) -> list[dict]:
+        return self._search(query, year, "series")
+
+    def _search(self, query: str, year: int | None, kind: str) -> list[dict]:
         try:
-            data = self._get_json(s=query, type="movie", y=year)
+            data = self._get_json(s=query, type=kind, y=year)
         except TMDBError as exc:
             if exc.kind == "notfound" or "too many" in str(exc).lower():
                 return []
@@ -113,6 +119,28 @@ class OMDbClient:
                         "cast": [{"name": n, "character": ""} for n in _names(d.get("Actors"))]},
             "poster_path": _na(d.get("Poster")), "backdrop_path": None,
         }
+
+    def tv_details(self, omdb_id: int, language: str | None = None) -> dict:
+        return self.movie_details(omdb_id, language)   # o OMDb usa a mesma consulta para séries
+
+    def season(self, omdb_id: int, number: int, language: str | None = None) -> dict:
+        """Episódios de uma temporada no formato do TMDB (o OMDb não traz sinopse por episódio)."""
+        data = self._get_json(i=f"tt{omdb_id - OMDB_OFFSET:07d}", Season=number)
+        episodes = []
+        for e in data.get("Episodes") or []:
+            released, iso = _na(e.get("Released")), None
+            if released:
+                try:
+                    iso = datetime.strptime(released, "%Y-%m-%d").date().isoformat()
+                except ValueError:
+                    pass
+            rating = _na(e.get("imdbRating"))
+            number_text = str(e.get("Episode") or "")
+            if number_text.isdigit():
+                episodes.append({"episode_number": int(number_text), "name": _na(e.get("Title")),
+                                 "overview": None, "air_date": iso, "runtime": None,
+                                 "vote_average": float(rating) if rating else None})
+        return {"episodes": episodes}
 
     def download_image(self, size: str, file_path: str) -> bytes:
         return self._request(file_path)   # no OMDb o "caminho" já é a URL completa
