@@ -66,6 +66,7 @@ DEFAULT_SETTINGS = {
     "player_prefs": {},       # volume and picture settings remembered between movies
     "resume": {},             # file path -> position (ms) where it stopped
     "sort_id": "title_asc",
+    "auto_update": True,      # check GitHub for a new version when the app starts
 }
 
 

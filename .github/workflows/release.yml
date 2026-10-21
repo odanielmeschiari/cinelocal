@@ -1,0 +1,59 @@
+# Builds the Linux and Windows executables and publishes them as a GitHub Release.
+# Usage: set __version__ in cinelocal/__init__.py, commit, then:  git tag v1.12.0 && git push --tags
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-22.04, windows-latest]   # the oldest Ubuntu keeps the binary working on older distros
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check version and update repository
+        shell: python
+        run: |
+          import os, sys
+          sys.path.insert(0, ".")
+          from cinelocal import UPDATE_REPO, __version__
+          tag = os.environ["GITHUB_REF_NAME"]
+          if tag != "v" + __version__:
+              sys.exit(f"Tag {tag} does not match __version__ {__version__}")
+          if not UPDATE_REPO:
+              sys.exit("UPDATE_REPO is empty in cinelocal/__init__.py")
+      - name: System libraries (bundled into the Linux binary)
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update -qq && sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0
+          libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
+          libxcb-shape0 libxcb-xinerama0
+      - run: pip install -r requirements.txt "pyinstaller>=6.9"
+      - run: pyinstaller --noconfirm cinelocal.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}
+          path: dist/CineLocal-*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

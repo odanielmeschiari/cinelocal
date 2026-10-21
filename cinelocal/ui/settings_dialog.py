@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 
-from PySide6.QtWidgets import (QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
                                QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget)
 
 from ..config import LANGUAGES, TRACK_LANGUAGES
@@ -106,6 +106,10 @@ class SettingsDialog(QDialog):
         pbrowse = QPushButton("Browse…")
         pbrowse.clicked.connect(self._browse_player)
         form.addRow("External player", self._with_button(self.player_edit, pbrowse))
+
+        self.auto_update = QCheckBox("Check for updates when CineLocal starts")
+        self.auto_update.setChecked(bool(s.get("auto_update")))
+        form.addRow("Updates", self.auto_update)
         root.addLayout(form)
 
         buttons = QHBoxLayout()
@@ -198,4 +202,5 @@ class SettingsDialog(QDialog):
             "default_player": self.default_player.currentData(),
             "audio_language": self.audio_language.currentData(),
             "subtitle_language": self.subtitle_language.currentData(),
+            "auto_update": self.auto_update.isChecked(),
         }

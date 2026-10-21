@@ -4,6 +4,29 @@ Local movie browser for Linux and Windows, with a Netflix-style black and blue l
 Fast and offline: the internet is only used to download posters and information for new movies
 (or when you force an update).
 
+## Download (no installation)
+
+Get the file for your system from the [latest release](../../releases/latest):
+
+- **Windows 10/11**: `CineLocal-windows-x86_64.exe` — double-click it. (Windows SmartScreen may warn about an
+  unknown publisher: *More info → Run anyway*.)
+- **Linux (x86_64)**: `CineLocal-linux-x86_64` — right-click → *Properties → Permissions → Allow executing*
+  (or `chmod +x CineLocal-linux-x86_64`), then double-click it.
+
+No Python needed. For the built-in player, VLC must be installed (see below); without it movies open in the
+external player. If Linux complains about the Qt `xcb` plugin, run `sudo apt install libxcb-cursor0`.
+
+**Automatic updates**: when it starts, CineLocal checks for a newer release and offers to update itself
+(downloads the new file, replaces the current one and restarts). Turn it off in Settings → *Updates*.
+Copies run from source or installed with `install.sh`/`install.bat` only get a link to the download page.
+
+### Publishing a release (maintainers)
+
+1. Set `UPDATE_REPO` (`"owner/repo"`) and `__version__` in `cinelocal/__init__.py` and commit.
+2. `git tag v<version> && git push --tags` — GitHub Actions builds both executables with PyInstaller
+   (`cinelocal.spec`) and attaches them to a new release. The tag must match `__version__`.
+3. To build locally instead: `pip install pyinstaller && pyinstaller --noconfirm cinelocal.spec` (output in `dist/`).
+
 ## Installation (Linux Mint / Ubuntu / Debian)
 
 ```bash
@@ -157,6 +180,7 @@ cinelocal/
   service.py                in-memory state + operations used by the interface
   filters.py                filters, search, sorting and counts
   player.py                 opens the movie in the external player
+  updater.py                checks GitHub Releases and updates the packaged executable
   ui/                       theme (QSS), grid, sidebar, windows and dialogs
   ui/player_page.py         built-in player (libVLC)
 tests/test_core.py          tests for the logic without a GUI
