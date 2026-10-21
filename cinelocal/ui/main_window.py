@@ -153,7 +153,6 @@ class MainWindow(QMainWindow):
         head.addSpacing(12)
         head.addWidget(self.count_label, 0, Qt.AlignBottom)
         head.addStretch(1)
-        column.addLayout(head)
 
         self.views = QStackedWidget()
         self.grid = MovieFlow()
@@ -170,6 +169,7 @@ class MainWindow(QMainWindow):
         grid_col.setContentsMargins(0, 0, 0, 0)
         grid_col.setSpacing(10)
         grid_col.addWidget(self.continue_row)
+        grid_col.addLayout(head)   # "All movies" title below "Continue watching"
         grid_col.addWidget(self.grid)
         grid_col.addStretch(1)
         self.empty = QLabel("")
