@@ -86,6 +86,8 @@ Seus filmes **nunca são apagados**: o uninstall só remove o app e, se você pe
 
 ## Uso
 
+- **Início** (tela padrão): uma fileira por seção (Continuar assistindo, Favoritos, Watchlist, Assistidos e Todos os
+  filmes), com setas ← → para andar entre os filmes. Seções vazias não aparecem. Buscar mostra a grade de resultados.
 - **Grade**: clique numa capa para abrir os detalhes (na mesma janela; `←  Voltar`, `Esc` ou `Alt`+`←` voltam à lista
   exatamente onde você estava). `Ctrl`/`Shift`+clique seleciona vários filmes;
   clique direito abre o menu (favoritar, assistido, coleções, atualizar, corrigir correspondência).
@@ -100,11 +102,11 @@ Seus filmes **nunca são apagados**: o uninstall só remove o app e, se você pe
   Ao passar de 95% o filme é marcado como assistido; ao fim de um episódio, o player oferece o próximo. Na grade, uma
   barra na capa mostra quanto já foi visto, e **Continuar assistindo** (barra lateral) reúne o que está pela metade
   (séries incluídas, com o episódio em andamento); "Assistir do início" fica no clique direito.
-  O volume e os ajustes de imagem são lembrados entre filmes; na engrenagem (botão Configurações do player) há também **velocidade** (0,5x a 2x) e **atraso da
+  O volume e os ajustes de imagem são lembrados entre filmes; na engrenagem (⚙) do player há também **velocidade** (0,5x a 2x) e **atraso da
   legenda**, e a barra de progresso mostra o tempo do ponto sob o mouse.
-  Em Configurações você escolhe o **player padrão** (integrado ou externo); clique direito num filme (ou o menu Configurações do player)
+  Em Configurações você escolhe o **player padrão** (integrado ou externo); clique direito num filme (ou a engrenagem ⚙ do player)
   para abrir no outro. O player integrado lembra onde você parou e retoma de lá, mesmo após fechar o app.
-  No player, o botão **Configurações** reúne **Áudio** e **Legendas** (faixas que vêm no arquivo) e **Imagem**
+  No player, a engrenagem **⚙** reúne **Áudio** e **Legendas** (faixas que vêm no arquivo) e **Imagem**
   (brilho, contraste, cor e nitidez). Em tela cheia, os controles e o ponteiro somem depois de alguns segundos sem mexer o mouse.
 - **Séries**: arquivos com `S01E02`, `1x02` ou `Temporada 1 Episódio 2` no nome (ou dentro de pastas `Temporada N`)
   são agrupados numa única capa de série, que abre a lista de temporadas e episódios, cada um com seus metadados.

@@ -15,6 +15,7 @@ from ..service import LibraryService
 from .dialogs import (ask_new_collection, ask_rename_collection, confirm_delete_collection,
                       populate_collections_menu)
 from .grid import MovieGrid
+from .home import SECTIONS, HomePage
 from .match_dialog import MatchDialog
 from .movie_dialog import MovieDialog
 from .player_page import VlcPlayerPage, unavailable_reason
@@ -27,7 +28,7 @@ class MainWindow(QMainWindow):
     def __init__(self, service: LibraryService):
         super().__init__()
         self.service = service
-        self.flt: filters.Filter = ("all", None)
+        self.flt: filters.Filter = ("home", None)   # a página inicial é a tela padrão
         self.query = ""
         self.sort_id = service.settings.get("sort_id")
         self._detail: MovieDialog | None = None
@@ -41,6 +42,8 @@ class MainWindow(QMainWindow):
 
         self._sidebar_timer = QTimer(self, singleShot=True, interval=350)
         self._sidebar_timer.timeout.connect(self._rebuild_sidebar)
+        self._home_timer = QTimer(self, singleShot=True, interval=300)   # agrupa várias mudanças seguidas
+        self._home_timer.timeout.connect(self._refresh_home)
 
         self._build_ui()
         self._connect()
@@ -154,10 +157,12 @@ class MainWindow(QMainWindow):
 
         self.views = QStackedWidget()
         self.grid = MovieGrid()
+        self.home = HomePage(self.service.progress_of)
         self.empty = QLabel("")
         self.empty.setObjectName("muted")
         self.empty.setAlignment(Qt.AlignCenter)
         self.views.addWidget(self.grid)
+        self.views.addWidget(self.home)
         self.views.addWidget(self.empty)
         column.addWidget(self.views, 1)
         return page
@@ -184,6 +189,8 @@ class MainWindow(QMainWindow):
         self.sort_combo.currentIndexChanged.connect(self._on_sort)
         self.grid.movie_opened.connect(self.open_movie)
         self.grid.context_requested.connect(self._context_menu)
+        self.home.movie_opened.connect(self.open_movie)
+        self.home.context_requested.connect(self._context_menu)
         self.grid.itemDelegate().progress_of = s.progress_of
 
         s.library_changed.connect(self._on_library_changed)
@@ -229,7 +236,28 @@ class MainWindow(QMainWindow):
         self.service.start_scan()
 
     # ------------------------------------------------------------------ visualização --
+    def _refresh_home(self) -> None:
+        """Página inicial: a primeira fileira de cada seção; as vazias não aparecem."""
+        s = self.service
+        data = {}
+        for key, _title, flt in SECTIONS:
+            items = filters.filter_movies(s.movies, flt, s.membership, "", s.progress_of)
+            items = filters.sort_movies(items, self.sort_id)
+            if key == "continue":   # o último que você assistiu vem primeiro
+                items.sort(key=lambda m: -s.last_played(m))
+            data[key] = items
+        total = len(s.movies)
+        self.heading.setText(self._heading_text())
+        self.count_label.setText(f"{total} filmes")
+        if self.home.set_data(data):
+            self.views.setCurrentWidget(self.home)
+        else:
+            self.empty.setText(self._empty_text(total))
+            self.views.setCurrentWidget(self.empty)
+
     def refresh_view(self) -> None:
+        if self.flt[0] == "home" and not self.query:   # com busca, mostra a grade com os resultados
+            return self._refresh_home()
         bar = self.grid.verticalScrollBar()
         position = bar.value()
         visible = filters.filter_movies(self.service.movies, self.flt, self.service.membership,
@@ -259,6 +287,8 @@ class MainWindow(QMainWindow):
 
     def _heading_text(self) -> str:
         kind, value = self.flt
+        if kind == "home":
+            return "Resultados da busca" if self.query else "Início"
         names = {"all": "Todos os filmes", "favorites": "Favoritos", "watchlist": "Watchlist",
                  "review": "Precisam de revisão", "continue": "Continuar assistindo"}
         if kind in names:
@@ -305,6 +335,9 @@ class MainWindow(QMainWindow):
 
     def _on_movie_changed(self, movie_id: int) -> None:
         self.grid.movie_model.refresh_movie(movie_id)
+        self.home.refresh_movie(movie_id)
+        if self.flt[0] == "home" and not self.query:
+            self._home_timer.start()
         if self.flt[0] in ("favorites", "watchlist", "watched", "review") or (
                 self.flt[0] == "continue" and self._player is None):
             self.refresh_view()   # o filme pode ter entrado/saído da seção atual
@@ -450,7 +483,7 @@ class MainWindow(QMainWindow):
             self._player.deleteLater()
             self._player = self._player_origin = None
             self.grid.viewport().update()   # barras de progresso
-            if self.flt[0] == "continue":
+            if self.flt[0] in ("continue", "home"):
                 self.refresh_view()
 
     def _discard_detail(self) -> None:

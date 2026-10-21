@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from collections import OrderedDict
 
-from PySide6.QtCore import (QAbstractListModel, QModelIndex, QPoint, QRect, QRectF, QSize, Qt,
-                            Signal)
+from PySide6.QtCore import (QAbstractAnimation, QAbstractListModel, QEasingCurve, QModelIndex, QPoint,
+                            QPropertyAnimation, QRect, QRectF, QSize, Qt, Signal)
 from PySide6.QtGui import (QColor, QFont, QFontMetrics, QGuiApplication, QLinearGradient,
                            QPainter, QPainterPath, QPen, QPixmap)
 from PySide6.QtWidgets import QAbstractItemView, QListView, QStyle, QStyledItemDelegate
@@ -245,3 +245,40 @@ class MovieGrid(QListView):
             self.movie_opened.emit(self._model.movie_at(self.currentIndex().row())["id"])
             return
         super().keyPressEvent(event)
+
+
+class MovieRow(MovieGrid):
+    """Uma única fileira horizontal de capas (usada na página inicial), rolada por setas."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setViewMode(QListView.ListMode)
+        self.setFlow(QListView.LeftToRight)
+        self.setWrapping(False)
+        self.setResizeMode(QListView.Fixed)
+        self.setLayoutMode(QListView.SinglePass)
+        self.setGridSize(QSize(CELL_W, CELL_H))
+        self.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setFixedHeight(CELL_H + 8)
+        self._anim = QPropertyAnimation(self.horizontalScrollBar(), b"value", self)
+        self._anim.setDuration(320)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+
+    def scroll_page(self, direction: int) -> None:
+        """Anda uma 'página' de capas inteiras para a esquerda (-1) ou direita (1)."""
+        bar = self.horizontalScrollBar()
+        base = self._anim.endValue() if self._anim.state() == QAbstractAnimation.Running else bar.value()
+        step = max(CELL_W, (self.viewport().width() // CELL_W) * CELL_W)
+        target = max(bar.minimum(), min(bar.maximum(), int(base) + direction * step))
+        self._anim.stop()
+        self._anim.setStartValue(bar.value())
+        self._anim.setEndValue(target)
+        self._anim.start()
+
+    def wheelEvent(self, event) -> None:
+        if event.angleDelta().x():   # rolagem horizontal (touchpad): anda a fileira
+            super().wheelEvent(event)
+        else:                        # roda comum: rola a página inteira
+            event.ignore()

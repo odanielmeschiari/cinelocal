@@ -154,8 +154,8 @@ class VlcPlayerPage(QWidget):
         row = QHBoxLayout(self.controls)
         row.setContentsMargins(14, 8, 14, 8)
         row.setSpacing(10)
-        self.play_btn = self._button("Pausar", self.toggle_pause)
-        self.play_btn.setMinimumWidth(90)   # o texto muda entre Pausar e Reproduzir
+        self.play_btn = self._button("⏸", self.toggle_pause)
+        self.play_btn.setToolTip("Pausar / reproduzir (Espaço)")
         self.elapsed, self.total = QLabel("0:00"), QLabel("0:00")
         self.seek = _SeekSlider(Qt.Horizontal)
         self.seek.setRange(0, 1000)
@@ -172,8 +172,10 @@ class VlcPlayerPage(QWidget):
         self.volume_label.setFixedWidth(42)
         self.volume.valueChanged.connect(lambda v: self.volume_label.setText(f"{v}%"))
         self.volume.valueChanged.connect(lambda _v: self._prefs_changed())
-        self.settings_btn = QPushButton("Configurações")      # áudio, legendas e imagem ficam todos aqui
+        self.settings_btn = QPushButton("⚙")      # áudio, legendas e imagem ficam todos aqui
         self.settings_btn.setToolTip("Configurações")
+        self.fullscreen_btn = self._button("⛶", self.toggle_fullscreen)
+        self.fullscreen_btn.setToolTip("Tela cheia (F)")
         self.settings_btn.setFocusPolicy(Qt.NoFocus)
         menu = QMenu(self.settings_btn)
         for text, fill in (("Áudio", self._fill_audio_menu), ("Legendas", self._fill_subtitle_menu),
@@ -186,7 +188,7 @@ class VlcPlayerPage(QWidget):
         menu.addAction("Abrir em outro player", lambda: self.external_requested.emit())
         self.settings_btn.setMenu(menu)
         for w in (self.play_btn, self.elapsed, self.seek, self.total, self.volume, self.volume_label,
-                  self.settings_btn, self._button("Tela cheia", self.toggle_fullscreen)):
+                  self.settings_btn, self.fullscreen_btn):
             row.addWidget(w, 1 if w is self.seek else 0)
         layout.addWidget(self.controls)
 
@@ -406,7 +408,7 @@ class VlcPlayerPage(QWidget):
             self.elapsed.setText(_clock(self._mp.get_time()))
             if not self._dragging:
                 self.seek.setValue(int(self._mp.get_position() * 1000))
-        self.play_btn.setText("Pausar" if self._mp.is_playing() else "Reproduzir")
+        self.play_btn.setText("⏸" if self._mp.is_playing() else "▶")
         now = time.monotonic()
         if now - self._last_saved >= SAVE_EVERY_MS / 1000:
             self._last_saved = now
