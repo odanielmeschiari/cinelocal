@@ -53,6 +53,15 @@ To just try it without installing: `run.bat`. To remove it: `uninstall.bat` (`--
 
 Your movies are **never deleted**: the uninstaller only removes the app and, if you ask, CineLocal's data.
 
+### Downloaded executable
+
+The executable installs nothing: it runs from wherever you saved it, so to remove the app just delete the file
+(`CineLocal-windows-x86_64.exe` or `CineLocal-linux-x86_64`). To also remove the data (library, posters, API key and
+saved positions, with no way back), delete these folders yourself:
+
+- Linux: `rm -rf ~/.config/cinelocal ~/.local/share/cinelocal ~/.cache/cinelocal`
+- Windows: `%APPDATA%\cinelocal` and `%LOCALAPPDATA%\cinelocal` (paste each one in the File Explorer address bar)
+
 ### Linux
 
 1. Open a terminal in the extracted CineLocal folder (the same one as `install.sh`).
