@@ -7,7 +7,17 @@ from PySide6.QtWidgets import (QComboBox, QDialog, QFileDialog, QFormLayout, QHB
                                QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget)
 
 from ..config import LANGUAGES
+from ..providers import PROVIDERS
 from ..service import LibraryService
+
+_HELP = {
+    "tmdb": ('Gratuita: crie uma conta em <a href="https://www.themoviedb.org/signup">themoviedb.org</a>, '
+             'abra <a href="https://www.themoviedb.org/settings/api">Configurações → API</a> e copie a '
+             '“Chave da API” (ou o “Token de leitura”).'),
+    "omdb": ('Gratuita (1.000 consultas/dia): peça a chave em <a href="https://www.omdbapi.com/apikey.aspx">'
+             'omdbapi.com/apikey</a> e ative-a pelo link enviado ao seu e-mail. O OMDb só tem dados em inglês '
+             'e não traz imagem de fundo nem trailer.'),
+}
 
 
 class SettingsDialog(QDialog):
@@ -40,24 +50,30 @@ class SettingsDialog(QDialog):
         browse.clicked.connect(self._browse_folder)
         form.addRow("Pasta de filmes", self._with_button(self.folder_edit, browse))
 
-        self.key_edit = QLineEdit(s.get("tmdb_api_key"))
+        self.provider = QComboBox()
+        for code, name in PROVIDERS.items():
+            self.provider.addItem(name, code)
+        self.provider.setCurrentIndex(max(0, self.provider.findData(s.get("provider"))))
+        form.addRow("Fonte dos metadados", self.provider)
+        self._keys = {"tmdb": s.get("tmdb_api_key"), "omdb": s.get("omdb_api_key")}
+        self._shown = self.provider.currentData()
+
+        self.key_edit = QLineEdit(self._keys[self._shown])
         self.key_edit.setEchoMode(QLineEdit.Password)
-        self.key_edit.setPlaceholderText("Cole aqui a chave da API do TMDB")
+        self.key_edit.setPlaceholderText("Cole aqui a chave da API")
         self.test_btn = QPushButton("Testar")
         self.test_btn.clicked.connect(self._test_key)
-        form.addRow("Chave do TMDB", self._with_button(self.key_edit, self.test_btn))
+        form.addRow("Chave da API", self._with_button(self.key_edit, self.test_btn))
 
         self.key_status = QLabel("")
         self.key_status.setObjectName("muted")
         form.addRow("", self.key_status)
-        help_label = QLabel(
-            'Gratuita: crie uma conta em <a href="https://www.themoviedb.org/signup">themoviedb.org</a>, '
-            'abra <a href="https://www.themoviedb.org/settings/api">Configurações → API</a> e copie a '
-            '“Chave da API” (ou o “Token de leitura”).')
+        self.help_label = help_label = QLabel(_HELP[self._shown])
         help_label.setOpenExternalLinks(True)
         help_label.setWordWrap(True)
         help_label.setObjectName("muted")
         form.addRow("", help_label)
+        self.provider.currentIndexChanged.connect(self._on_provider)
 
         self.language = QComboBox()
         for code, name in LANGUAGES.items():
@@ -71,7 +87,7 @@ class SettingsDialog(QDialog):
         form.addRow("Idioma dos metadados", self.language)
 
         self.player_edit = QLineEdit(s.get("player_command"))
-        self.player_edit.setPlaceholderText("Vazio = player padrão do sistema (xdg-open)")
+        self.player_edit.setPlaceholderText("Vazio = player integrado (VLC) ou, sem o VLC, o padrão do sistema")
         pbrowse = QPushButton("Procurar…")
         pbrowse.clicked.connect(self._browse_player)
         form.addRow("Player externo", self._with_button(self.player_edit, pbrowse))
@@ -120,6 +136,13 @@ class SettingsDialog(QDialog):
         if path:
             self.player_edit.setText(path)
 
+    def _on_provider(self) -> None:
+        self._keys[self._shown] = self.key_edit.text()
+        self._shown = self.provider.currentData()
+        self.key_edit.setText(self._keys[self._shown])
+        self.help_label.setText(_HELP[self._shown])
+        self.key_status.setText("")
+
     def _test_key(self) -> None:
         key = self.key_edit.text().strip()
         if not key:
@@ -127,7 +150,7 @@ class SettingsDialog(QDialog):
             return
         self.key_status.setText("Testando…")
         self.test_btn.setEnabled(False)
-        self.service.test_key(key, self._key_ok, self._key_failed)
+        self.service.test_key(key, self._key_ok, self._key_failed, self.provider.currentData())
 
     def _key_ok(self, _result) -> None:
         if not self._closed:
@@ -140,9 +163,12 @@ class SettingsDialog(QDialog):
             self.key_status.setText(f"✗ {exc}")
 
     def values(self) -> dict:
+        self._keys[self._shown] = self.key_edit.text()
         return {
             "library_path": self.folder_edit.text().strip(),
-            "tmdb_api_key": self.key_edit.text().strip(),
+            "tmdb_api_key": self._keys["tmdb"].strip(),
+            "omdb_api_key": self._keys["omdb"].strip(),
+            "provider": self.provider.currentData(),
             "language": self.language.currentData(),
             "player_command": self.player_edit.text().strip(),
         }

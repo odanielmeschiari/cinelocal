@@ -58,7 +58,7 @@ METADATA_COLUMNS = {
     "runtime", "rating", "votes", "director", "trailer_key", "has_poster", "has_backdrop",
     "status",
 }
-FLAG_COLUMNS = {"watched", "favorite"}
+FLAG_COLUMNS = {"watched", "favorite", "watchlist"}
 
 
 def _loads(text, default):
@@ -74,6 +74,7 @@ def _row_to_movie(row: sqlite3.Row) -> dict:
     m["cast"] = _loads(m.pop("cast_json", None), [])
     m["watched"] = bool(m["watched"])
     m["favorite"] = bool(m["favorite"])
+    m["watchlist"] = bool(m["watchlist"])
     m["has_poster"] = bool(m["has_poster"])
     m["has_backdrop"] = bool(m["has_backdrop"])
     return m
@@ -89,6 +90,11 @@ class Database:
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.executescript(SCHEMA)
+            try:   # migração: bancos criados antes da Watchlist não têm a coluna
+                self._conn.execute("ALTER TABLE movies ADD COLUMN watchlist INTEGER DEFAULT 0")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
 
     # -- infra ---------------------------------------------------------------
     def _run(self, sql: str, params=()):

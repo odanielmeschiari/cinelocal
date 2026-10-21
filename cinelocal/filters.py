@@ -31,6 +31,8 @@ def matches(movie: dict, flt: Filter, membership: dict[int, set[int]]) -> bool:
         return True
     if kind == "favorites":
         return movie["favorite"]
+    if kind == "watchlist":
+        return movie["watchlist"]
     if kind == "watched":
         return movie["watched"] == value
     if kind == "review":
@@ -93,6 +95,7 @@ def sidebar_counts(movies: list[dict]) -> dict:
     return {
         "all": len(movies),
         "favorites": sum(m["favorite"] for m in movies),
+        "watchlist": sum(m["watchlist"] for m in movies),
         "watched": sum(m["watched"] for m in movies),
         "unwatched": sum(not m["watched"] for m in movies),
         "review": sum(m["status"] in ("ambiguous", "not_found") for m in movies),

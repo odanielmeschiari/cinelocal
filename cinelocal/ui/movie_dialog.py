@@ -21,6 +21,7 @@ BACKDROP_HEIGHT = 380
 
 class MovieDialog(QWidget):
     back_requested = Signal()
+    play_requested = Signal(int)
 
     def __init__(self, service: LibraryService, movie_id: int, parent=None):
         super().__init__(parent)
@@ -31,7 +32,7 @@ class MovieDialog(QWidget):
         self._heads: dict[QLabel, QLabel] = {}
         self.setWindowTitle(service.by_id[movie_id]["display_title"])
         self._build()
-        QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self.back_requested.emit)
+        QShortcut(QKeySequence("Esc"), self, activated=self.back_requested.emit)
         QShortcut(QKeySequence.Back, self, activated=self.back_requested.emit)
         self._populate()
         service.movie_changed.connect(self._on_movie_changed)
@@ -104,6 +105,9 @@ class MovieDialog(QWidget):
         self.seen_btn = QPushButton("✓  Assistido")
         self.seen_btn.setCheckable(True)
         self.seen_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watched", on))
+        self.list_btn = QPushButton("＋  Watchlist")
+        self.list_btn.setCheckable(True)
+        self.list_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watchlist", on))
         self.coll_btn = QPushButton("＋  Coleções")
         coll_menu = QMenu(self.coll_btn)
         coll_menu.aboutToShow.connect(lambda: self._fill_collections(coll_menu))
@@ -116,7 +120,7 @@ class MovieDialog(QWidget):
         more_menu.addAction("Corrigir correspondência…", self._fix_match)
         more_menu.addAction("Mostrar na pasta", self._show_folder)
         more.setMenu(more_menu)
-        for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.coll_btn, self.trailer_btn):
+        for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.coll_btn, self.trailer_btn):
             actions.addWidget(w)
         actions.addStretch(1)
         actions.addWidget(more)
@@ -185,7 +189,8 @@ class MovieDialog(QWidget):
 
         for button, value, on_text, off_text in (
                 (self.fav_btn, m["favorite"], "♥  Favorito", "♥  Favoritar"),
-                (self.seen_btn, m["watched"], "✓  Assistido", "✓  Marcar como assistido")):
+                (self.seen_btn, m["watched"], "✓  Assistido", "✓  Marcar como assistido"),
+                (self.list_btn, m["watchlist"], "✓  Na Watchlist", "＋  Watchlist")):
             button.blockSignals(True)
             button.setChecked(value)
             button.setText(on_text if value else off_text)
@@ -242,10 +247,7 @@ class MovieDialog(QWidget):
 
     # -- ações ---------------------------------------------------------------------------------
     def _watch(self) -> None:
-        try:
-            self.service.play(self.movie_id)
-        except OSError as exc:
-            QMessageBox.warning(self, "Não foi possível abrir", str(exc))
+        self.play_requested.emit(self.movie_id)
 
     def _fill_collections(self, menu: QMenu) -> None:
         menu.clear()

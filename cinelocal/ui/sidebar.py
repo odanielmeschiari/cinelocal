@@ -46,6 +46,7 @@ class Sidebar(QTreeWidget):
         self._header("BIBLIOTECA")
         self._entry("Todos os filmes", ("all", None), counts["all"])
         self._entry("Favoritos", ("favorites", None), counts["favorites"])
+        self._entry("Watchlist", ("watchlist", None), counts["watchlist"])
         self._entry("Assistidos", ("watched", True), counts["watched"])
         self._entry("Não assistidos", ("watched", False), counts["unwatched"])
         if counts["review"]:

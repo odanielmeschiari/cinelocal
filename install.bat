@@ -30,6 +30,7 @@ if not exist "%PREFIX%\venv\Scripts\python.exe" %PY% -m venv "%PREFIX%\venv" || 
 echo ==^> Criando atalho no Menu Iniciar
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%LNK%'); $s.TargetPath='%PREFIX%\venv\Scripts\pythonw.exe'; $s.Arguments='\"%PREFIX%\main.py\"'; $s.WorkingDirectory='%PREFIX%'; $s.IconLocation='%PREFIX%\assets\cinelocal.ico'; $s.Description='CineLocal'; $s.Save()" || goto fail
 
+if not exist "%ProgramFiles%\VideoLAN\VLC\libvlc.dll" echo AVISO: VLC nao encontrado. Para usar o player integrado instale o VLC 64 bits: winget install VideoLAN.VLC
 echo.
 echo Pronto! Abra o CineLocal pelo Menu Iniciar (digite "CineLocal").
 pause

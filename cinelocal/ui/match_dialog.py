@@ -75,7 +75,7 @@ class MatchDialog(QDialog):
         if service.has_key:
             QTimer.singleShot(0, self._search)
         else:
-            self.status.setText("Configure a chave da API do TMDB para buscar.")
+            self.status.setText("Configure a chave da API para buscar.")
             self.search_btn.setEnabled(False)
 
     def done(self, result: int) -> None:
@@ -92,7 +92,7 @@ class MatchDialog(QDialog):
             return
         year_text = self.year_edit.text().strip()
         year = int(year_text) if year_text.isdigit() else None
-        self.status.setText("Buscando no TMDB…")
+        self.status.setText("Buscando…")
         self.results.clear()
         self.search_btn.setEnabled(False)
         self.service.search_tmdb(query, year, self._on_results, self._on_error)

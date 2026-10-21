@@ -8,6 +8,7 @@ from PySide6.QtCore import QThread, Signal
 
 from .db import Database
 from .metadata_service import process_movie
+from .providers import make_client
 from .tmdb import TMDBClient, TMDBError
 
 
@@ -38,9 +39,11 @@ class UpdateWorker(QThread):
     failed = Signal(str)
 
     def __init__(self, db: Database, api_key: str, language: str,
-                 movies: list[dict], forced: dict[int, int] | None = None, parent=None):
+                 movies: list[dict], forced: dict[int, int] | None = None, parent=None,
+                 provider: str = "tmdb"):
         super().__init__(parent)
         self._db, self._key, self._language = db, api_key, language
+        self._provider = provider
         self._movies = movies
         self._forced = forced or {}
         self._cancel = threading.Event()
@@ -57,7 +60,7 @@ class UpdateWorker(QThread):
     def run(self):
         summary = {"matched": 0, "ambiguous": 0, "not_found": 0, "failed": 0, "cancelled": False}
         total, done = len(self._movies), 0
-        client = TMDBClient(self._key, self._language)
+        client = make_client(self._provider, self._key, self._language)
         with ThreadPoolExecutor(max_workers=4) as pool:
             futures = {pool.submit(self._one, client, m): m for m in self._movies}
             for future in as_completed(futures):

@@ -44,6 +44,8 @@ LANGUAGES = {
 DEFAULT_SETTINGS = {
     "library_path": "",
     "tmdb_api_key": "",
+    "omdb_api_key": "",
+    "provider": "tmdb",
     "language": "pt-BR",
     "player_command": "",
     "sort_id": "title_asc",

@@ -1,6 +1,8 @@
 """Janela principal: barra lateral + busca/ordenação + grade de capas."""
 from __future__ import annotations
 
+import os
+
 from PySide6.QtCore import (QEasingCurve, QParallelAnimationGroup, QPoint,
                             QPropertyAnimation, Qt, QTimer)
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -15,6 +17,7 @@ from .dialogs import (ask_new_collection, ask_rename_collection, confirm_delete_
 from .grid import MovieGrid
 from .match_dialog import MatchDialog
 from .movie_dialog import MovieDialog
+from .player_page import VlcPlayerPage, unavailable_reason
 from .settings_dialog import SettingsDialog
 from .sidebar import Sidebar
 
@@ -27,6 +30,8 @@ class MainWindow(QMainWindow):
         self.query = ""
         self.sort_id = service.settings.get("sort_id")
         self._detail: MovieDialog | None = None
+        self._player: VlcPlayerPage | None = None
+        self._player_origin: QWidget | None = None
         self._sliding = False
         self.setWindowTitle("CineLocal")
         self.resize(1380, 860)
@@ -249,7 +254,8 @@ class MainWindow(QMainWindow):
 
     def _heading_text(self) -> str:
         kind, value = self.flt
-        names = {"all": "Todos os filmes", "favorites": "Favoritos", "review": "Precisam de revisão"}
+        names = {"all": "Todos os filmes", "favorites": "Favoritos", "watchlist": "Watchlist",
+                 "review": "Precisam de revisão"}
         if kind in names:
             return names[kind]
         if kind == "watched":
@@ -294,7 +300,7 @@ class MainWindow(QMainWindow):
 
     def _on_movie_changed(self, movie_id: int) -> None:
         self.grid.movie_model.refresh_movie(movie_id)
-        if self.flt[0] in ("favorites", "watched", "review"):
+        if self.flt[0] in ("favorites", "watchlist", "watched", "review"):
             self.refresh_view()   # o filme pode ter entrado/saído da seção atual
         self._sidebar_timer.start()
 
@@ -334,6 +340,7 @@ class MainWindow(QMainWindow):
         self._discard_detail()
         page = MovieDialog(self.service, movie_id, self)
         page.back_requested.connect(self.close_movie)
+        page.play_requested.connect(self.play_movie)
         self._detail = page
         self.stack.addWidget(page)
         self._slide_to(page, forward=True)
@@ -347,6 +354,37 @@ class MainWindow(QMainWindow):
             self.grid.setFocus()
 
         self._slide_to(self.stack.widget(1), forward=False, done=done)
+
+    def play_movie(self, movie_id: int) -> None:
+        """Toca no player integrado (VLC); com player externo configurado ou sem libVLC, usa o externo."""
+        if self._sliding:
+            return
+        self._discard_player()
+        movie = self.service.by_id[movie_id]
+        if self.service.settings.get("player_command").strip() or not os.path.exists(movie["path"]):
+            return self._play(movie_id)
+        reason = unavailable_reason()
+        if reason:
+            self.statusBar().showMessage(reason + " Usando o player do sistema.", 10000)
+            return self._play(movie_id)
+        page = VlcPlayerPage(movie["display_title"], self)
+        page.back_requested.connect(self.close_player)
+        self._player, self._player_origin = page, self.stack.currentWidget()
+        self.stack.addWidget(page)
+        self._slide_to(page, forward=True, done=lambda: page.start(movie["path"]))
+
+    def close_player(self) -> None:
+        if self._sliding or self._player is None or self.stack.currentWidget() is not self._player:
+            return
+        self._player.leave()
+        self._slide_to(self._player_origin, forward=False, done=self._discard_player)
+
+    def _discard_player(self) -> None:
+        if self._player is not None:
+            self.stack.removeWidget(self._player)
+            self._player.release()
+            self._player.deleteLater()
+            self._player = self._player_origin = None
 
     def _discard_detail(self) -> None:
         if self._detail is not None:
@@ -388,6 +426,7 @@ class MainWindow(QMainWindow):
     def open_settings(self, focus_key: bool = False, intro: str = "") -> None:
         s = self.service.settings
         old = {k: s.get(k) for k in ("library_path", "tmdb_api_key", "language")}
+        had_key = self.service.has_key
         dialog = SettingsDialog(self.service, self, intro=intro, focus_key=focus_key)
         dialog.exec()
         if not dialog.saved:
@@ -400,7 +439,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(1)
 
         language_changed = old["language"] != s.get("language") and bool(self.service.movies)
-        if old["library_path"] != s.get("library_path") or (not old["tmdb_api_key"] and s.get("tmdb_api_key")):
+        if old["library_path"] != s.get("library_path") or (not had_key and self.service.has_key):
             self.service.start_scan()
         if language_changed:
             answer = QMessageBox.question(
@@ -454,7 +493,7 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         if single:
             menu.addAction("Abrir detalhes", lambda: self.open_movie(ids[0]))
-            menu.addAction("▶  Assistir", lambda: self._play(ids[0]))
+            menu.addAction("▶  Assistir", lambda: self.play_movie(ids[0]))
             menu.addSeparator()
 
         all_fav = all(m["favorite"] for m in movies)
@@ -463,6 +502,9 @@ class MainWindow(QMainWindow):
                        lambda: s.set_flag(ids, "favorite", not all_fav))
         menu.addAction("Marcar como não assistido" if all_seen else "✓  Marcar como assistido",
                        lambda: s.set_flag(ids, "watched", not all_seen))
+        all_listed = all(m["watchlist"] for m in movies)
+        menu.addAction("Remover da Watchlist" if all_listed else "＋  Adicionar à Watchlist",
+                       lambda: s.set_flag(ids, "watchlist", not all_listed))
         collections_menu = menu.addMenu("Coleções")
         populate_collections_menu(collections_menu, s, ids, self)
         if self.flt[0] == "collection":
@@ -493,5 +535,6 @@ class MainWindow(QMainWindow):
             self.service.apply_match(movie_id, dialog.selected_tmdb_id)
 
     def closeEvent(self, event) -> None:
+        self._discard_player()
         self.service.shutdown()
         super().closeEvent(event)

@@ -11,7 +11,7 @@ from .config import Settings
 from .db import Database
 from .library import sync_library
 from .metadata_service import find_candidates, process_movie
-from .tmdb import TMDBClient
+from .providers import make_client, same_provider
 from .movie_fields import decorate
 from .workers import FuncWorker, UpdateWorker
 
@@ -40,7 +40,15 @@ class LibraryService(QObject):
     # -- estado ----------------------------------------------------------------
     @property
     def has_key(self) -> bool:
-        return bool(self.settings.get("tmdb_api_key").strip())
+        return bool(self.api_key.strip())
+
+    @property
+    def provider(self) -> str:
+        return self.settings.get("provider")
+
+    @property
+    def api_key(self) -> str:
+        return self.settings.get("omdb_api_key" if self.provider == "omdb" else "tmdb_api_key")
 
     @property
     def language(self) -> str:
@@ -65,8 +73,8 @@ class LibraryService(QObject):
         current.update(decorate(fresh))   # atualiza no lugar: o modelo da grade vê a mudança
         self.movie_changed.emit(movie_id)
 
-    def _client(self) -> TMDBClient:
-        return TMDBClient(self.settings.get("tmdb_api_key"), self.language)
+    def _client(self):
+        return make_client(self.provider, self.api_key, self.language)
 
     # -- execução assíncrona -----------------------------------------------------
     def run_async(self, fn, on_result=None, on_error=None) -> None:
@@ -129,7 +137,7 @@ class LibraryService(QObject):
             self.message.emit("Já existe uma atualização em andamento.")
             return False
         if not self.has_key:
-            self.error.emit("Configure a chave da API do TMDB em Configurações para baixar os metadados.")
+            self.error.emit("Configure a chave da API em Configurações para baixar os metadados.")
             return False
         if mode == "pending":
             targets = [m for m in self.movies if m["status"] == "pending"]
@@ -143,11 +151,11 @@ class LibraryService(QObject):
 
         # Filmes já identificados mantêm a correspondência (inclusive correções manuais).
         forced = {m["id"]: m["tmdb_id"] for m in targets
-                  if m["status"] == "matched" and m["tmdb_id"]}
+                  if m["status"] == "matched" and same_provider(self.provider, m["tmdb_id"])}
         snapshot = [{k: m[k] for k in ("id", "clean_title", "year_guess", "tmdb_id", "status")}
                     for m in targets]
-        worker = UpdateWorker(self.db, self.settings.get("tmdb_api_key"), self.language,
-                              snapshot, forced, self)
+        worker = UpdateWorker(self.db, self.api_key, self.language,
+                              snapshot, forced, self, provider=self.provider)
         worker.progress.connect(self.progress)
         worker.movie_done.connect(self._on_movie_done)
         worker.finished_all.connect(self._on_update_done)
@@ -180,12 +188,12 @@ class LibraryService(QObject):
     def apply_match(self, movie_id: int, tmdb_id: int | None = None) -> None:
         """Define (ou atualiza) a correspondência de um filme com o TMDB."""
         if not self.has_key:
-            self.error.emit("Configure a chave da API do TMDB em Configurações.")
+            self.error.emit("Configure a chave da API em Configurações.")
             return
         movie = self.by_id.get(movie_id)
         if movie is None:
             return
-        if tmdb_id is None and movie["status"] == "matched":
+        if tmdb_id is None and movie["status"] == "matched" and same_provider(self.provider, movie["tmdb_id"]):
             tmdb_id = movie["tmdb_id"]
         snapshot = {k: movie[k] for k in ("id", "clean_title", "year_guess", "tmdb_id", "status")}
 
@@ -204,9 +212,9 @@ class LibraryService(QObject):
     def search_tmdb(self, query: str, year: int | None, on_result, on_error) -> None:
         self.run_async(lambda: find_candidates(self._client(), query, year), on_result, on_error)
 
-    def test_key(self, key: str, on_result, on_error) -> None:
+    def test_key(self, key: str, on_result, on_error, provider: str | None = None) -> None:
         def job():
-            TMDBClient(key, self.language).test_key()
+            make_client(provider or self.provider, key, self.language).test_key()
             return True
         self.run_async(job, on_result, on_error)
 

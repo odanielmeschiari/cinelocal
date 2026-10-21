@@ -12,7 +12,7 @@ ICONS="$HOME/.local/share/icons/hicolor/scalable/apps"
 echo "==> Verificando dependências do sistema"
 PKGS=(python3 python3-venv python3-pip xdg-utils libegl1 libgl1 libxkbcommon-x11-0
       libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
-      libxcb-shape0 libxcb-xinerama0)
+      libxcb-shape0 libxcb-xinerama0 vlc)
 missing=()
 for pkg in "${PKGS[@]}"; do
     dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")

@@ -21,7 +21,9 @@ Para só testar sem instalar: `./run.sh`. Para remover: `./uninstall.sh` (`--pur
    marcando **"Add python.exe to PATH"** no instalador.
 2. Extraia o zip do CineLocal e dê dois cliques em **`install.bat`** (ou rode `install.bat` no Prompt de Comando,
    dentro da pasta extraída).
-3. Abra o **CineLocal** pelo Menu Iniciar.
+3. Para usar o **player integrado**, instale também o [VLC](https://www.videolan.org/vlc/) de 64 bits
+   (`winget install VideoLAN.VLC`). Sem ele o CineLocal abre o filme no player padrão do Windows.
+4. Abra o **CineLocal** pelo Menu Iniciar.
 
 O script copia o app para `%LOCALAPPDATA%\Programs\cinelocal`, cria um ambiente virtual com o PySide6
 (precisa de internet, ~200 MB) e adiciona o atalho no Menu Iniciar. Não precisa de administrador.
@@ -44,8 +46,15 @@ Para só testar sem instalar: `run.bat`. Para remover: `uninstall.bat` (`--purge
   nota ou adicionados recentemente.
 - **Barra lateral**: Todos, Favoritos, Assistidos/Não assistidos, **Coleções** (um filme pode estar em várias),
   Gêneros e Anos (décadas). Clique direito numa coleção para renomear ou excluir.
-- **Assistir** abre o filme no player padrão do sistema (`xdg-open` no Linux, o programa associado no Windows);
-  em Configurações dá para escolher outro (ex.: `mpv --fs`).
+- **Assistir** abre o **player integrado** (baseado no libVLC): `Espaço` pausa, `←`/`→` pulam 10 s, `↑`/`↓` mudam o
+  volume, `M` muda o mudo, `F` tela cheia e `Esc` volta. Precisa do VLC instalado (no Linux o `install.sh` instala) e,
+  no Linux, de uma sessão X11. Sem isso, ou se você definir um player em Configurações (ex.: `mpv --fs`),
+  o filme abre no player externo (`xdg-open` no Linux, o programa associado no Windows).
+- **Watchlist**: filmes que você quer ver no futuro. Adicione pelo botão `＋  Watchlist` nos detalhes ou pelo clique
+  direito; a lista fica na barra lateral.
+- **Fonte dos metadados** (Configurações): TMDB (padrão) ou OMDb. O OMDb é gratuito (1.000 consultas/dia), só tem dados em
+  inglês e não traz imagem de fundo nem trailer. Ao trocar de fonte, use **Metadados ▾ → Forçar atualização**
+  para reidentificar os filmes já baixados.
 - **Reescanear** (`F5`): roda ao abrir o app; detecta filmes novos e remove os que sumiram do disco.
   Arquivos movidos para outra subpasta mantêm metadados, coleções e marcações.
 - **Metadados ▾**: buscar pendentes, forçar atualização de todos (mantém correspondências confirmadas)
@@ -77,6 +86,8 @@ cinelocal/
   scanner.py                varredura da pasta e limpeza de nomes de arquivo
   library.py                sincroniza disco ↔ banco (novos, removidos, movidos)
   tmdb.py                   cliente HTTP do TMDB
+  omdb.py                   cliente HTTP do OMDb (devolve o mesmo formato do TMDB)
+  providers.py              escolhe o cliente conforme a fonte configurada
   parsing.py                interpreta respostas e escolhe a melhor correspondência
   metadata_service.py       identifica o filme, baixa metadados e imagens
   images.py                 cache de capas/miniaturas/fundos
@@ -85,6 +96,7 @@ cinelocal/
   filters.py                filtros, busca, ordenação e contagens
   player.py                 abre o filme no player externo
   ui/                       tema (QSS), grade, barra lateral, janelas e diálogos
+  ui/player_page.py         player integrado (libVLC)
 tests/test_core.py          testes da lógica sem interface
 ```
 
