@@ -318,10 +318,48 @@ class LibraryService(QObject):
             return int(value[0]), int(value[1]), int(value[2])
         return 0, 0, 0
 
+    def _resume_path(self, movie: dict) -> str:
+        """Arquivo cuja posição vale para este item: o próprio filme ou, numa série, o episódio
+        em andamento (o assistido por último)."""
+        if movie.get("kind") != "series":
+            return movie.get("path") or ""
+        best, best_when = "", -1
+        for episode in self.episodes.get(-movie["id"], []):
+            position, _, when = self.resume_info(episode["path"])
+            if position > 0 and when >= best_when:
+                best, best_when = episode["path"], when
+        return best
+
     def progress_of(self, movie: dict) -> float:
-        """Fração já assistida (0 a 1) de um filme que foi deixado pela metade."""
-        position, length, _ = self.resume_info(movie.get("path") or "")
+        """Fração já assistida (0 a 1) de um filme (ou do episódio em andamento de uma série)."""
+        position, length, _ = self.resume_info(self._resume_path(movie))
         return min(1.0, position / length) if position > 0 and length > 0 else 0.0
+
+    def last_played(self, movie: dict) -> int:
+        return self.resume_info(self._resume_path(movie))[2]
+
+    def restart(self, movie: dict) -> None:
+        """Esquece onde o filme parou, para assistir do início."""
+        path = self._resume_path(movie)
+        if path:
+            self.save_progress(path, 0, 0)
+
+    def by_path(self, path: str) -> dict | None:
+        return next((m for m in self.by_id.values()
+                     if m.get("path") == path and m.get("kind") != "series"), None)
+
+    def mark_finished(self, path: str) -> None:
+        """Chegou ao fim (95%+): marca como assistido."""
+        movie = self.by_path(path)
+        if movie is not None and not movie["watched"]:
+            self.set_flag([movie["id"]], "watched", True)
+
+    def episode_after(self, episode: dict) -> dict | None:
+        episodes = self.episodes.get(episode.get("series_id"), [])
+        for i, e in enumerate(episodes):
+            if e["id"] == episode["id"]:
+                return episodes[i + 1] if i + 1 < len(episodes) else None
+        return None
 
     def save_progress(self, path: str, position: int, length: int) -> None:
         """Guarda onde o filme parou (posição 0, ou muito no início, apaga o registro)."""
@@ -338,6 +376,9 @@ class LibraryService(QObject):
             for movie in self.by_id.values():
                 if movie.get("path") == path:
                     self.movie_changed.emit(movie["id"])
+                    if movie.get("kind") == "episode":   # a capa da série mostra o episódio em andamento
+                        self.movie_changed.emit(-movie["series_id"])
+                    break
 
     def play(self, movie_id: int) -> None:
         player.play(self.by_id[movie_id]["path"], self.settings.get("player_command"))

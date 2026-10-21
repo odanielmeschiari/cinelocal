@@ -97,6 +97,11 @@ Seus filmes **nunca são apagados**: o uninstall só remove o app e, se você pe
   volume, `M` muda o mudo, `F` tela cheia e `Esc` volta. Precisa do VLC instalado (no Linux o `install.sh` instala) e,
   no Linux, de uma sessão X11. Sem isso, ou se você definir um player em Configurações (ex.: `mpv --fs`),
   o filme abre no player externo (`xdg-open` no Linux, o programa associado no Windows).
+  Ao passar de 95% o filme é marcado como assistido; ao fim de um episódio, o player oferece o próximo. Na grade, uma
+  barra na capa mostra quanto já foi visto, e **Continuar assistindo** (barra lateral) reúne o que está pela metade
+  (séries incluídas, com o episódio em andamento); "↺ Assistir do início" fica no clique direito.
+  O volume e os ajustes de imagem são lembrados entre filmes; na ⚙ há também **velocidade** (0,5x a 2x) e **atraso da
+  legenda**, e a barra de progresso mostra o tempo do ponto sob o mouse.
   Em Configurações você escolhe o **player padrão** (integrado ou externo); clique direito num filme (ou ⚙ no player)
   para abrir no outro. O player integrado lembra onde você parou e retoma de lá, mesmo após fechar o app.
   No player, a engrenagem **⚙** reúne **🔊 Áudio** e **💬 Legendas** (faixas que vêm no arquivo) e **🎨 Imagem**

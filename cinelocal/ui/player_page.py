@@ -7,9 +7,13 @@ import time
 from PySide6.QtCore import Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QCursor, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QApplication, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
-                               QSizePolicy, QSlider, QStyle, QVBoxLayout, QWidget, QWidgetAction)
+                               QSizePolicy, QSlider, QStyle, QToolTip, QVBoxLayout, QWidget, QWidgetAction)
 
 SAVE_EVERY_MS = 5000      # de quanto em quanto tempo a posição de reprodução é salva
+PREFS_DELAY_MS = 800       # espera o volume/ajustes pararem de mudar antes de gravar
+FINISH_FRACTION = 0.95    # a partir daqui o filme conta como assistido
+RATES = (0.5, 0.75, 1.0, 1.25, 1.5, 2.0)   # velocidades de reprodução
+SPU_STEP_US = 250_000     # passo do atraso da legenda (microssegundos)
 FADE_MS = 500             # duração do desaparecimento suave dos controles
 IDLE_HIDE_SECONDS = 2.5   # em tela cheia, controles e ponteiro somem depois deste tempo parado
 # chave, rótulo, mínimo, máximo, padrão (em %). Nitidez 0 = filtro desligado.
@@ -48,6 +52,20 @@ def _track_name(name) -> str:
 
 
 class _SeekSlider(QSlider):
+    length_ms = 0   # duração do filme, atualizada pelo player
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.setMouseTracking(True)
+
+    def mouseMoveEvent(self, event) -> None:   # mostra o tempo do ponto sob o mouse
+        if self.length_ms > 0:
+            value = QStyle.sliderValueFromPosition(
+                self.minimum(), self.maximum(), int(event.position().x()), self.width())
+            QToolTip.showText(event.globalPosition().toPoint(),
+                              _clock(self.length_ms * value // self.maximum()), self)
+        super().mouseMoveEvent(event)
+
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:   # clicar na barra salta para o ponto clicado
             self.setValue(QStyle.sliderValueFromPosition(
@@ -60,6 +78,9 @@ class VlcPlayerPage(QWidget):
     back_requested = Signal()
     external_requested = Signal()     # abrir este filme em outro player
     progress = Signal(str, int, int)  # caminho, posição (ms), duração (ms); posição 0 = apagar
+    finished = Signal(str)            # passou de 95%: marcar como assistido
+    ended = Signal(str)               # o vídeo chegou ao fim
+    prefs_changed = Signal(dict)      # volume e ajustes de imagem, para lembrar nos próximos filmes
 
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
@@ -77,6 +98,12 @@ class VlcPlayerPage(QWidget):
         self._last_pos = QCursor.pos()
         self._last_activity = time.monotonic()
         self._last_saved = 0
+        self._rate = 1.0
+        self._spu_delay = 0              # atraso da legenda (µs)
+        self._finished_sent = self._ended_sent = False
+        self._loading_prefs = False
+        self._prefs_timer = QTimer(self, singleShot=True, interval=PREFS_DELAY_MS)
+        self._prefs_timer.timeout.connect(self._emit_prefs)
         self._build(title)
         self._timer = QTimer(self, interval=250)
         self._timer.timeout.connect(self._tick)
@@ -107,7 +134,7 @@ class VlcPlayerPage(QWidget):
         top.setContentsMargins(34, 20, 34, 10)
         back = self._button("←  Voltar", self.back_requested.emit)
         back.setToolTip("Voltar (Esc)")
-        name = QLabel(title)
+        name = self.title_label = QLabel(title)
         name.setObjectName("muted")
         name.setAlignment(Qt.AlignCenter)
         top.addWidget(back, 0, Qt.AlignLeft)
@@ -143,11 +170,14 @@ class VlcPlayerPage(QWidget):
         self.volume_label = QLabel("100%")
         self.volume_label.setFixedWidth(42)
         self.volume.valueChanged.connect(lambda v: self.volume_label.setText(f"{v}%"))
+        self.volume.valueChanged.connect(lambda _v: self._prefs_changed())
         self.settings_btn = QPushButton("⚙")      # áudio, legendas e imagem ficam todos aqui
         self.settings_btn.setToolTip("Configurações")
         self.settings_btn.setFocusPolicy(Qt.NoFocus)
         menu = QMenu(self.settings_btn)
-        for text, fill in (("🔊  Áudio", self._fill_audio_menu), ("💬  Legendas", self._fill_subtitle_menu)):
+        for text, fill in (("🔊  Áudio", self._fill_audio_menu), ("💬  Legendas", self._fill_subtitle_menu),
+                           ("⏱  Atraso da legenda", self._fill_delay_menu),
+                           ("⏩  Velocidade", self._fill_speed_menu)):
             sub = menu.addMenu(text)
             sub.aboutToShow.connect(lambda m=sub, f=fill: f(m))   # a lista é montada na hora de abrir
         self._build_image_menu(menu.addMenu("🎨  Imagem"))
@@ -193,6 +223,59 @@ class VlcPlayerPage(QWidget):
         self._chosen_spu = track_id
         self._mp.video_set_spu(track_id)
 
+    # -- velocidade e atraso da legenda ---------------------------------------------------
+    def _fill_speed_menu(self, menu: QMenu) -> None:
+        menu.clear()
+        for rate in RATES:
+            action = menu.addAction(f"{rate:g}x" + ("  (normal)" if rate == 1.0 else ""))
+            action.setCheckable(True)
+            action.setChecked(abs(rate - self._rate) < 1e-6)
+            action.triggered.connect(lambda _checked=False, r=rate: self._set_rate(r))
+
+    def _set_rate(self, rate: float) -> None:
+        self._rate = rate
+        self._mp.set_rate(rate)
+
+    def _fill_delay_menu(self, menu: QMenu) -> None:
+        menu.clear()
+        menu.addAction(f"Atraso atual: {self._spu_delay // 1000:+d} ms").setEnabled(False)
+        menu.addAction("Adiantar legenda (−250 ms)", lambda: self._shift_delay(-SPU_STEP_US))
+        menu.addAction("Atrasar legenda (+250 ms)", lambda: self._shift_delay(SPU_STEP_US))
+        menu.addAction("Zerar", lambda: self._shift_delay(None))
+
+    def _shift_delay(self, delta) -> None:
+        self._spu_delay = 0 if delta is None else self._spu_delay + delta
+        self._mp.video_set_spu_delay(self._spu_delay)
+
+    # -- lembrar volume e ajustes de imagem entre filmes -----------------------------------
+    def apply_prefs(self, prefs: dict) -> None:
+        self._loading_prefs = True
+        try:
+            for key, slider in self._sliders.items():
+                if key in prefs:
+                    slider.setValue(int(prefs[key]))
+            if "volume" in prefs:
+                self.volume.setValue(int(prefs["volume"]))
+        except (TypeError, ValueError):
+            pass
+        finally:
+            self._loading_prefs = False
+
+    def _prefs_changed(self) -> None:
+        if not self._loading_prefs:
+            self._prefs_timer.start()
+
+    def _emit_prefs(self) -> None:
+        self.prefs_changed.emit({**self._adjust, "volume": self.volume.value()})
+
+    def _flush_prefs(self) -> None:
+        if self._prefs_timer.isActive():
+            self._prefs_timer.stop()
+            self._emit_prefs()
+
+    def set_title(self, title: str) -> None:
+        self.title_label.setText(title)
+
     # -- brilho, contraste, cor e nitidez --------------------------------------------------
     def _build_image_menu(self, menu: QMenu) -> None:
         panel = QWidget()
@@ -225,6 +308,7 @@ class VlcPlayerPage(QWidget):
     def _on_adjust(self, key: str, value: int, label: QLabel) -> None:
         label.setText(f"{value}%")
         self._adjust[key] = value
+        self._prefs_changed()
         if key == "sharpness":
             self._sharp_timer.start()
         else:
@@ -259,6 +343,7 @@ class VlcPlayerPage(QWidget):
     # -- reprodução ---------------------------------------------------------------
     def start(self, path: str, resume_ms: int = 0) -> None:
         self._path = path
+        self._finished_sent = self._ended_sent = False
         if resume_ms > 0:
             self._pending_start = (resume_ms, False)   # aplicado quando a reprodução começa
         self._open_media()
@@ -292,6 +377,11 @@ class VlcPlayerPage(QWidget):
     def _on_playing(self) -> None:
         """Primeiro instante de reprodução (de novo após reabrir por causa da nitidez)."""
         self._apply_adjust()
+        self._mp.audio_set_volume(self.volume.value())
+        if self._rate != 1.0:
+            self._mp.set_rate(self._rate)
+        if self._spu_delay:
+            self._mp.video_set_spu_delay(self._spu_delay)
         if self._pending_start is not None:
             position, paused = self._pending_start
             self._pending_start = None
@@ -310,6 +400,7 @@ class VlcPlayerPage(QWidget):
         self._autohide()
         length = self._mp.get_length()
         if length > 0:
+            self.seek.length_ms = length
             self.total.setText(_clock(length))
             self.elapsed.setText(_clock(self._mp.get_time()))
             if not self._dragging:
@@ -319,6 +410,11 @@ class VlcPlayerPage(QWidget):
         if now - self._last_saved >= SAVE_EVERY_MS / 1000:
             self._last_saved = now
             self._save_progress()
+        if (self._playing_seen and not self._ended_sent
+                and self._mp.get_state() == self._vlc.State.Ended):
+            self._ended_sent = True
+            self._save_progress()   # garante o aviso de 'assistido'
+            self.ended.emit(self._path)
 
     def _save_progress(self) -> None:
         """Informa a posição atual (ou 0, perto do fim) para o filme poder ser retomado depois."""
@@ -326,8 +422,11 @@ class VlcPlayerPage(QWidget):
         if not self._playing_seen or self._pending_start is not None:
             return
         length, pos = self._mp.get_length(), self._mp.get_time()
-        if state == self._vlc.State.Ended or (length > 0 and pos >= length - 30000):
+        if state == self._vlc.State.Ended or (length > 0 and pos >= length * FINISH_FRACTION):
             self.progress.emit(self._path, 0, length)
+            if not self._finished_sent:
+                self._finished_sent = True
+                self.finished.emit(self._path)
         elif state in (self._vlc.State.Playing, self._vlc.State.Paused) and pos > 0:
             self.progress.emit(self._path, pos, length)
 
@@ -397,12 +496,14 @@ class VlcPlayerPage(QWidget):
             self._set_fullscreen(False)
         self._wake()
         self._save_progress()
+        self._flush_prefs()
         self._timer.stop()
         self._sharp_timer.stop()
         self._mp.stop()
 
     def release(self) -> None:
         self._save_progress()   # no-op se leave() já parou o vídeo (ex.: app fechado durante a reprodução)
+        self._flush_prefs()
         self._timer.stop()
         self._sharp_timer.stop()
         self._mp.stop()

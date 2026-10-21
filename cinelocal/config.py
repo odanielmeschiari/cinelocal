@@ -49,6 +49,7 @@ DEFAULT_SETTINGS = {
     "language": "pt-BR",
     "player_command": "",
     "default_player": "",     # "builtin", "external" ou "" (= externo só se houver comando)
+    "player_prefs": {},       # volume e ajustes de imagem lembrados entre filmes
     "resume": {},             # caminho do arquivo -> posição (ms) onde parou
     "sort_id": "title_asc",
 }
