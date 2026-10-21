@@ -4,6 +4,25 @@ Local movie browser for Linux and Windows, with a Netflix-style black and blue l
 Fast and offline: the internet is only used to download posters and information for new movies
 (or when you force an update).
 
+## Download (no installation)
+
+No need to download the source zip: get just the file for your system from the [latest release](../../releases/latest):
+
+- **Windows 10/11**: `CineLocal-windows-x86_64.exe` — double-click it. (Windows SmartScreen may warn about an
+  unknown publisher: *More info → Run anyway*.)
+- **Linux (x86_64)**: `CineLocal-linux-x86_64` — right-click → *Properties → Permissions → Allow executing*
+  (or `chmod +x CineLocal-linux-x86_64`), then double-click it.
+
+No Python or VLC needed: the built-in player is already inside the file. If Linux complains about the Qt `xcb`
+plugin, run `sudo apt install libxcb-cursor0`.
+
+### Publishing a release (maintainers)
+
+1. `git tag v<version> && git push --tags` — GitHub Actions builds both executables with PyInstaller
+   (`cinelocal.spec`, with VLC bundled) and attaches them to a new release.
+2. To build locally instead: install VLC (set `VLC_DIR` if it is not in the default place), then
+   `pip install pyinstaller && pyinstaller --noconfirm cinelocal.spec` (output in `dist/`).
+
 ## Installation (Linux Mint / Ubuntu / Debian)
 
 ```bash
