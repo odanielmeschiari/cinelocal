@@ -55,7 +55,7 @@ class Sidebar(QTreeWidget):
             self._entry("Precisam de revisão", ("review", None), counts["review"])
 
         self._header("COLEÇÕES")
-        self._entry("＋  Nova coleção", _NEW_COLLECTION, None)
+        self._entry("Nova coleção", _NEW_COLLECTION, None)
         for c in collections:
             self._entry(c["name"], ("collection", c["id"]), len(membership.get(c["id"], ())))
 

@@ -162,12 +162,12 @@ class SettingsDialog(QDialog):
     def _key_ok(self, _result) -> None:
         if not self._closed:
             self.test_btn.setEnabled(True)
-            self.key_status.setText("✓ Chave válida.")
+            self.key_status.setText("Chave válida.")
 
     def _key_failed(self, exc: Exception) -> None:
         if not self._closed:
             self.test_btn.setEnabled(True)
-            self.key_status.setText(f"✗ {exc}")
+            self.key_status.setText(f"Erro: {exc}")
 
     def values(self) -> dict:
         self._keys[self._shown] = self.key_edit.text()

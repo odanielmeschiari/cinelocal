@@ -99,24 +99,24 @@ Seus filmes **nunca são apagados**: o uninstall só remove o app e, se você pe
   o filme abre no player externo (`xdg-open` no Linux, o programa associado no Windows).
   Ao passar de 95% o filme é marcado como assistido; ao fim de um episódio, o player oferece o próximo. Na grade, uma
   barra na capa mostra quanto já foi visto, e **Continuar assistindo** (barra lateral) reúne o que está pela metade
-  (séries incluídas, com o episódio em andamento); "↺ Assistir do início" fica no clique direito.
-  O volume e os ajustes de imagem são lembrados entre filmes; na ⚙ há também **velocidade** (0,5x a 2x) e **atraso da
+  (séries incluídas, com o episódio em andamento); "Assistir do início" fica no clique direito.
+  O volume e os ajustes de imagem são lembrados entre filmes; na engrenagem (botão Configurações do player) há também **velocidade** (0,5x a 2x) e **atraso da
   legenda**, e a barra de progresso mostra o tempo do ponto sob o mouse.
-  Em Configurações você escolhe o **player padrão** (integrado ou externo); clique direito num filme (ou ⚙ no player)
+  Em Configurações você escolhe o **player padrão** (integrado ou externo); clique direito num filme (ou o menu Configurações do player)
   para abrir no outro. O player integrado lembra onde você parou e retoma de lá, mesmo após fechar o app.
-  No player, a engrenagem **⚙** reúne **🔊 Áudio** e **💬 Legendas** (faixas que vêm no arquivo) e **🎨 Imagem**
+  No player, o botão **Configurações** reúne **Áudio** e **Legendas** (faixas que vêm no arquivo) e **Imagem**
   (brilho, contraste, cor e nitidez). Em tela cheia, os controles e o ponteiro somem depois de alguns segundos sem mexer o mouse.
 - **Séries**: arquivos com `S01E02`, `1x02` ou `Temporada 1 Episódio 2` no nome (ou dentro de pastas `Temporada N`)
   são agrupados numa única capa de série, que abre a lista de temporadas e episódios, cada um com seus metadados.
   Séries aparecem com o selo “Série” na grade e ficam fora das coleções.
-- **Watchlist**: filmes que você quer ver no futuro. Adicione pelo botão `＋  Watchlist` nos detalhes ou pelo clique
+- **Watchlist**: filmes que você quer ver no futuro. Adicione pelo botão `Watchlist` nos detalhes ou pelo clique
   direito; a lista fica na barra lateral.
 - **Fonte dos metadados** (Configurações): TMDB (padrão) ou OMDb. O OMDb é gratuito (1.000 consultas/dia), só tem dados em
-  inglês e não traz imagem de fundo nem trailer. Ao trocar de fonte, use **Metadados ▾ → Forçar atualização**
+  inglês e não traz imagem de fundo nem trailer. Ao trocar de fonte, use **Metadados → Forçar atualização**
   para reidentificar os filmes já baixados.
 - **Reescanear** (`F5`): roda ao abrir o app; detecta filmes novos e remove os que sumiram do disco.
   Arquivos movidos para outra subpasta mantêm metadados, coleções e marcações.
-- **Metadados ▾**: buscar pendentes, forçar atualização de todos (mantém correspondências confirmadas)
+- **Metadados**: buscar pendentes, forçar atualização de todos (mantém correspondências confirmadas)
   ou revisar filmes sem correspondência. Quando o app não tem certeza (remakes, título ambíguo, nada
   encontrado), o filme ganha o selo **Revisar** e você escolhe o correto numa janela.
 - **Idioma** dos metadados: padrão `pt-BR` (com inglês como reserva quando falta tradução);

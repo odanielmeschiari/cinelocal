@@ -110,7 +110,7 @@ class MainWindow(QMainWindow):
         for sort_id, label, *_ in filters.SORT_OPTIONS:
             self.sort_combo.addItem(label, sort_id)
         self.sort_combo.setCurrentIndex(max(0, self.sort_combo.findData(self.sort_id)))
-        rescan = QPushButton("⟳  Reescanear")
+        rescan = QPushButton("Reescanear")
         rescan.clicked.connect(self.service.start_scan)
         meta = QPushButton("Metadados")
         meta_menu = QMenu(meta)
@@ -120,9 +120,8 @@ class MainWindow(QMainWindow):
         meta_menu.addSeparator()
         meta_menu.addAction("Revisar filmes sem correspondência…", self.review_all)
         meta.setMenu(meta_menu)
-        settings = QPushButton("⚙")
+        settings = QPushButton("Configurações")
         settings.setToolTip("Configurações (Ctrl+,)")
-        settings.setFixedWidth(46)
         settings.clicked.connect(lambda: self.open_settings())
         bar.addWidget(self.search, 1)
         bar.addWidget(QLabel("Ordenar:"))
@@ -255,7 +254,7 @@ class MainWindow(QMainWindow):
         if self.query:
             return "Nenhum filme corresponde à busca."
         if total == 0:
-            return "Nenhum filme encontrado na pasta selecionada.\nUse ⚙ para escolher outra pasta."
+            return "Nenhum filme encontrado na pasta selecionada.\nUse o botão Configurações para escolher outra pasta."
         return "Nenhum filme nesta seção."
 
     def _heading_text(self) -> str:
@@ -561,22 +560,22 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         if single:
             menu.addAction("Abrir detalhes", lambda: self.open_movie(ids[0]))
-            menu.addAction("▶  Assistir", lambda: self.play_movie(ids[0]))
+            menu.addAction("Assistir", lambda: self.play_movie(ids[0]))
             other = "player integrado" if self._use_external() else "outro player"
-            menu.addAction(f"↗  Assistir no {other}",
+            menu.addAction(f"Assistir no {other}",
                            lambda: self.play_movie(ids[0], external=not self._use_external()))
             if s.progress_of(movies[0]) > 0:
-                menu.addAction("↺  Assistir do início", lambda: self._play_from_start(ids[0]))
+                menu.addAction("Assistir do início", lambda: self._play_from_start(ids[0]))
             menu.addSeparator()
 
         all_fav = all(m["favorite"] for m in movies)
         all_seen = all(m["watched"] for m in movies)
-        menu.addAction("Remover dos favoritos" if all_fav else "♥  Favoritar",
+        menu.addAction("Remover dos favoritos" if all_fav else "Favoritar",
                        lambda: s.set_flag(ids, "favorite", not all_fav))
-        menu.addAction("Marcar como não assistido" if all_seen else "✓  Marcar como assistido",
+        menu.addAction("Marcar como não assistido" if all_seen else "Marcar como assistido",
                        lambda: s.set_flag(ids, "watched", not all_seen))
         all_listed = all(m["watchlist"] for m in movies)
-        menu.addAction("Remover da Watchlist" if all_listed else "＋  Adicionar à Watchlist",
+        menu.addAction("Remover da Watchlist" if all_listed else "Adicionar à Watchlist",
                        lambda: s.set_flag(ids, "watchlist", not all_listed))
         if all(i > 0 for i in ids):   # coleções só guardam filmes
             collections_menu = menu.addMenu("Coleções")

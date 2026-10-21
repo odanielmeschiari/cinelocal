@@ -147,17 +147,17 @@ class MovieDelegate(QStyledItemDelegate):
 
     def _paint_badges(self, painter, poster, movie):
         if movie["rating"] and movie["votes"]:
-            self._pill(painter, QRect(poster.left() + 8, poster.bottom() - 28, 54, 20),
-                       f"★ {movie['rating']:.1f}", QColor(0, 0, 0, 185), "#ffd25e")
+            self._pill(painter, QRect(poster.left() + 8, poster.bottom() - 28, 42, 20),
+                       f"{movie['rating']:.1f}", QColor(0, 0, 0, 185), "#ffd25e")
         if movie["status"] in ("ambiguous", "not_found"):
             self._pill(painter, QRect(poster.right() - 70, poster.bottom() - 28, 62, 20),
                        "Revisar", QColor(COLORS["warn"]), "#1b1200")
         if movie["favorite"]:
-            self._pill(painter, QRect(poster.right() - 30, poster.top() + 8, 22, 22),
-                       "♥", QColor(COLORS["accent"]))
+            self._pill(painter, QRect(poster.right() - 70, poster.top() + 8, 62, 20),
+                       "Favorito", QColor(COLORS["accent"]))
         if movie["watched"]:
-            self._pill(painter, QRect(poster.left() + 8, poster.top() + 8, 22, 22),
-                       "✓", QColor(0, 0, 0, 185))
+            self._pill(painter, QRect(poster.left() + 8, poster.top() + 8, 46, 20),
+                       "Visto", QColor(0, 0, 0, 185))
         fraction = self.progress_of(movie) if self.progress_of else 0
         if fraction > 0:   # mini-tracker: quanto do filme já foi visto
             track = QRectF(poster.left() + 8, poster.bottom() - 6, POSTER_W - 16, 4)

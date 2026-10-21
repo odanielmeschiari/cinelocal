@@ -60,7 +60,7 @@ def populate_collections_menu(menu: QMenu, service: LibraryService,
             service.set_in_collection(cid, ids, present))
     if service.collections:
         menu.addSeparator()
-    new_action = menu.addAction("＋  Nova coleção…")
+    new_action = menu.addAction("Nova coleção…")
 
     def create_and_add():
         collection_id = ask_new_collection(parent, service)

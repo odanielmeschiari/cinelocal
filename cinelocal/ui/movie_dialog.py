@@ -96,25 +96,25 @@ class MovieDialog(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self.watch_btn = QPushButton("▶  Assistir")
+        self.watch_btn = QPushButton("Assistir")
         self.watch_btn.setProperty("primary", True)
         self.watch_btn.clicked.connect(self._watch)
-        self.fav_btn = QPushButton("♥  Favoritar")
+        self.fav_btn = QPushButton("Favoritar")
         self.fav_btn.setCheckable(True)
         self.fav_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "favorite", on))
-        self.seen_btn = QPushButton("✓  Assistido")
+        self.seen_btn = QPushButton("Assistido")
         self.seen_btn.setCheckable(True)
         self.seen_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watched", on))
-        self.list_btn = QPushButton("＋  Watchlist")
+        self.list_btn = QPushButton("Watchlist")
         self.list_btn.setCheckable(True)
         self.list_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watchlist", on))
-        self.coll_btn = QPushButton("＋  Coleções")
+        self.coll_btn = QPushButton("Coleções")
         coll_menu = QMenu(self.coll_btn)
         coll_menu.aboutToShow.connect(lambda: self._fill_collections(coll_menu))
         self.coll_btn.setMenu(coll_menu)
         self.trailer_btn = QPushButton("Trailer")
         self.trailer_btn.clicked.connect(self._open_trailer)
-        more = QPushButton("⋯")
+        more = QPushButton("Mais")
         more_menu = QMenu(more)
         more_menu.addAction("Atualizar metadados", self._refresh)
         more_menu.addAction("Corrigir correspondência…", self._fix_match)
@@ -161,7 +161,7 @@ class MovieDialog(QWidget):
         self.meta.setText("   •   ".join(p for p in parts if p))
 
         if m["rating"] and m["votes"]:
-            self.rating.setText(f"★ {m['rating']:.1f}/10   "
+            self.rating.setText(f"Nota {m['rating']:.1f}/10   "
                                 f"<span style='color:{COLORS['muted']};font-weight:400;font-size:10pt'>"
                                 f"{format_votes(m['votes'])} votos no TMDB</span>")
         else:
@@ -172,8 +172,8 @@ class MovieDialog(QWidget):
 
         banners = {
             "pending": "Os metadados ainda não foram baixados para este filme.",
-            "ambiguous": "Vários filmes combinam com este arquivo. Use ⋯ → Corrigir correspondência.",
-            "not_found": "Este filme não foi encontrado no TMDB. Use ⋯ → Corrigir correspondência.",
+            "ambiguous": "Vários filmes combinam com este arquivo. Use Mais → Corrigir correspondência.",
+            "not_found": "Este filme não foi encontrado no TMDB. Use Mais → Corrigir correspondência.",
         }
         self.banner.setText(banners.get(m["status"], ""))
         self.banner.setVisible(bool(self.banner.text()))
@@ -188,9 +188,9 @@ class MovieDialog(QWidget):
         self._load_backdrop(m)
 
         for button, value, on_text, off_text in (
-                (self.fav_btn, m["favorite"], "♥  Favorito", "♥  Favoritar"),
-                (self.seen_btn, m["watched"], "✓  Assistido", "✓  Marcar como assistido"),
-                (self.list_btn, m["watchlist"], "✓  Na Watchlist", "＋  Watchlist")):
+                (self.fav_btn, m["favorite"], "Favorito", "Favoritar"),
+                (self.seen_btn, m["watched"], "Assistido", "Marcar como assistido"),
+                (self.list_btn, m["watchlist"], "Na Watchlist", "Watchlist")):
             button.blockSignals(True)
             button.setChecked(value)
             button.setText(on_text if value else off_text)
