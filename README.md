@@ -86,8 +86,8 @@ Seus filmes **nunca são apagados**: o uninstall só remove o app e, se você pe
 
 ## Uso
 
-- **Início** (tela padrão): uma fileira por seção (Continuar assistindo, Favoritos, Watchlist, Assistidos e Todos os
-  filmes), com setas ← → para andar entre os filmes. Seções vazias não aparecem. Buscar mostra a grade de resultados.
+- **Todos os filmes** (tela padrão): com a fileira "Continuar assistindo" acima da grade (setas ← → para andar entre
+  os filmes); ela some quando está vazia ou durante a busca.
 - **Grade**: clique numa capa para abrir os detalhes (na mesma janela; `←  Voltar`, `Esc` ou `Alt`+`←` voltam à lista
   exatamente onde você estava). `Ctrl`/`Shift`+clique seleciona vários filmes;
   clique direito abre o menu (favoritar, assistido, coleções, atualizar, corrigir correspondência).

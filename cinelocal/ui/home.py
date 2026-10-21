@@ -1,19 +1,10 @@
-"""Página inicial: uma fileira rolável por seção (continuar assistindo, favoritos, watchlist...)."""
+"""Fileira rolável com título e setas (usada em "Continuar assistindo")."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, Qt, QTimer, Signal
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .grid import MovieRow
-
-# chave, título, filtro (o mesmo formato usado na barra lateral)
-SECTIONS = (
-    ("continue", "Continuar assistindo", ("continue", None)),
-    ("favorites", "Favoritos", ("favorites", None)),
-    ("watchlist", "Watchlist", ("watchlist", None)),
-    ("watched", "Assistidos", ("watched", True)),
-    ("all", "Todos os filmes", ("all", None)),
-)
 
 
 class HomeSection(QWidget):
@@ -56,45 +47,3 @@ class HomeSection(QWidget):
         bar = self.row.horizontalScrollBar()
         self.left.setEnabled(bar.value() > bar.minimum())
         self.right.setEnabled(bar.value() < bar.maximum())
-
-
-class HomePage(QScrollArea):
-    movie_opened = Signal(int)
-    context_requested = Signal(list, QPoint)
-
-    def __init__(self, progress_of, parent=None):
-        super().__init__(parent)
-        self.setWidgetResizable(True)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        body = QWidget()
-        layout = QVBoxLayout(body)
-        layout.setContentsMargins(0, 0, 16, 16)
-        layout.setSpacing(18)
-        self.sections: dict[str, HomeSection] = {}
-        for key, title, _flt in SECTIONS:
-            section = HomeSection(title)
-            section.row.itemDelegate().progress_of = progress_of
-            section.row.movie_opened.connect(self.movie_opened)
-            section.row.context_requested.connect(self.context_requested)
-            layout.addWidget(section)
-            self.sections[key] = section
-        layout.addStretch(1)
-        self.setWidget(body)
-
-    def set_data(self, data: dict[str, list[dict]]) -> bool:
-        """Preenche as fileiras; seções vazias somem. Retorna False se todas estiverem vazias."""
-        any_visible = False
-        for key, section in self.sections.items():
-            items = data.get(key, [])
-            bar = section.row.horizontalScrollBar()
-            position = bar.value()
-            section.row.movie_model.set_movies(items)
-            QTimer.singleShot(0, lambda b=bar, p=position: b.setValue(p))   # o layout só termina depois
-            section.count.setText(str(len(items)))
-            section.setVisible(bool(items))
-            any_visible = any_visible or bool(items)
-        return any_visible
-
-    def refresh_movie(self, movie_id: int) -> None:
-        for section in self.sections.values():
-            section.row.movie_model.refresh_movie(movie_id)

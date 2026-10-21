@@ -30,7 +30,7 @@ class Sidebar(QTreeWidget):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context)
         self.currentItemChanged.connect(self._on_current_changed)
-        self._current: Filter = ("home", None)
+        self._current: Filter = ("all", None)
         self._rebuilding = False
 
     @property
@@ -44,7 +44,6 @@ class Sidebar(QTreeWidget):
         self.clear()
 
         self._header("BIBLIOTECA")
-        self._entry("Início", ("home", None), None)
         if counts["continue"]:
             self._entry("Continuar assistindo", ("continue", None), counts["continue"])
         self._entry("Todos os filmes", ("all", None), counts["all"])
