@@ -97,7 +97,7 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   Genres and Years (decades). Right-click a collection to rename or delete it.
 - **Watch** opens the **built-in player** (based on libVLC): `Space` pauses, `←`/`→` skip 10 s, `↑`/`↓` change the
   volume, `M` toggles mute, `F` toggles fullscreen and `Esc` goes back. It needs VLC installed (on Linux `install.sh` installs it) and,
-  on Linux, an X11 session. Without that, or if you set a player in Settings (e.g. `mpv --fs`),
+  on Linux, X11 or XWayland (Wayland sessions run through XWayland automatically; a pure Wayland session without XWayland is not supported). Without that, or if you set a player in Settings (e.g. `mpv --fs`),
   the movie opens in the external player (`xdg-open` on Linux, the associated program on Windows).
   Past 95% the movie is marked as watched; at the end of an episode, the player offers the next one. On the grid, a
   bar on the poster shows how much has been watched, and **Continue watching** (sidebar) gathers what is half-watched

@@ -31,7 +31,7 @@ def unavailable_reason() -> str:
     """Why the built-in player cannot be used ('' = it can)."""
     global _vlc, _error
     if sys.platform.startswith("linux") and QGuiApplication.platformName() != "xcb":
-        return "The built-in player needs an X11 session (or run with QT_QPA_PLATFORM=xcb)."
+        return "The built-in player needs X11 or XWayland (no X server found for this session)."
     if _vlc is None and not _error:
         try:
             import vlc

@@ -38,6 +38,7 @@ class SeriesDialog(QWidget):
         self._backdrop: QPixmap | None = None
         self._backdrop_scaled: QPixmap | None = None
         self._season = None
+        self._offset = DETAILS_OFFSET
         self._heads: dict[QLabel, QLabel] = {}
         self.setStyleSheet(DETAIL_STYLE)
         self.setWindowTitle(service.by_id[movie_id]["display_title"])
@@ -80,7 +81,11 @@ class SeriesDialog(QWidget):
 
         right = QVBoxLayout()
         right.setSpacing(8)
-        right.addSpacing(DETAILS_OFFSET)
+        # Empty space above the details. It starts at DETAILS_OFFSET and is trimmed by _fit_offset() so that
+        # only half of the first episode peeks out at the bottom of the window.
+        self._right_gap = QWidget()
+        self._right_gap.setFixedHeight(DETAILS_OFFSET)
+        right.addWidget(self._right_gap)
         top.addLayout(right, 1)
         self.title = QLabel()
         self.title.setObjectName("movieTitle")
@@ -98,7 +103,10 @@ class SeriesDialog(QWidget):
         self.banner.setWordWrap(True)
         for w in (self.title, self.meta, self.rating, self.tagline, self.banner):
             right.addWidget(w)
-        left.insertSpacing(0, DETAILS_OFFSET + cap_offset(self.title))   # the poster's top lines up with the title's letters
+        self._cap = cap_offset(self.title)   # the poster's top lines up with the title's letters
+        self._left_gap = QWidget()
+        self._left_gap.setFixedHeight(DETAILS_OFFSET + self._cap)
+        left.insertWidget(0, self._left_gap)
         self.overview = self._text_block(right, "OVERVIEW")
         self.creator = self._text_block(right, "CREATED BY")
         self.cast = self._text_block(right, "CAST")
@@ -253,6 +261,7 @@ class SeriesDialog(QWidget):
             if e["season"] == self._season:
                 self.ep_box.addWidget(self._episode_row(e))
         QTimer.singleShot(0, lambda: bar.setValue(position))   # keep the scroll position on refresh
+        QTimer.singleShot(0, self._fit_offset)
 
     def _episode_row(self, e: dict) -> QFrame:
         row = QFrame()
@@ -338,6 +347,27 @@ class SeriesDialog(QWidget):
     def resizeEvent(self, event) -> None:
         self._backdrop_scaled = None
         super().resizeEvent(event)
+        QTimer.singleShot(0, self._fit_offset)
+
+    def _set_offset(self, offset: int) -> None:
+        self._offset = offset
+        self._right_gap.setFixedHeight(offset)
+        self._left_gap.setFixedHeight(offset + self._cap)
+
+    def _fit_offset(self) -> None:
+        """Raises the poster and details just enough for the middle of the first episode to sit at the bottom edge
+        of the window (half of the row visible, hinting that there is more below). Never lower than DETAILS_OFFSET."""
+        if self.scroll.verticalScrollBar().value() > 0 or self.ep_box.count() == 0:
+            return   # do not move the content under the user's scroll
+        first = self.ep_box.itemAt(0).widget()
+        if first is None:
+            return
+        body = self.scroll.widget()
+        self._set_offset(0)
+        body.layout().activate()
+        middle = first.mapTo(body, first.rect().center()).y()   # grows 1:1 with the offset
+        self._set_offset(max(0, min(DETAILS_OFFSET, self.scroll.viewport().height() - middle)))
+        body.layout().activate()
 
     def _leave(self) -> None:
         self.review.autosave()
