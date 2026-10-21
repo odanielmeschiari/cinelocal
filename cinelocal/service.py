@@ -315,6 +315,12 @@ class LibraryService(QObject):
             self.by_id[movie_id].update(user_rating=rating, user_comment=comment)
             self.movie_changed.emit(movie_id)
 
+    def remember_tracks(self, path: str, choices: dict) -> None:
+        """Keeps the audio/subtitle tracks picked by hand for this file (used the next time it plays)."""
+        saved = dict(self.settings.get("track_choices") or {})
+        saved[path] = choices
+        self.settings.update(track_choices=saved)
+
     # -- continuar assistindo -----------------------------------------------------------
     def resume_info(self, path: str) -> tuple[int, int, int]:
         """(position ms, duration ms, when it was saved) of a file; zeros if none."""

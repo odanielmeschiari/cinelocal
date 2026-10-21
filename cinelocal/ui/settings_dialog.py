@@ -97,6 +97,7 @@ class SettingsDialog(QDialog):
         form.addRow("Audio language", self.audio_language)
         self.subtitle_language = self._track_combo(s.get("subtitle_language"), "File default")
         self.subtitle_language.insertItem(1, "Off (no subtitles)", "off")
+        self.subtitle_language.insertItem(2, "Forced only (foreign-language parts)", "forced")
         self.subtitle_language.setCurrentIndex(max(0, self.subtitle_language.findData(s.get("subtitle_language"))))
         form.addRow("Subtitle language", self.subtitle_language)
 

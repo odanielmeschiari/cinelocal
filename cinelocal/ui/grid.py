@@ -147,9 +147,14 @@ class MovieDelegate(QStyledItemDelegate):
         painter.drawText(rect, Qt.AlignCenter, text)
 
     def _paint_badges(self, painter, poster, movie):
+        x = poster.left() + 8
         if movie["rating"] and movie["votes"]:
-            self._pill(painter, QRect(poster.left() + 8, poster.bottom() - 28, 42, 20),
+            self._pill(painter, QRect(x, poster.bottom() - 28, 42, 20),
                        f"{movie['rating']:.1f}", QColor(0, 0, 0, 185), "#ffd25e")
+            x += 48
+        if movie.get("user_rating"):   # the user's own stars, next to the TMDB rating
+            self._pill(painter, QRect(x, poster.bottom() - 28, 40, 20),
+                       f"★ {movie['user_rating']}", QColor(COLORS["accent"]))
         if movie["status"] in ("ambiguous", "not_found"):
             self._pill(painter, QRect(poster.right() - 70, poster.bottom() - 28, 62, 20),
                        "Review", QColor(COLORS["warn"]), "#1b1200")

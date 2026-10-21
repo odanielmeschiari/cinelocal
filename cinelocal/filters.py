@@ -14,6 +14,8 @@ SORT_OPTIONS = [
     ("rating_desc", "Rating (highest)", "rating", True),
     ("rating_asc", "Rating (lowest)", "rating", False),
     ("added_desc", "Recently added", "added", True),
+    ("myrating_desc", "My rating (highest)", "user_rating", True),
+    ("myrating_asc", "My rating (lowest)", "user_rating", False),
 ]
 _SORT_BY_ID = {o[0]: o for o in SORT_OPTIONS}
 
@@ -41,6 +43,8 @@ def matches(movie: dict, flt: Filter, membership: dict[int, set[int]], progress=
         return movie["status"] in ("ambiguous", "not_found")
     if kind == "collection":
         return movie["id"] in membership.get(value, ())
+    if kind == "stars":      # the user's own 1-5 star rating
+        return movie.get("user_rating") == value
     if kind == "genre":
         return value in movie["genres"]
     if kind == "decade":
@@ -66,6 +70,8 @@ def _sort_value(movie: dict, field: str):
         return movie["sort_title"]
     if field == "year":
         return movie.get("year") or movie.get("year_guess")
+    if field == "user_rating":
+        return movie.get("user_rating") or None   # unrated movies go last
     if field == "rating":
         return movie.get("rating") if movie.get("votes") else None
     return movie["added_at"]
@@ -89,6 +95,7 @@ def sort_movies(movies: list[dict], sort_id: str) -> list[dict]:
 def sidebar_counts(movies: list[dict], progress=None) -> dict:
     genres: Counter = Counter()
     decades: Counter = Counter()
+    stars: Counter = Counter(m["user_rating"] for m in movies if m.get("user_rating"))
     for m in movies:
         genres.update(m["genres"])
         d = decade_of(m)
@@ -104,4 +111,5 @@ def sidebar_counts(movies: list[dict], progress=None) -> dict:
         "review": sum(m["status"] in ("ambiguous", "not_found") for m in movies),
         "genres": sorted(genres.items(), key=lambda kv: (-kv[1], kv[0])),
         "decades": sorted(decades.items(), reverse=True),
+        "stars": sorted(stars.items(), reverse=True),
     }

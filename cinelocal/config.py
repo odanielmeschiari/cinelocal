@@ -61,6 +61,7 @@ DEFAULT_SETTINGS = {
     "player_command": "",
     "audio_language": "",     # "" = whatever the file defaults to, or a key of TRACK_LANGUAGES
     "subtitle_language": "",  # "" = file default, "off" = no subtitles, or a key of TRACK_LANGUAGES
+    "track_choices": {},      # file path -> audio/subtitle track names picked by hand in the player
     "default_player": "",     # "builtin", "external" or "" (= external only if a command is set)
     "player_prefs": {},       # volume and picture settings remembered between movies
     "resume": {},             # file path -> position (ms) where it stopped

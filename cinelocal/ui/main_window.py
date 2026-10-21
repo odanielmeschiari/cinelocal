@@ -313,6 +313,8 @@ class MainWindow(QMainWindow):
             return self.service.collection_name(value)
         if kind == "decade":
             return f"{value}s"
+        if kind == "stars":
+            return f"My rating: {'★' * value}"
         return str(value)
 
     def _rebuild_sidebar(self) -> None:
@@ -352,7 +354,7 @@ class MainWindow(QMainWindow):
         self.continue_row.row.movie_model.refresh_movie(movie_id)
         if self.flt[0] == "all" and not self.query:
             self._home_timer.start()
-        if self.flt[0] in ("favorites", "watchlist", "watched", "review") or (
+        if self.flt[0] in ("favorites", "watchlist", "watched", "review", "stars") or (
                 self.flt[0] == "continue" and self._player is None):
             self.refresh_view()   # the movie may have entered/left the current section
         self._sidebar_timer.start()
@@ -443,6 +445,8 @@ class MainWindow(QMainWindow):
         page.apply_prefs(self.service.settings.get("player_prefs") or {})
         page.set_track_languages(self.service.settings.get("audio_language"),
                                  self.service.settings.get("subtitle_language"))
+        page.set_saved_tracks((self.service.settings.get("track_choices") or {}).get(movie["path"], {}))
+        page.tracks_remembered.connect(self.service.remember_tracks)
         page.external_requested.connect(lambda: self._open_external(self._playing_id))
         self._player, self._player_origin = page, self.stack.currentWidget()
         self.stack.addWidget(page)

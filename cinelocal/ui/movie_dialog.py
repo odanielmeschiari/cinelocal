@@ -1,7 +1,7 @@
 """Movie page with its metadata (poster, overview, rating, cast...) and actions."""
 from __future__ import annotations
 
-from PySide6.QtCore import QUrl, Qt, Signal
+from PySide6.QtCore import QEvent, QUrl, Qt, Signal
 from PySide6.QtGui import (QColor, QDesktopServices, QKeySequence, QLinearGradient, QPainter,
                            QPixmap, QShortcut)
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox, QPushButton,
@@ -73,7 +73,7 @@ class MovieDialog(QWidget):
         self.setWindowTitle(service.by_id[movie_id]["display_title"])
         self._build()
         QShortcut(QKeySequence("Esc"), self, activated=self._escape)
-        QShortcut(QKeySequence.Back, self, activated=self.back_requested.emit)
+        QShortcut(QKeySequence.Back, self, activated=self._leave)
         self._populate()
         service.movie_changed.connect(self._on_movie_changed)
 
@@ -84,7 +84,7 @@ class MovieDialog(QWidget):
         page.setSpacing(14)
         self.back_btn = QPushButton("←  Back")
         self.back_btn.setToolTip("Back to the list (Esc)")
-        self.back_btn.clicked.connect(self.back_requested.emit)
+        self.back_btn.clicked.connect(self._leave)
         page.addWidget(self.back_btn, 0, Qt.AlignLeft)
         root = QHBoxLayout()
         root.setSpacing(30)
@@ -138,6 +138,7 @@ class MovieDialog(QWidget):
         self.comment.setAcceptRichText(False)
         self.comment.setPlaceholderText("Write your own comments about this movie…")
         self.comment.setFixedHeight(100)
+        self.comment.installEventFilter(self)   # the comment is also saved when the field loses focus
         self.save_comment_btn = QPushButton("Save comment")
         self.save_comment_btn.setEnabled(False)
         self.save_comment_btn.clicked.connect(self._save_comment)
@@ -306,11 +307,24 @@ class MovieDialog(QWidget):
         self._backdrop_scaled = None
         super().resizeEvent(event)
 
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self.comment and event.type() == QEvent.FocusOut:
+            self._autosave()
+        return super().eventFilter(obj, event)
+
+    def _autosave(self) -> None:
+        if self.comment.document().isModified():
+            self._save_comment()
+
+    def _leave(self) -> None:
+        self._autosave()
+        self.back_requested.emit()
+
     def _escape(self) -> None:
         if self.comment.hasFocus():   # Esc while typing a comment only leaves the field
             self.comment.clearFocus()
         else:
-            self.back_requested.emit()
+            self._leave()
 
     # -- actions ---------------------------------------------------------------------------------
     def _set_rating(self, value: int) -> None:

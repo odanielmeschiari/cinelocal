@@ -59,6 +59,11 @@ class Sidebar(QTreeWidget):
         for c in collections:
             self._entry(c["name"], ("collection", c["id"]), len(membership.get(c["id"], ())))
 
+        if counts["stars"]:
+            self._header("MY RATING")
+            for n, count in counts["stars"]:
+                self._entry("★" * n, ("stars", n), count)
+
         if counts["genres"]:
             self._header("GENRES")
             for name, n in counts["genres"]:

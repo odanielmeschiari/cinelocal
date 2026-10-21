@@ -1,7 +1,6 @@
 """Built-in player, based on libVLC (python-vlc). Appears inside the main window."""
 from __future__ import annotations
 
-import re
 import sys
 import time
 
@@ -10,7 +9,7 @@ from PySide6.QtGui import QCursor, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QApplication, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
                                QSizePolicy, QSlider, QStyle, QToolTip, QVBoxLayout, QWidget, QWidgetAction)
 
-from ..config import TRACK_LANGUAGES
+from ..tracks import choose_track, track_name as _track_name
 
 SAVE_EVERY_MS = 5000      # how often the playback position is saved
 PREFS_DELAY_MS = 800       # waits for volume/adjustments to stop changing before saving
@@ -51,10 +50,6 @@ def _clock(ms: int) -> str:
     return f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
 
 
-def _track_name(name) -> str:
-    return name.decode("utf-8", "replace") if isinstance(name, bytes) else str(name)
-
-
 class _SeekSlider(QSlider):
     length_ms = 0   # movie duration, updated by the player
 
@@ -84,6 +79,7 @@ class VlcPlayerPage(QWidget):
     progress = Signal(str, int, int)  # path, position (ms), duration (ms); position 0 = clear
     finished = Signal(str)            # passed 95%: mark as watched
     ended = Signal(str)               # the video reached the end
+    tracks_remembered = Signal(str, dict)   # path, audio/subtitle track names picked by hand
     prefs_changed = Signal(dict)      # volume and picture adjustments, to remember for the next movies
 
     def __init__(self, title: str, parent=None):
@@ -100,6 +96,7 @@ class VlcPlayerPage(QWidget):
         self._chosen_audio = self._chosen_spu = None
         self._want_audio = self._want_spu = ""   # preferred languages from the settings
         self._lang_tries = 0             # ticks left to look for those tracks
+        self._saved = {}                 # tracks picked by hand for this file in an earlier session
         self._chrome_hidden = False
         self._last_pos = QCursor.pos()
         self._last_activity = time.monotonic()
@@ -224,48 +221,55 @@ class VlcPlayerPage(QWidget):
 
     def _fill_audio_menu(self, menu: QMenu) -> None:
         self._fill_tracks(menu, self._mp.audio_get_track_description() or [],
-                          self._mp.audio_get_track(), self._choose_audio)
+                          self._mp.audio_get_track(), self._pick_audio)
 
     def _fill_subtitle_menu(self, menu: QMenu) -> None:
         self._fill_tracks(menu, self._mp.video_get_spu_description() or [],
-                          self._mp.video_get_spu(), self._choose_subtitle)
+                          self._mp.video_get_spu(), self._pick_subtitle)
 
     def set_track_languages(self, audio: str, subtitles: str) -> None:
         """Preferred audio and subtitle languages ('' = file default, subtitles also 'off')."""
         self._want_audio, self._want_spu = audio or "", subtitles or ""
         self._lang_tries = 40 if (self._want_audio or self._want_spu) else 0
 
-    @staticmethod
-    def _match_track(code: str, tracks):
-        aliases = TRACK_LANGUAGES[code][1]
-        for track_id, name in tracks or []:
-            if track_id >= 0 and any(w in aliases for w in re.findall(r"\w+", _track_name(name).lower())):
-                return track_id
-        return None
+    def set_saved_tracks(self, saved: dict) -> None:
+        """Tracks picked by hand the last time this file played; they win over the language settings."""
+        self._saved = dict(saved or {})
+        if self._saved:
+            self._lang_tries = 40
 
     def _apply_track_languages(self) -> None:
-        """Picks the preferred tracks once VLC lists them (never overrides a manual choice)."""
+        """Picks the remembered/preferred tracks once VLC lists them (never overrides a choice made now)."""
         done = True
-        if self._chosen_audio is None and self._want_audio in TRACK_LANGUAGES:
-            track = self._match_track(self._want_audio, self._mp.audio_get_track_description())
-            if track is None:
+        for kind, tracks, chosen, language, choose in (
+                ("audio", self._mp.audio_get_track_description(), self._chosen_audio,
+                 self._want_audio, self._choose_audio),
+                ("spu", self._mp.video_get_spu_description(), self._chosen_spu,
+                 self._want_spu, self._choose_subtitle)):
+            if chosen is not None or not (self._saved.get(kind) or language):
+                continue
+            track, final = choose_track(tracks, self._saved.get(kind, ""), language, self._want_audio)
+            if track is not None:
+                choose(track)
+            elif not final:
                 done = False
-            else:
-                self._choose_audio(track)
-        if self._chosen_spu is None and self._want_spu:
-            tracks = self._mp.video_get_spu_description() or []
-            if self._want_spu == "off":
-                if any(t >= 0 for t, _n in tracks):   # only once the file's subtitles are known
-                    self._choose_subtitle(-1)
-                else:
-                    done = False
-            elif self._want_spu in TRACK_LANGUAGES:
-                track = self._match_track(self._want_spu, tracks)
-                if track is None:
-                    done = False
-                else:
-                    self._choose_subtitle(track)
         self._lang_tries = self._lang_tries - 1 if not done else 0
+
+    def _remember_track(self, kind: str, track_id: int) -> None:
+        tracks = (self._mp.audio_get_track_description() if kind == "audio"
+                  else self._mp.video_get_spu_description()) or []
+        name = next((_track_name(n) for t, n in tracks if t == track_id), None)
+        if name is not None and self._path:
+            self._saved[kind] = name
+            self.tracks_remembered.emit(self._path, dict(self._saved))
+
+    def _pick_audio(self, track_id: int) -> None:   # chosen from the menu
+        self._choose_audio(track_id)
+        self._remember_track("audio", track_id)
+
+    def _pick_subtitle(self, track_id: int) -> None:
+        self._choose_subtitle(track_id)
+        self._remember_track("spu", track_id)
 
     def _choose_audio(self, track_id: int) -> None:
         self._chosen_audio = track_id
