@@ -1,11 +1,34 @@
 # PyInstaller recipe for a single-file build:  pyinstaller --noconfirm cinelocal.spec
-# The output name must match ASSETS in cinelocal/updater.py.
+# Install VLC first: its libraries are bundled so the built-in player works without VLC installed.
+import os
 import sys
+from pathlib import Path
 
 win = sys.platform == "win32"
 
+
+def vlc_binaries():
+    """libVLC and its plugins. Looked up in $VLC_DIR (the VLC folder on Windows, the library folder on
+    Linux) or in the usual place; if VLC is not found the build still works, without the built-in player."""
+    if win:
+        root = Path(os.environ.get("VLC_DIR", r"C:\Program Files\VideoLAN\VLC"))
+        libs, plugins = [root / "libvlc.dll", root / "libvlccore.dll"], root / "plugins"
+    else:
+        root = Path(os.environ.get("VLC_DIR", "/usr/lib/x86_64-linux-gnu"))
+        libs, plugins = [root / "libvlc.so.5", root / "libvlccore.so.9"], root / "vlc" / "plugins"
+    if not (all(lib.is_file() for lib in libs) and plugins.is_dir()):
+        print("WARNING: VLC not found - building without the built-in player libraries")
+        return []
+    found = [(str(lib), ".") for lib in libs]
+    for plugin in plugins.rglob("*"):
+        if plugin.suffix in (".dll", ".so"):
+            found.append((str(plugin), str(Path("vlc/plugins") / plugin.parent.relative_to(plugins))))
+    return found
+
+
 a = Analysis(
     ["main.py"],
+    binaries=vlc_binaries(),
     datas=[("assets/cinelocal.svg", "assets")],
     hiddenimports=["PySide6.QtSvg"],   # for the .svg window icon
 )

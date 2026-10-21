@@ -1,8 +1,10 @@
 """Built-in player, based on libVLC (python-vlc). Appears inside the main window."""
 from __future__ import annotations
 
+import os
 import sys
 import time
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QCursor, QGuiApplication, QKeySequence, QShortcut
@@ -27,6 +29,15 @@ _vlc = None      # (vlc module, Instance) after the first successful load
 _error = ""      # reason for the failure (kept so we don't try again)
 
 
+def _use_bundled_vlc() -> None:
+    """In the packaged executable, points python-vlc and libVLC to the copy bundled by cinelocal.spec."""
+    root = Path(getattr(sys, "_MEIPASS", ""))
+    lib = root / ("libvlc.dll" if sys.platform == "win32" else "libvlc.so.5")
+    if getattr(sys, "frozen", False) and lib.is_file():
+        os.environ.setdefault("PYTHON_VLC_LIB_PATH", str(lib))
+        os.environ.setdefault("VLC_PLUGIN_PATH", str(root / "vlc" / "plugins"))
+
+
 def unavailable_reason() -> str:
     """Why the built-in player cannot be used ('' = it can)."""
     global _vlc, _error
@@ -34,6 +45,7 @@ def unavailable_reason() -> str:
         return "The built-in player needs X11 or XWayland (no X server found for this session)."
     if _vlc is None and not _error:
         try:
+            _use_bundled_vlc()
             import vlc
             instance = vlc.Instance()
             if instance is None:

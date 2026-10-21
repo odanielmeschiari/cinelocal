@@ -4,13 +4,13 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import (QEasingCurve, QParallelAnimationGroup, QPoint,
-                            QPropertyAnimation, Qt, QTimer, QUrl)
-from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QApplication, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
+                            QPropertyAnimation, Qt, QTimer)
+from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
                                QLineEdit, QMainWindow, QMenu, QMessageBox, QProgressBar,
                                QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
-from .. import filters, updater
+from .. import filters
 from ..service import LibraryService
 from .dialogs import (ask_new_collection, ask_rename_collection, confirm_delete_collection,
                       populate_collections_menu)
@@ -233,7 +233,6 @@ class MainWindow(QMainWindow):
             self.service.start_scan()
         else:
             self.stack.setCurrentIndex(0)
-        self._check_updates()
 
     def _choose_folder(self) -> None:
         import os
@@ -660,36 +659,6 @@ class MainWindow(QMainWindow):
         dialog.exec()
         if dialog.selected_tmdb_id:
             self.service.apply_match(movie_id, dialog.selected_tmdb_id)
-
-    # ----------------------------------------------------------------------- updates --
-    def _check_updates(self) -> None:
-        updater.cleanup()
-        if updater.enabled() and self.service.settings.get("auto_update"):
-            self.service.run_async(updater.check, self._offer_update)
-
-    def _offer_update(self, release) -> None:
-        if release is None:
-            return
-        if not updater.can_self_update(release):
-            answer = QMessageBox.question(
-                self, "CineLocal", f"CineLocal {release.version} is available. Open the download page?")
-            if answer == QMessageBox.Yes:
-                QDesktopServices.openUrl(QUrl(release.page))
-            return
-        answer = QMessageBox.question(
-            self, "CineLocal", f"CineLocal {release.version} is available. Update now?\n"
-                               "The app will restart when the download finishes.")
-        if answer != QMessageBox.Yes:
-            return
-        self.statusBar().showMessage(f"Downloading CineLocal {release.version}…")
-        self.service.run_async(
-            lambda: updater.install(release), lambda _: self._restart_app(),
-            lambda exc: (self.statusBar().clearMessage(),
-                         QMessageBox.warning(self, "Update failed", f"{exc}\n\nDownload it manually: {release.page}")))
-
-    def _restart_app(self) -> None:
-        updater.restart()
-        QApplication.quit()
 
     def closeEvent(self, event) -> None:
         self._discard_player()
