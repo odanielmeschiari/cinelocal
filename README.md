@@ -4,6 +4,8 @@ Local movie browser for Linux and Windows, with a Netflix-style black and blue l
 Fast and offline: the internet is only used to download posters and information for new movies
 (or when you force an update).
 
+![Home screen](home.png "Home Screen")
+
 ## Download (no installation)
 
 No need to download the source zip: get just the file for your system from the [latest release](../../releases/latest):
@@ -127,6 +129,9 @@ saved positions, with no way back), delete these folders yourself:
   right-click opens the menu (favorite, watched, collections, update, fix match).
 - **Instant search** (`Ctrl+F`) by title, actor, director or genre; **sorting** by title, year,
   rating or recently added.
+
+  ![Filters](filters.png "Filters")
+  
 - **Sidebar**: All, Favorites, Watched/Unwatched, **Collections** (a movie can be in several),
   Genres and Years (decades). Right-click a collection to rename or delete it.
 - **Watch** opens the **built-in player** (based on libVLC): `Space` pauses, `←`/`→` skip 10 s, `↑`/`↓` change the
@@ -142,12 +147,18 @@ saved positions, with no way back), delete these folders yourself:
   to open it in the other one. The built-in player remembers where you stopped and resumes from there, even after closing the app.
   In the player, the **⚙** gear gathers **Audio** and **Subtitles** (tracks that come in the file) and **Picture**
   (brightness, contrast, color and sharpness). In fullscreen, the controls and the pointer disappear after a few seconds without moving the mouse.
+
+  ![Player](player.png "Player")
+  
 - **Series**: files with `S01E02`, `1x02` or `Season 1 Episode 2` in the name (or inside `Season N` folders)
   are grouped under a single series poster, which opens the list of seasons and episodes, each with its own metadata.
   (Portuguese names such as `Temporada 1 Episódio 2` are recognized too.)
   Series appear with a “Series” badge on the grid and are left out of collections.
+
+  ![Series](series.png "Series")
+  
 - **Watchlist**: movies you want to watch in the future. Add them with the `Watchlist` button in the details or from the
-  right-click menu; the list lives in the sidebar.
+  right-click menu; the list lives in the sidebar.  
 - **Metadata source** (Settings): TMDB (default) or OMDb. OMDb is free (1,000 requests/day), only has data in
   English and provides no backdrop image or trailer. When you switch sources, use **Metadata → Force update**
   to re-identify the movies already downloaded.
