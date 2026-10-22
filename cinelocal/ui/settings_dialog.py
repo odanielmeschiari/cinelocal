@@ -20,6 +20,10 @@ _HELP = {
              'omdbapi.com/apikey</a> and activate it with the link sent to your email. OMDb only has English '
              'data and provides no backdrop image or trailer.'),
 }
+_HELP_SUBTITLES = ('With a key, the subtitle of each new movie is downloaded automatically, in the language above '
+                   '(or the metadata language), and saved next to the video. Free: create an account at '
+                   '<a href="https://www.opensubtitles.com/en/consumers">opensubtitles.com</a> and register an API '
+                   'consumer. There is a daily download limit; what is left is downloaded on the next scan.')
 
 
 class SettingsDialog(QDialog):
@@ -105,6 +109,16 @@ class SettingsDialog(QDialog):
         self.subtitle_language.insertItem(2, "Forced only (foreign-language parts)", "forced")
         self.subtitle_language.setCurrentIndex(max(0, self.subtitle_language.findData(s.get("subtitle_language"))))
         form.addRow("Subtitle language", self.subtitle_language)
+
+        self.opensubtitles_key = QLineEdit(s.get("opensubtitles_api_key"))
+        self.opensubtitles_key.setEchoMode(QLineEdit.Password)
+        self.opensubtitles_key.setPlaceholderText("Optional: OpenSubtitles API key")
+        form.addRow("OpenSubtitles key", self.opensubtitles_key)
+        opensubtitles_help = QLabel(_HELP_SUBTITLES)
+        opensubtitles_help.setOpenExternalLinks(True)
+        opensubtitles_help.setWordWrap(True)
+        opensubtitles_help.setObjectName("muted")
+        form.addRow("", opensubtitles_help)
 
         self.player_edit = QLineEdit(s.get("player_command"))
         self.player_edit.setPlaceholderText("Empty = system default player")
@@ -217,4 +231,5 @@ class SettingsDialog(QDialog):
             "default_player": self.default_player.currentData(),
             "audio_language": self.audio_language.currentData(),
             "subtitle_language": self.subtitle_language.currentData(),
+            "opensubtitles_api_key": self.opensubtitles_key.text().strip(),
         }

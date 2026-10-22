@@ -2,7 +2,7 @@
 
 Local movie browser for Linux and Windows.
 Fast and offline: the internet is only used to download posters and metadata for new movies
-(or when you force an update).
+(or when you force an update) and, if you set an OpenSubtitles key, their subtitles.
 
 ![Home screen](examples/home.png "Home Screen")
 
@@ -193,6 +193,11 @@ saved positions, with no way back), delete these folders yourself:
 - **Metadata**: fetch pending items, force an update of all (keeps confirmed matches)
   or review movies without a match. When the app is not sure (remakes, ambiguous title, nothing
   found), the movie gets a **Review** badge and you pick the right one in a dialog.
+- **Automatic subtitles** (optional): paste a free [OpenSubtitles](https://www.opensubtitles.com/en/consumers) API key in
+  Settings and the subtitle of every new movie or episode is downloaded in the background, in the **Subtitle language**
+  (or the metadata language, if that is left on "File default"). It is saved next to the video (`Movie.pt-BR.srt`), so it
+  loads every time you watch it again, in any player. Videos that already have a subtitle are skipped. The free account has a
+  daily download limit: what is left waits and is downloaded on the next scan.
 - Metadata **language**: default `en-US` (English is used as a fallback when a translation is missing);
   change it in Settings.
 
@@ -220,6 +225,7 @@ cinelocal/
   library.py                syncs disk ↔ database (new, removed, moved)
   tmdb.py                   TMDB HTTP client
   omdb.py                   OMDb HTTP client (returns the same shape as TMDB)
+  opensubtitles.py          OpenSubtitles HTTP client: finds and saves subtitles next to the videos
   providers.py              picks the client for the configured source
   parsing.py                parses responses and picks the best match
   metadata_service.py       identifies the movie, downloads metadata and images

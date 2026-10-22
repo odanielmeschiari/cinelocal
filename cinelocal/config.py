@@ -62,6 +62,8 @@ DEFAULT_SETTINGS = {
     "audio_language": "",     # "" = whatever the file defaults to, or a key of TRACK_LANGUAGES
     "subtitle_language": "",  # "" = file default, "off" = no subtitles, or a key of TRACK_LANGUAGES
     "track_choices": {},      # file path -> audio/subtitle track names picked by hand in the player
+    "opensubtitles_api_key": "",   # optional: with it, new movies get their subtitle downloaded automatically
+    "subtitle_queue": [],     # video paths waiting for that download (new files, or the daily limit was hit)
     "default_player": "",     # "builtin", "external" or "" (= external only if a command is set)
     "player_prefs": {},       # volume and picture settings remembered between movies
     "resume": {},             # file path -> position (ms) where it stopped

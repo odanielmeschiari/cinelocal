@@ -3,18 +3,20 @@ from __future__ import annotations
 
 import copy
 import os
+import threading
 import time
 import traceback
 
 from PySide6.QtCore import QObject, Signal
 
 from . import images, player
-from .config import DEFAULT_SETTINGS, Settings
+from .config import DEFAULT_SETTINGS, TRACK_LANGUAGES, Settings
 from .db import Database
 from .library import sync_library
 from .metadata_service import find_candidates, find_series_candidates, process_movie, process_series
 from .providers import make_client, same_provider
 from .movie_fields import decorate
+from .opensubtitles import OpenSubtitlesClient, OpenSubtitlesError, fetch_subtitle
 from .workers import FuncWorker, UpdateWorker
 
 
@@ -39,6 +41,8 @@ class LibraryService(QObject):
         self._update_worker: UpdateWorker | None = None
         self._jobs: set[FuncWorker] = set()
         self._scanning = False
+        self._subtitling = False            # subtitles being downloaded in the background
+        self._subtitle_stop = threading.Event()
 
     # -- estado ----------------------------------------------------------------
     @property
@@ -182,6 +186,7 @@ class LibraryService(QObject):
             images.delete_images(series_id)
         self.library_changed.emit()
         self.scan_finished.emit(len(added), len(removed))
+        self.download_subtitles(added)
         if not self.updating:
             self.busy_changed.emit(False, "")
         if self.has_key and self._pending():
@@ -191,6 +196,79 @@ class LibraryService(QObject):
         self._scanning = False
         self.busy_changed.emit(False, "")
         self._report(exc)
+
+    # -- subtitles (OpenSubtitles) --------------------------------------------------------
+    def _subtitle_languages(self) -> str:
+        """OpenSubtitles language(s) to download ('' = none): the subtitle language of the settings or, while it's
+        left on "file default", the metadata language."""
+        choice = self.settings.get("subtitle_language")
+        if choice in ("off", "forced"):
+            return ""
+        code = choice if choice in TRACK_LANGUAGES else self.language[:2].lower()
+        return "pt-br,pt-pt" if code == "pt" else code
+
+    def download_subtitles(self, added: list[int]) -> None:
+        """Queues the new files and downloads their subtitles in the background (only with an OpenSubtitles key).
+        They are saved next to the videos, so they load every time a movie is played. The queue is kept in the
+        settings: what is left when the daily download limit is hit is tried again on the next scan."""
+        key = (self.settings.get("opensubtitles_api_key") or "").strip()
+        languages = self._subtitle_languages()
+        if not key or not languages:
+            return
+        queue = list(self.settings.get("subtitle_queue") or [])
+        for movie_id in added:
+            path = (self.by_id.get(movie_id) or {}).get("path")
+            if path and path not in queue:
+                queue.append(path)
+        entries = [(path, self.by_path(path)) for path in queue]
+        entries = [(path, m) for path, m in entries if m is not None]   # files that left the library are dropped
+        self.settings.update(subtitle_queue=[path for path, _m in entries])
+        if not entries or self._subtitling:
+            return
+        jobs = [(path, m["clean_title"], m["year_guess"],
+                 m["season"] if m.get("kind") == "episode" else None,
+                 m["episode"] if m.get("kind") == "episode" else None) for path, m in entries]
+        client = OpenSubtitlesClient(key)
+        self._subtitling = True
+        self._subtitle_stop.clear()
+
+        def job():
+            handled, saved, failed, problem = [], 0, 0, None
+            for path, title, year, season, episode in jobs:
+                if self._subtitle_stop.is_set():
+                    break
+                try:
+                    saved += bool(fetch_subtitle(client, path, title, year, languages, season, episode))
+                except OpenSubtitlesError as exc:
+                    if exc.kind != "other":   # key rejected, limit reached or offline: the rest waits
+                        problem = exc
+                        break
+                except OSError:   # unreadable video or folder that cannot be written to
+                    failed += 1
+                handled.append(path)
+            return handled, saved, failed, problem
+
+        def done(result):
+            handled, saved, failed, problem = result
+            self._subtitling = False
+            handled = set(handled)
+            self.settings.update(subtitle_queue=[p for p in self.settings.get("subtitle_queue") or []
+                                                 if p not in handled])
+            notes = [f"{saved} subtitle(s) downloaded."] if saved else []
+            if failed:
+                notes.append(f"{failed} could not be saved (is the movies folder writable?).")
+            if problem is not None and problem.kind == "auth":
+                self.error.emit(str(problem))
+            elif problem is not None:
+                notes.append(f"{problem} The rest will be tried on the next scan.")
+            if notes:
+                self.message.emit(" ".join(notes))
+
+        def failed_job(exc):
+            self._subtitling = False
+            self._report(exc)
+
+        self.run_async(job, done, failed_job)
 
     # -- metadata update ----------------------------------------------------
     def start_update(self, mode: str = "pending", ids: list[int] | None = None) -> bool:
@@ -506,6 +584,7 @@ class LibraryService(QObject):
 
     # -- encerramento ----------------------------------------------------------------------
     def shutdown(self) -> None:
+        self._subtitle_stop.set()
         if self._update_worker:
             self._update_worker.cancel()
             self._update_worker.wait(5000)
