@@ -52,6 +52,9 @@ QPushButton#iconBtn:pressed { background: $surface3; }
 QPushButton#plainIcon { background: transparent; border: none; padding: 0 6px; font-size: 26pt; }
 QPushButton#plainIcon:hover { background: transparent; color: $accent_hover; }
 QPushButton#plainIcon:pressed { background: transparent; color: $accent; }
+QPushButton#bigIcon { background: transparent; border: none; padding: 0 10px; font-size: 22pt; }
+QPushButton#bigIcon:hover { background: transparent; color: $accent_hover; }
+QPushButton#bigIcon:checked { background: transparent; color: $accent_hover; }
 QPushButton::menu-indicator, QToolButton::menu-indicator { image: none; width: 0; }
 
 QTreeWidget#sidebar { background: $surface; border: none; outline: 0; padding: 10px 6px; }
