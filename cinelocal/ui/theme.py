@@ -26,11 +26,11 @@ QMainWindow, QDialog, QStackedWidget { background: $bg; }
 QWidget#page, QWidget#content { background: $bg; }
 QToolTip { background: $surface2; color: $text; border: 1px solid $border; padding: 4px 8px; }
 
-QLineEdit, QComboBox, QTextEdit {
+QLineEdit, QComboBox, QTextEdit, QSpinBox, QDoubleSpinBox {
     background: $surface; border: 1px solid $border; border-radius: 9px;
     padding: 8px 12px; selection-background-color: $accent;
 }
-QLineEdit:focus, QComboBox:focus, QTextEdit:focus { border-color: $accent; }
+QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: $accent; }
 QComboBox::drop-down { border: none; width: 26px; }
 QComboBox QAbstractItemView {
     background: $surface2; border: 1px solid $border; outline: 0;
@@ -91,6 +91,10 @@ QStatusBar { background: $surface; border-top: 1px solid $border; }
 QStatusBar::item { border: none; }
 QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid $border; background: $surface; }
 QCheckBox::indicator:checked { background: $accent; border-color: $accent; }
+
+QWidget#scrim { background: rgba(0, 0, 0, 170); }
+QFrame#overlayPanel { background: $surface; border: 1px solid $border; border-radius: 14px; }
+QFrame#overlayPanel QLabel { background: transparent; }
 
 QFrame#infobar { background: $accent_dark; border-radius: 10px; }
 QLabel#muted { color: $muted; }

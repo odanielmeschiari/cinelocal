@@ -86,14 +86,14 @@ CREATE TABLE IF NOT EXISTS collection_movies (
 METADATA_COLUMNS = {
     "tmdb_id", "title", "original_title", "year", "release_date", "overview", "tagline",
     "runtime", "rating", "votes", "director", "trailer_key", "has_poster", "has_backdrop",
-    "status",
+    "status", "certification",
 }
 FLAG_COLUMNS = {"watched", "favorite", "watchlist"}
 EPISODE_COLUMNS = {"ep_title", "ep_overview", "ep_air_date", "ep_runtime", "ep_rating"}
-# Columns added after the first version, for movies and series: the user's review and the list of fields (and
-# "poster") edited by hand, which a metadata update must not overwrite.
+# Columns added after the first version, for movies and series: the user's review, the list of fields (and
+# "poster") edited by hand, which a metadata update must not overwrite, and the age rating.
 _REVIEW_COLUMNS = (("user_rating", "INTEGER DEFAULT 0"), ("user_comment", "TEXT DEFAULT ''"),
-                   ("custom_json", "TEXT DEFAULT '[]'"))
+                   ("custom_json", "TEXT DEFAULT '[]'"), ("certification", "TEXT"))
 # Series/episode columns added to databases created by earlier versions.
 _MIGRATIONS = (
     ("kind", "TEXT DEFAULT 'movie'"), ("series_id", "INTEGER"), ("season", "INTEGER"),
@@ -329,7 +329,7 @@ class Database:
                     run(f"UPDATE {table} SET status = 'pending', tmdb_id = NULL, title = NULL, original_title = NULL,"
                         " year = NULL, release_date = NULL, overview = NULL, tagline = NULL, runtime = NULL,"
                         " rating = NULL, votes = NULL, genres_json = '[]', director = NULL, cast_json = '[]',"
-                        f" trailer_key = NULL, has_poster = 0, has_backdrop = 0, custom_json = '[]', updated_at = ?{extra}", (time.time(),))
+                        f" trailer_key = NULL, has_poster = 0, has_backdrop = 0, custom_json = '[]', certification = NULL, updated_at = ?{extra}", (time.time(),))
             if history and not everything:
                 run("UPDATE movies SET watched = 0")
             if favorites and not everything:

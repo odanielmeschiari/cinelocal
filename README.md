@@ -129,6 +129,10 @@ saved positions, with no way back), delete these folders yourself:
   right-click opens the menu (favorite, watched, collections, update, fix match).
 - **Instant search** (`Ctrl+F`) by title, actor, director or genre; **sorting** by title, year,
   rating or recently added.
+- **Advanced search** (magnifier button next to the search box): combine filters on type, genre,
+  year (range or a single year), TMDB rating and votes, runtime, age rating, directors, cast,
+  favorites/watchlist/watched, your collections and ratings, and date added. Filters can be saved
+  and reused. Age ratings are downloaded with the metadata (use *Force update* for existing movies).
 
   ![Filters](examples/filters.png "Filters")
   

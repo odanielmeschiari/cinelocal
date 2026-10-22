@@ -34,6 +34,19 @@ def _tv_as_movie(raw: dict) -> dict:
     return out
 
 
+def _certification(raw: dict, region: str) -> str | None:
+    """Age rating for `region` (or the US) from release_dates (movies) or content_ratings (series)."""
+    block = raw.get("release_dates") or raw.get("content_ratings") or {}
+    for country in dict.fromkeys((region, "US")):
+        for entry in block.get("results") or []:
+            if entry.get("iso_3166_1") == country:
+                found = entry.get("rating") or next(
+                    (r["certification"] for r in entry.get("release_dates") or [] if r.get("certification")), "")
+                if found:
+                    return found
+    return None
+
+
 class TMDBClient:
     def __init__(self, api_key: str, language: str = "en-US", timeout: int = 15):
         self.api_key = (api_key or "").strip()
@@ -41,6 +54,7 @@ class TMDBClient:
         self.timeout = timeout
         # A v3 key has 32 characters; the v4 read token is a much longer JWT.
         self._use_bearer = len(self.api_key) > 40
+        self._region = (self.language.split("-") + ["US"])[1].upper()   # "pt-BR" -> "BR": country of the age rating
 
     def _request(self, url: str, retries: int = 2) -> bytes:
         if not self.api_key:
@@ -94,12 +108,14 @@ class TMDBClient:
 
     def movie_details(self, tmdb_id: int, language: str | None = None) -> dict:
         lang = language or self.language
-        return self._get_json(
+        raw = self._get_json(
             f"/movie/{tmdb_id}",
             language=lang,
-            append_to_response="credits,videos",
+            append_to_response="credits,videos,release_dates",
             include_video_language=f"{lang[:2]},en,null",
         )
+        raw["certification"] = _certification(raw, self._region)
+        return raw
 
     def search_tv(self, query: str, year: int | None = None) -> list[dict]:
         data = self._get_json("/search/tv", query=query, first_air_date_year=year,
@@ -108,12 +124,14 @@ class TMDBClient:
 
     def tv_details(self, tmdb_id: int, language: str | None = None) -> dict:
         lang = language or self.language
-        return _tv_as_movie(self._get_json(
+        raw = self._get_json(
             f"/tv/{tmdb_id}",
             language=lang,
-            append_to_response="credits,videos",
+            append_to_response="credits,videos,content_ratings",
             include_video_language=f"{lang[:2]},en,null",
-        ))
+        )
+        raw["certification"] = _certification(raw, self._region)
+        return _tv_as_movie(raw)
 
     def season(self, tmdb_id: int, number: int, language: str | None = None) -> dict:
         return self._get_json(f"/tv/{tmdb_id}/season/{number}", language=language or self.language)

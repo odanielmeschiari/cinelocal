@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLab
 from .. import filters
 from ..service import LibraryService
 from ..utils import star_text
+from .advanced_search import AdvancedSearch
 from .dialogs import (ask_new_collection, ask_rename_collection, confirm_delete_collection,
                       populate_collections_menu)
 from .grid import CELL_H, MovieFlow
@@ -34,6 +35,7 @@ class MainWindow(QMainWindow):
         self.service = service
         self.flt: filters.Filter = ("all", None)
         self.query = ""
+        self.advanced: dict = {}   # criteria of the advanced search (empty = off)
         self.sort_id = service.settings.get("sort_id")
         self._detail: MovieDialog | None = None
         self._player: VlcPlayerPage | None = None
@@ -110,9 +112,12 @@ class MainWindow(QMainWindow):
         bar = QHBoxLayout()
         bar.setSpacing(8)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search by title, actor, director or genre…  (Ctrl+F)")
+        self.search.setPlaceholderText("Search by title, actor, director or genre…")
         self.search.setClearButtonEnabled(True)
         self.search.setMinimumWidth(320)
+        self.advanced_btn = IconButton("search_advanced", box=TOOL_BOX, size=TOOL_ICON)
+        self.advanced_btn.setToolTip("Advanced search")
+        self.advanced_btn.setCheckable(True)   # lit while advanced filters are active
         self.sort_combo = QComboBox()
         for sort_id, label, *_ in filters.SORT_OPTIONS:
             self.sort_combo.addItem(label, sort_id)
@@ -133,6 +138,7 @@ class MainWindow(QMainWindow):
         settings.setToolTip("Settings (Ctrl+,)")
         settings.clicked.connect(lambda: self.open_settings())
         bar.addWidget(self.search, 1)
+        bar.addWidget(self.advanced_btn)
         bar.addWidget(QLabel("Sort:"))
         bar.addWidget(self.sort_combo)
         bar.addWidget(rescan)
@@ -205,6 +211,7 @@ class MainWindow(QMainWindow):
         self.sidebar.rename_collection_requested.connect(lambda cid: ask_rename_collection(self, s, cid))
         self.sidebar.delete_collection_requested.connect(self._delete_collection)
         self.search.textChanged.connect(self._on_search)
+        self.advanced_btn.clicked.connect(self._open_advanced)
         self.sort_combo.currentIndexChanged.connect(self._on_sort)
         self.grid.movie_opened.connect(self.open_movie)
         self.grid.context_requested.connect(self._context_menu)
@@ -225,7 +232,8 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence.Find, self, activated=self._focus_search)
         QShortcut(QKeySequence("F5"), self, activated=s.start_scan)
         QShortcut(QKeySequence("Ctrl+,"), self, activated=self.open_settings)
-        QShortcut(QKeySequence("Esc"), self.search, activated=self.search.clear)
+        QShortcut(QKeySequence("Esc"), self.search, activated=self.search.clear,
+                  context=Qt.WidgetShortcut)   # only while typing in the search (Esc also closes the overlay)
 
     # ---------------------------------------------------------------------- start --
     def start(self) -> None:
@@ -260,7 +268,7 @@ class MainWindow(QMainWindow):
         """\"Continue watching\" row above \"All movies\"; hidden when empty or outside that screen."""
         s = self.service
         items = []
-        if self.flt[0] == "all" and not self.query:
+        if self.flt[0] == "all" and not self.query and not self.advanced:
             items = filters.filter_movies(s.movies, ("continue", None), s.membership, "", s.progress_of)
             items.sort(key=lambda m: -s.last_played(m))   # the one you watched last comes first
         row = self.continue_row.row
@@ -282,7 +290,7 @@ class MainWindow(QMainWindow):
         bar = self.grid_page.verticalScrollBar()
         position = bar.value()
         visible = filters.filter_movies(self.service.movies, self.flt, self.service.membership,
-                                        self.query, self.service.progress_of)
+                                        self.query, self.service.progress_of, self.advanced)
         visible = filters.sort_movies(visible, self.sort_id)
         if self.flt[0] == "continue":   # the one you watched last comes first
             visible.sort(key=lambda m: -self.service.last_played(m))
@@ -301,7 +309,7 @@ class MainWindow(QMainWindow):
             self.views.setCurrentWidget(self.empty)
 
     def _empty_text(self, total: int) -> str:
-        if self.query:
+        if self.query or self.advanced:
             return "No movies match your search."
         if total == 0:
             return "No movies found in the selected folder.\nUse the Settings button to choose another folder."
@@ -342,6 +350,20 @@ class MainWindow(QMainWindow):
         self.query = text
         self.refresh_view()
 
+    def _open_advanced(self) -> None:
+        s = self.service
+        self.advanced_btn.setChecked(bool(self.advanced))   # the click toggled it; it only shows the filter state
+        overlay = AdvancedSearch(
+            s, self.stack.widget(1), self.advanced,
+            lambda adv: len(filters.filter_movies(s.movies, self.flt, s.membership, self.query,
+                                                  s.progress_of, adv)))
+        overlay.applied.connect(self._on_advanced)
+
+    def _on_advanced(self, criteria: dict) -> None:
+        self.advanced = criteria
+        self.advanced_btn.setChecked(bool(criteria))
+        self.refresh_view()
+
     def _on_sort(self) -> None:
         self.sort_id = self.sort_combo.currentData()
         self.service.settings.update(sort_id=self.sort_id)
@@ -358,9 +380,9 @@ class MainWindow(QMainWindow):
     def _on_movie_changed(self, movie_id: int) -> None:
         self.grid.movie_model.refresh_movie(movie_id)
         self.continue_row.row.movie_model.refresh_movie(movie_id)
-        if self.flt[0] == "all" and not self.query:
+        if self.flt[0] == "all" and not self.query and not self.advanced:
             self._home_timer.start()
-        if self.flt[0] in ("favorites", "watchlist", "watched", "review", "stars") or (
+        if self.flt[0] in ("favorites", "watchlist", "watched", "review", "stars") or self.advanced or (
                 self.flt[0] == "continue" and self._player is None):
             self.refresh_view()   # the movie may have entered/left the current section
         self._sidebar_timer.start()

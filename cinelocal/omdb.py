@@ -110,7 +110,7 @@ class OMDbClient:
         return {
             "id": omdb_id, "title": d.get("Title"), "original_title": d.get("Title"),
             "release_date": iso or (_na(d.get("Year")) or "")[:4] or None,
-            "overview": _na(d.get("Plot")), "tagline": None,
+            "overview": _na(d.get("Plot")), "tagline": None, "certification": _na(d.get("Rated")),
             "runtime": int(runtime.group()) if runtime else None,
             "vote_average": float(rating) if rating else None,
             "vote_count": int(votes) if votes.isdigit() else 0,

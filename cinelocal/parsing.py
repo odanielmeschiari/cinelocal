@@ -107,4 +107,5 @@ def parse_details(raw: dict, fallback: dict | None = None) -> dict:
         "director": ", ".join(dict.fromkeys(directors)) or None,
         "cast": cast,
         "trailer_key": _pick_trailer(videos),
+        "certification": pick("certification"),
     }
