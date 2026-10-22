@@ -1,8 +1,8 @@
 """Pieces shared by the movie and series pages: text style, the user's review box, poster alignment."""
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QColor, QLinearGradient
 from PySide6.QtWidgets import (QHBoxLayout, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget)
 
 from .theme import COLORS
@@ -44,78 +44,6 @@ def cap_offset(label: QLabel) -> int:
     label.ensurePolished()
     metrics = label.fontMetrics()
     return max(0, metrics.ascent() - metrics.capHeight())
-
-
-def _tag_path() -> QPainterPath:
-    path = QPainterPath()
-    points = [(2, 2), (12, 2), (20.6, 10.6), (20.6, 13.4), (13.4, 20.6), (10.6, 20.6), (2, 12)]
-    path.moveTo(*points[0])
-    for point in points[1:]:
-        path.lineTo(*point)
-    path.closeSubpath()
-    path.addEllipse(QPointF(7.2, 7.2), 2, 2)   # the hole of the tag
-    path.setFillRule(Qt.OddEvenFill)
-    path.translate(0.7, 0.7)
-    return path
-
-
-def _book_path() -> QPainterPath:
-    path = QPainterPath()
-    for mirrored in (False, True):   # open book: the left page and its mirror image
-        def x(v: float) -> float:
-            return 24 - v if mirrored else v
-        path.moveTo(x(2), 3)
-        path.lineTo(x(8), 3)
-        path.cubicTo(x(10.2), 3, x(12), 4.8, x(12), 7)
-        path.lineTo(x(12), 21)
-        path.cubicTo(x(12), 19.3, x(10.7), 18, x(9), 18)
-        path.lineTo(x(2), 18)
-        path.closeSubpath()
-    return path
-
-
-def _clapper_path() -> QPainterPath:
-    path = QPainterPath()
-    path.addRoundedRect(QRectF(3, 10, 18, 11), 2, 2)                      # board
-    path.addPolygon(QPolygonF([QPointF(*p) for p in ((3, 10), (3, 7), (21, 3.5), (21, 10), (3, 10))]))   # stick
-    for x in (7.5, 12.5, 17.5):                                            # diagonal stripes of the stick
-        x2 = x + 3
-        path.moveTo(x, 10)
-        path.lineTo(x2, 7 - (x2 - 3) * 3.5 / 18)                           # up to the slanted top edge
-    return path
-
-
-_GLYPHS = {"tag": _tag_path, "book": _book_path, "clapper": _clapper_path}
-
-
-class GlyphButton(QPushButton):
-    """Icon button with the look of the heart / check ones (objectName "bigIcon"), but whose symbol is drawn as a
-    vector shape, so it does not depend on the fonts installed. Checked buttons get a filled symbol."""
-    SIZE = 26   # side (px) of the drawing
-
-    def __init__(self, shape: str, parent=None):
-        super().__init__(parent)
-        self.setObjectName("bigIcon")
-        self.setFixedSize(ACTION_BOX, ACTION_BOX)
-        self._path = _GLYPHS[shape]()
-
-    def paintEvent(self, event) -> None:
-        super().paintEvent(event)
-        if self.isDown():
-            name = "accent"
-        elif self.isChecked() or self.underMouse():
-            name = "accent_hover"
-        else:
-            name = "text"
-        color = QColor(COLORS[name])
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.translate((self.width() - self.SIZE) / 2, (self.height() - self.SIZE) / 2)
-        painter.scale(self.SIZE / 24, self.SIZE / 24)
-        painter.setPen(QPen(color, 1.9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-        painter.setBrush(color if self.isChecked() else Qt.NoBrush)
-        painter.drawPath(self._path)
-        painter.end()
 
 
 class _Stars(QWidget):

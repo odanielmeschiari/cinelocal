@@ -3,20 +3,22 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QPainter, QPixmap, QShortcut
-from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QMenu, QPushButton,
+from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QMenu,
                                QScrollArea, QVBoxLayout, QWidget)
 
 from .. import images
 from ..service import LibraryService
 from ..utils import format_runtime, format_votes
-from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP, GlyphButton,
+from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP,
                              ReviewBox, backdrop_gradient, cap_offset, side_margin)
 from .edit_dialog import EditDialog
+from .icons import IconButton
 from .match_dialog import MatchDialog
 from .theme import COLORS
 from .widgets import rounded_pixmap
 
 BACKDROP_HEIGHT = 340
+EP_BOX, EP_ICON = 36, 20   # episode row buttons: side of the button and of the icon (px)
 
 
 def _date(text) -> str:
@@ -54,8 +56,7 @@ class SeriesDialog(QWidget):
         page = QVBoxLayout(self)
         page.setContentsMargins(34, 20, 34, 20)
         page.setSpacing(10)
-        self.back_btn = QPushButton("←")
-        self.back_btn.setObjectName("plainIcon")
+        self.back_btn = IconButton("back", object_name="plainIcon")
         self.back_btn.setToolTip("Back to the list (Esc)")
         self.back_btn.clicked.connect(self._leave)
         page.addWidget(self.back_btn, 0, Qt.AlignLeft)
@@ -116,31 +117,26 @@ class SeriesDialog(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(12)
-        self.watch_btn = QPushButton("▶")
-        self.watch_btn.setStyleSheet("QPushButton { font-size: 20pt; border: none; border-radius: 10px; padding: 0; }")
+        self.watch_btn = IconButton("play", object_name="", color="#ffffff")   # white over the blue square
+        self.watch_btn.setStyleSheet("QPushButton { border: none; border-radius: 10px; padding: 0; }")
         self.watch_btn.setProperty("primary", True)
         self.watch_btn.clicked.connect(lambda: self.play_requested.emit(self.movie_id))
-        self.fav_btn = QPushButton("♡")
+        self.fav_btn = IconButton("favorite", "favorite_on", checked_color="text")   # the filled heart is enough
         self.fav_btn.setToolTip("Favorite")
-        self.fav_btn.setObjectName("bigIcon")
-        self.fav_btn.setStyleSheet("QPushButton:checked { color: #e9eef7; }")   # the filled heart is enough
         self.fav_btn.setCheckable(True)
         self.fav_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "favorite", on))
-        self.seen_btn = QPushButton("✓")
+        self.seen_btn = IconButton("watched", "watched_on")
         self.seen_btn.setToolTip("Mark as watched")
-        self.seen_btn.setObjectName("bigIcon")
         self.seen_btn.setCheckable(True)
         self.seen_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watched", on))
-        self.list_btn = GlyphButton("tag")
+        self.list_btn = IconButton("watchlist", "watchlist_on")
         self.list_btn.setToolTip("Watchlist")
         self.list_btn.setCheckable(True)
         self.list_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watchlist", on))
-        self.trailer_btn = GlyphButton("clapper")
+        self.trailer_btn = IconButton("trailer")
         self.trailer_btn.setToolTip("Trailer")
         self.trailer_btn.clicked.connect(self._open_trailer)
-        more = QPushButton("⋮")
-        more.setObjectName("plainIcon")
-        more.setStyleSheet("QPushButton { font-size: 18pt; }")   # not inherited by the menu
+        more = IconButton("menu", object_name="plainIcon")
         more.setToolTip("More")
         more_menu = QMenu(more)
         more_menu.addAction("Refresh metadata", lambda: self.service.apply_match(self.movie_id))
@@ -233,12 +229,9 @@ class SeriesDialog(QWidget):
         self._backdrop_scaled = None
         self.update()
 
-        for button, value, on_text, off_text in (
-                (self.fav_btn, s["favorite"], "♥", "♡"),
-                (self.seen_btn, s["watched"], "✓", "✓")):
+        for button, value in ((self.fav_btn, s["favorite"]), (self.seen_btn, s["watched"])):
             button.blockSignals(True)
             button.setChecked(value)
-            button.setText(on_text if value else off_text)
             button.blockSignals(False)
         self.list_btn.blockSignals(True)
         self.list_btn.setChecked(s["watchlist"])
@@ -313,10 +306,10 @@ class SeriesDialog(QWidget):
             info.addWidget(w)
         layout.addLayout(info, 1)
 
-        play = QPushButton("▶")
+        play = IconButton("play", object_name="iconBtn", box=EP_BOX, size=EP_ICON)
         play.setToolTip("Watch this episode")
         play.clicked.connect(lambda _checked=False, i=e["id"]: self.play_requested.emit(i))
-        seen = QPushButton("✓")
+        seen = IconButton("watched", "watched_on", object_name="iconBtn", box=EP_BOX, size=EP_ICON)
         seen.setCheckable(True)
         seen.setChecked(e["watched"])
         seen.setToolTip("Mark as watched")

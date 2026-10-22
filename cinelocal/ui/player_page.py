@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (QApplication, QGraphicsOpacityEffect, QGridLayout
                                QSizePolicy, QSlider, QStyle, QToolTip, QVBoxLayout, QWidget, QWidgetAction)
 
 from ..tracks import choose_track, track_name as _track_name
+from .icons import IconButton
 
 SAVE_EVERY_MS = 5000      # how often the playback position is saved
 PREFS_DELAY_MS = 800       # waits for volume/adjustments to stop changing before saving
@@ -148,8 +149,7 @@ class VlcPlayerPage(QWidget):
         self.topbar.setObjectName("page")
         top = QHBoxLayout(self.topbar)
         top.setContentsMargins(34, 20, 34, 10)
-        back = self._button("←", self.back_requested.emit)
-        back.setObjectName("plainIcon")
+        back = self._svg_button("back", self.back_requested.emit, "plainIcon")
         back.setToolTip("Back (Esc)")
         name = self.title_label = QLabel(title)
         name.setObjectName("muted")
@@ -171,11 +171,9 @@ class VlcPlayerPage(QWidget):
         row = QHBoxLayout(self.controls)
         row.setContentsMargins(14, 8, 14, 8)
         row.setSpacing(10)
-        self.play_btn = self._icon_button("❚❚", self.toggle_pause)
-        self.play_btn.setStyleSheet("font-size: 18pt;")   # the pause bars are heavier than the gear and fullscreen glyphs
+        self.play_btn = self._svg_button("pause", self.toggle_pause)
         self.play_btn.setToolTip("Pause / play (Space)")
-        self.next_btn = self._icon_button("▶|", self.next_requested.emit)   # shown only for series episodes
-        self.next_btn.setStyleSheet("font-size: 14pt;")
+        self.next_btn = self._svg_button("next", self.next_requested.emit)   # shown only for series episodes
         self.next_btn.setToolTip("Next episode")
         self.next_btn.hide()
         self.elapsed, self.total = QLabel("0:00"), QLabel("0:00")
@@ -194,7 +192,7 @@ class VlcPlayerPage(QWidget):
         self.volume_label.setFixedWidth(42)
         self.volume.valueChanged.connect(lambda v: self.volume_label.setText(f"{v}%"))
         self.volume.valueChanged.connect(lambda _v: self._prefs_changed())
-        self.settings_btn = self._icon_button("⚙", None)      # audio, subtitles and picture all live here
+        self.settings_btn = self._svg_button("settings", None)      # audio, subtitles and picture all live here
         self.settings_btn.setToolTip("Settings")
         self.fullscreen_btn = self._icon_button("⛶", self.toggle_fullscreen)
         self.fullscreen_btn.setToolTip("Fullscreen (F)")
@@ -217,6 +215,13 @@ class VlcPlayerPage(QWidget):
         button = QPushButton(text)
         button.setFocusPolicy(Qt.NoFocus)   # the space bar is a player shortcut, not the button's
         button.clicked.connect(lambda _checked=False: slot())
+        return button
+
+    def _svg_button(self, icon: str, slot, object_name: str = "iconBtn") -> IconButton:
+        button = IconButton(icon, object_name=object_name, box=ICON_BOX)
+        button.setFocusPolicy(Qt.NoFocus)   # the space bar is a player shortcut, not the button's
+        if slot:
+            button.clicked.connect(lambda _checked=False: slot())
         return button
 
     def _icon_button(self, symbol: str, slot) -> QPushButton:
@@ -487,7 +492,7 @@ class VlcPlayerPage(QWidget):
             self.elapsed.setText(_clock(self._mp.get_time()))
             if not self._dragging:
                 self.seek.setValue(int(self._mp.get_position() * 1000))
-        self.play_btn.setText("❚❚" if self._mp.is_playing() else "▶")
+        self.play_btn.set_icon("pause" if self._mp.is_playing() else "play")
         now = time.monotonic()
         if now - self._last_saved >= SAVE_EVERY_MS / 1000:
             self._last_saved = now

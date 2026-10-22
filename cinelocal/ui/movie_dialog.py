@@ -3,16 +3,17 @@ from __future__ import annotations
 
 from PySide6.QtCore import QUrl, Qt, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QPainter, QPixmap, QShortcut
-from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox, QPushButton,
+from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox,
                                QScrollArea, QVBoxLayout, QWidget)
 
 from .. import images
 from ..service import LibraryService
 from ..utils import format_runtime, format_votes
 from .dialogs import populate_collections_menu
-from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP, GlyphButton,
+from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP,
                              ReviewBox, backdrop_gradient, cap_offset, side_margin)
 from .edit_dialog import EditDialog
+from .icons import IconButton
 from .match_dialog import MatchDialog
 from .theme import COLORS
 from .widgets import rounded_pixmap
@@ -44,8 +45,7 @@ class MovieDialog(QWidget):
         page = QVBoxLayout(self)
         page.setContentsMargins(34, 20, 34, 30)
         page.setSpacing(14)
-        self.back_btn = QPushButton("←")
-        self.back_btn.setObjectName("plainIcon")
+        self.back_btn = IconButton("back", object_name="plainIcon")
         self.back_btn.setToolTip("Back to the list (Esc)")
         self.back_btn.clicked.connect(self._leave)
         page.addWidget(self.back_btn, 0, Qt.AlignLeft)
@@ -105,37 +105,32 @@ class MovieDialog(QWidget):
 
         actions = self._actions = QHBoxLayout()   # under the poster and details, from the poster's left edge
         actions.setSpacing(12)
-        self.watch_btn = QPushButton("▶")
+        self.watch_btn = IconButton("play", object_name="", color="#ffffff")   # white over the blue square
         self.watch_btn.setToolTip("Watch")
-        self.watch_btn.setStyleSheet("QPushButton { font-size: 20pt; border: none; border-radius: 10px; padding: 0; }")
+        self.watch_btn.setStyleSheet("QPushButton { border: none; border-radius: 10px; padding: 0; }")
         self.watch_btn.setProperty("primary", True)
         self.watch_btn.clicked.connect(self._watch)
-        self.fav_btn = QPushButton("♡")
+        self.fav_btn = IconButton("favorite", "favorite_on", checked_color="text")   # the filled heart is enough
         self.fav_btn.setToolTip("Favorite")
-        self.fav_btn.setObjectName("bigIcon")
-        self.fav_btn.setStyleSheet("QPushButton:checked { color: #e9eef7; }")   # the filled heart is enough
         self.fav_btn.setCheckable(True)
         self.fav_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "favorite", on))
-        self.seen_btn = QPushButton("✓")
+        self.seen_btn = IconButton("watched", "watched_on")
         self.seen_btn.setToolTip("Mark as watched")
-        self.seen_btn.setObjectName("bigIcon")
         self.seen_btn.setCheckable(True)
         self.seen_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watched", on))
-        self.list_btn = GlyphButton("tag")
+        self.list_btn = IconButton("watchlist", "watchlist_on")
         self.list_btn.setToolTip("Watchlist")
         self.list_btn.setCheckable(True)
         self.list_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watchlist", on))
-        self.coll_btn = GlyphButton("book")
+        self.coll_btn = IconButton("collections")
         self.coll_btn.setToolTip("Collections")
         coll_menu = QMenu(self.coll_btn)
         coll_menu.aboutToShow.connect(lambda: self._fill_collections(coll_menu))
         self.coll_btn.setMenu(coll_menu)
-        self.trailer_btn = GlyphButton("clapper")
+        self.trailer_btn = IconButton("trailer")
         self.trailer_btn.setToolTip("Trailer")
         self.trailer_btn.clicked.connect(self._open_trailer)
-        more = QPushButton("⋮")
-        more.setObjectName("plainIcon")
-        more.setStyleSheet("QPushButton { font-size: 18pt; }")   # not inherited by the menu
+        more = IconButton("menu", object_name="plainIcon")
         more.setToolTip("More")
         more_menu = QMenu(more)
         more_menu.addAction("Refresh metadata", self._refresh)
@@ -213,12 +208,9 @@ class MovieDialog(QWidget):
         self._load_poster(m)
         self._load_backdrop(m)
 
-        for button, value, on_text, off_text in (
-                (self.fav_btn, m["favorite"], "♥", "♡"),
-                (self.seen_btn, m["watched"], "✓", "✓")):
+        for button, value in ((self.fav_btn, m["favorite"]), (self.seen_btn, m["watched"])):
             button.blockSignals(True)
             button.setChecked(value)
-            button.setText(on_text if value else off_text)
             button.blockSignals(False)
         self.list_btn.blockSignals(True)
         self.list_btn.setChecked(m["watchlist"])
