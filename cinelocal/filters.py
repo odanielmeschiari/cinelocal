@@ -28,12 +28,14 @@ def decade_of(movie: dict) -> int | None:
     return (year // 10) * 10 if year else None
 
 
-def matches(movie: dict, flt: Filter, membership: dict[int, set[int]], progress=None) -> bool:
+def matches(movie: dict, flt: Filter, membership: dict[int, set[int]], progress=None, history=None) -> bool:
     kind, value = flt
     if kind == "all":
         return True
     if kind == "continue":   # started watching but not finished
         return bool(progress and progress(movie) > 0)
+    if kind == "history":    # watched, or watched in part
+        return bool(history and history(movie))
     if kind == "favorites":
         return movie["favorite"]
     if kind == "watchlist":
@@ -124,11 +126,11 @@ def advanced_options(movies: list[dict]) -> dict:
 
 
 def filter_movies(movies: list[dict], flt: Filter, membership: dict[int, set[int]],
-                  query: str = "", progress=None, advanced: dict | None = None) -> list[dict]:
+                  query: str = "", progress=None, advanced: dict | None = None, history=None) -> list[dict]:
     terms = normalize_text(query).split()
     result = []
     for m in movies:
-        if not matches(m, flt, membership, progress):
+        if not matches(m, flt, membership, progress, history):
             continue
         if advanced and not matches_advanced(m, advanced, membership, progress):
             continue
@@ -165,7 +167,7 @@ def sort_movies(movies: list[dict], sort_id: str) -> list[dict]:
     return present + missing
 
 
-def sidebar_counts(movies: list[dict], progress=None) -> dict:
+def sidebar_counts(movies: list[dict], progress=None, history=None) -> dict:
     genres: Counter = Counter()
     decades: Counter = Counter()
     stars: Counter = Counter(m["user_rating"] for m in movies if m.get("user_rating"))
@@ -177,6 +179,7 @@ def sidebar_counts(movies: list[dict], progress=None) -> dict:
     return {
         "all": len(movies),
         "continue": sum(1 for m in movies if progress and progress(m) > 0),
+        "history": sum(1 for m in movies if history and history(m)),
         "favorites": sum(m["favorite"] for m in movies),
         "watchlist": sum(m["watchlist"] for m in movies),
         "watched": sum(m["watched"] for m in movies),

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QListView, QScro
                                QStyledItemDelegate)
 
 from .. import images
+from .icons import draw_icon
 from .theme import COLORS
 
 POSTER_W, POSTER_H = 180, 270
@@ -152,15 +153,19 @@ class MovieDelegate(QStyledItemDelegate):
             self._pill(painter, QRect(x, poster.bottom() - 28, 42, 20),
                        f"{movie['rating']:.1f}", QColor(0, 0, 0, 185), "#ffd25e")
             x += 48
-        if movie.get("user_rating"):   # the user's own stars, next to the TMDB rating
-            self._pill(painter, QRect(x, poster.bottom() - 28, 46, 20),
+        rated = bool(movie.get("user_rating"))
+        if rated:   # the user's own stars, in the bottom right corner
+            self._pill(painter, QRect(poster.right() - 54, poster.bottom() - 28, 46, 20),
                        f"★ {movie['user_rating']:g}", QColor(COLORS["accent"]))
         if movie["status"] in ("ambiguous", "not_found"):
-            self._pill(painter, QRect(poster.right() - 70, poster.bottom() - 28, 62, 20),
+            self._pill(painter, QRect(poster.right() - 70, poster.bottom() - (52 if rated else 28), 62, 20),
                        "Review", QColor(COLORS["warn"]), "#1b1200")
-        if movie["favorite"]:
-            self._pill(painter, QRect(poster.right() - 70, poster.top() + 8, 62, 20),
-                       "Favorite", QColor(COLORS["accent"]))
+        if movie["favorite"]:   # heart on a small dark disc (readable over any cover)
+            disc = QRectF(poster.right() - 34, poster.top() + 8, 26, 26)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(0, 0, 0, 185))
+            painter.drawEllipse(disc)
+            draw_icon(painter, "favorite_on", COLORS["accent_hover"], disc.adjusted(5, 5, -5, -5))
         if movie["watched"]:
             self._pill(painter, QRect(poster.left() + 8, poster.top() + 8, 58, 20),
                        "Watched", QColor(0, 0, 0, 185))

@@ -52,6 +52,8 @@ class Sidebar(QTreeWidget):
         self._entry("Watchlist", ("watchlist", None), counts["watchlist"])
         self._entry("Watched", ("watched", True), counts["watched"])
         self._entry("Unwatched", ("watched", False), counts["unwatched"])
+        if counts["history"]:
+            self._entry("History", ("history", None), counts["history"])
         if counts["review"]:
             self._entry("Needs review", ("review", None), counts["review"])
 

@@ -99,6 +99,7 @@ _MIGRATIONS = (
     ("kind", "TEXT DEFAULT 'movie'"), ("series_id", "INTEGER"), ("season", "INTEGER"),
     ("episode", "INTEGER"), ("ep_title", "TEXT"), ("ep_overview", "TEXT"),
     ("ep_air_date", "TEXT"), ("ep_runtime", "INTEGER"), ("ep_rating", "REAL"),
+    ("watched_at", "REAL"),   # when it was marked as watched (the history is ordered by it)
     *_REVIEW_COLUMNS,
 )
 
@@ -247,6 +248,10 @@ class Database:
     def set_flag_many(self, ids: list[int], column: str, value: bool) -> None:
         if column not in FLAG_COLUMNS:
             raise ValueError(column)
+        if column == "watched":
+            now = time.time() if value else None
+            return self._many("UPDATE movies SET watched = ?, watched_at = ? WHERE id = ?",
+                              [(int(value), now, i) for i in ids])
         self._many(f"UPDATE movies SET {column} = ? WHERE id = ?",
                    [(int(value), i) for i in ids])
 
@@ -331,7 +336,7 @@ class Database:
                         " rating = NULL, votes = NULL, genres_json = '[]', director = NULL, cast_json = '[]',"
                         f" trailer_key = NULL, has_poster = 0, has_backdrop = 0, custom_json = '[]', certification = NULL, updated_at = ?{extra}", (time.time(),))
             if history and not everything:
-                run("UPDATE movies SET watched = 0")
+                run("UPDATE movies SET watched = 0, watched_at = NULL")
             if favorites and not everything:
                 run("UPDATE movies SET favorite = 0, watchlist = 0")
                 run("UPDATE series SET favorite = 0, watchlist = 0")

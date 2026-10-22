@@ -1,4 +1,4 @@
-"""Scrollable row with a title and arrows (used in "Continue watching")."""
+"""Scrollable row with a title and arrows (the rows of the home screen)."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -16,7 +16,7 @@ class HomeSection(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
         head = QHBoxLayout()
-        name = QLabel(title)
+        self.title = name = QLabel(title)
         name.setStyleSheet("font-size: 14pt; font-weight: 700;")
         self.count = QLabel("")
         self.count.setObjectName("muted")

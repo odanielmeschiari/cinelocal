@@ -325,6 +325,8 @@ class LibraryService(QObject):
         for movie_id in movie_ids:
             if movie_id in self.by_id:
                 self.by_id[movie_id][column] = value
+                if column == "watched":
+                    self.by_id[movie_id]["watched_at"] = time.time() if value else None
                 if self.by_id[movie_id].get("kind") == "episode":
                     touched.add(self.by_id[movie_id]["series_id"])
                 else:
@@ -406,6 +408,16 @@ class LibraryService(QObject):
 
     def last_played(self, movie: dict) -> int:
         return self.resume_info(self._resume_path(movie))[2]
+
+    def history_stamp(self, movie: dict) -> float:
+        """When the movie (or any episode of the series) was last watched, even if only in part. 0 = it is
+        not in the history; 1 = it is, but nobody knows when (watched before dates were recorded)."""
+        if movie.get("kind") == "series":
+            return max((self.history_stamp(e) for e in self.episodes.get(-movie["id"], [])), default=0)
+        position, _, saved = self.resume_info(movie.get("path") or "")
+        if not (movie["watched"] or position > 0):
+            return 0
+        return max(movie.get("watched_at") or 0, saved, 1)
 
     def restart(self, movie: dict) -> None:
         """Forgets where the movie stopped, to watch from the start."""

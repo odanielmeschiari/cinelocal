@@ -122,22 +122,38 @@ saved positions, with no way back), delete these folders yourself:
 
 ## Usage
 
-- **All movies** (default screen): with the "Continue watching" row above the grid (← → arrows to move through
-  the movies); it disappears when empty or while searching, and scrolls together with the grid.
+- **All movies** (default screen): rows above the grid (← → arrows to move through the movies) that
+  disappear when empty or while searching, and scroll together with the grid. Use **Edit home** to choose
+  which rows appear — *Continue watching*, *History*, *Favorites*, *Watchlist* and any of your collections —
+  and in what order (by default only *Continue watching*).
 - **Grid**: click a poster to open the details (in the same window; `←  Back`, `Esc` or `Alt`+`←` return to the list
   exactly where you were). `Ctrl`/`Shift`+click selects several movies;
   right-click opens the menu (favorite, watched, collections, update, fix match).
 - **Instant search** (`Ctrl+F`) by title, actor, director or genre; **sorting** by title, year,
   rating or recently added.
-- **Advanced search** (magnifier button next to the search box): combine filters on type, genre,
-  year (range or a single year), TMDB rating and votes, runtime, age rating, directors, cast,
-  favorites/watchlist/watched, your collections and ratings, and date added. Filters can be saved
-  and reused. Age ratings are downloaded with the metadata (use *Force update* for existing movies).
+- **Advanced search** (magnifier button next to the search box): opens a panel where you combine any
+  of the filters below; only the ones you fill in count, and a movie must match all of them. It works
+  on the data already saved locally, on top of the section selected in the sidebar. The button shows
+  how many results you will get; **Show results** applies it and a bar with **Clear search** appears
+  above the grid to go back to the whole catalog. Use **Save…** to keep the current filters under a
+  name and load them again from the “Saved filters” list next time.
+  - Content: movies or series, runtime.
+  - Release and ratings: year (a range or a single year), TMDB rating and number of votes.
+  - Genre (any or all of the chosen ones) and age rating.
+  - People: directors and cast, picked from the ones in your library.
+  - My library: watched/unwatched, favorites, watchlist, in progress, your collections, your own
+    star ratings and how recently the movie was added.
+
+  Number fields accept typed values, the ▲▼ buttons or preset values from the ▾ menu; lists have
+  *Select all* and *Clear*. Age ratings are downloaded with the metadata (use *Force update* on
+  existing movies).
 
   ![Filters](examples/filters.png "Filters")
   
 - **Sidebar**: All, Favorites, Watched/Unwatched, **Collections** (a movie can be in several),
-  Genres and Years (decades). Right-click a collection to rename or delete it.
+  Genres and Years (decades). Right-click a collection to rename or delete it. **History** lists
+  everything you have watched, or started to watch, with the most recent first (movies marked as
+  watched before the dates were recorded come last).
 - **Watch** opens the **built-in player** (based on libVLC): `Space` pauses, `←`/`→` skip 10 s, `↑`/`↓` change the
   volume, `M` toggles mute, `F` toggles fullscreen and `Esc` goes back. It needs VLC installed (on Linux `install.sh` installs it) and,
   on Linux, X11 or XWayland (Wayland sessions run through XWayland automatically; a pure Wayland session without XWayland is not supported). Without that, or if you set a player in Settings (e.g. `mpv --fs`),
@@ -210,10 +226,12 @@ cinelocal/
   images.py                 poster/thumbnail/backdrop cache
   workers.py                threads (parallel updates, background tasks)
   service.py                in-memory state + operations used by the interface
-  filters.py                filters, search, sorting and counts
+  filters.py                filters, advanced search, sorting and counts
   player.py                 opens the movie in the external player
   ui/                       theme (QSS), grid, sidebar, windows and dialogs
   ui/player_page.py         built-in player (libVLC)
+  ui/advanced_search.py     advanced search panel (overlay)
+  ui/home_dialog.py         “Edit home”: rows of the home screen
   ui/edit_dialog.py         manual editing of metadata and cover
 tests/test_core.py          tests for the logic without a GUI
 ```

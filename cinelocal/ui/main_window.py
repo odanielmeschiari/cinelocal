@@ -18,6 +18,7 @@ from .dialogs import (ask_new_collection, ask_rename_collection, confirm_delete_
                       populate_collections_menu)
 from .grid import CELL_H, MovieFlow
 from .home import HomeSection
+from .home_dialog import HomeDialog
 from .icons import IconButton
 from .match_dialog import MatchDialog
 from .movie_dialog import MovieDialog
@@ -26,6 +27,7 @@ from .series_dialog import SeriesDialog
 from .settings_dialog import SettingsDialog
 from .sidebar import Sidebar
 
+HOME_ROW_LIMIT = 40   # posters per row on the home screen (the section itself shows them all)
 TOOL_BOX, TOOL_ICON = 36, 20   # top-bar icon buttons: a bit smaller than the detail/player ones (44, 24)
 
 
@@ -37,6 +39,7 @@ class MainWindow(QMainWindow):
         self.query = ""
         self.advanced: dict = {}   # criteria of the advanced search (empty = off)
         self.sort_id = service.settings.get("sort_id")
+        self._home_rows: dict[str, HomeSection] = {}   # row key -> row of the home screen
         self._detail: MovieDialog | None = None
         self._player: VlcPlayerPage | None = None
         self._player_origin: QWidget | None = None
@@ -49,7 +52,7 @@ class MainWindow(QMainWindow):
         self._sidebar_timer = QTimer(self, singleShot=True, interval=350)
         self._sidebar_timer.timeout.connect(self._rebuild_sidebar)
         self._home_timer = QTimer(self, singleShot=True, interval=300)   # batches several changes in a row
-        self._home_timer.timeout.connect(self._refresh_continue)
+        self._home_timer.timeout.connect(self._refresh_home)
 
         self._build_ui()
         self._connect()
@@ -180,9 +183,13 @@ class MainWindow(QMainWindow):
 
         self.views = QStackedWidget()
         self.grid = MovieFlow()
-        self.continue_row = HomeSection("Continue watching")   # only in "All movies", if there are items
-        self.continue_row.row.itemDelegate().progress_of = self.service.progress_of
-        self.continue_row.hide()
+        self.edit_home_btn = QPushButton("Edit home")   # only on the home screen (“All movies”)
+        self.edit_home_btn.setToolTip("Choose which rows are shown above the movies, and their order")
+        home_head = QHBoxLayout()
+        home_head.addStretch(1)
+        home_head.addWidget(self.edit_home_btn)
+        self.home_box = QVBoxLayout()   # rows chosen in "Edit home"; only in "All movies", if they have items
+        self.home_box.setSpacing(10)
         self.grid_page = QScrollArea()   # scrolls the "Continue watching" row together with the grid
         self.grid_page.setWidgetResizable(True)
         self.grid_page.setFrameShape(QFrame.NoFrame)
@@ -192,8 +199,9 @@ class MainWindow(QMainWindow):
         grid_col = QVBoxLayout(self.grid_content)
         grid_col.setContentsMargins(0, 0, 0, 0)
         grid_col.setSpacing(10)
-        grid_col.addWidget(self.continue_row)
-        grid_col.addLayout(head)   # "All movies" title below "Continue watching"
+        grid_col.addLayout(home_head)
+        grid_col.addLayout(self.home_box)
+        grid_col.addLayout(head)   # "All movies" title below the home rows
         grid_col.addWidget(self.grid)
         grid_col.addStretch(1)
         self.empty = QLabel("")
@@ -227,8 +235,7 @@ class MainWindow(QMainWindow):
         self.sort_combo.currentIndexChanged.connect(self._on_sort)
         self.grid.movie_opened.connect(self.open_movie)
         self.grid.context_requested.connect(self._context_menu)
-        self.continue_row.row.movie_opened.connect(self.open_movie)
-        self.continue_row.row.context_requested.connect(self._context_menu)
+        self.edit_home_btn.clicked.connect(self._edit_home)
         self.grid.itemDelegate().progress_of = s.progress_of
         self.grid.selectionModel().currentChanged.connect(self._reveal_current)
 
@@ -276,20 +283,61 @@ class MainWindow(QMainWindow):
         self.service.start_scan()
 
     # ------------------------------------------------------------------ view --
-    def _refresh_continue(self) -> None:
-        """\"Continue watching\" row above \"All movies\"; hidden when empty or outside that screen."""
+    def _home_keys(self) -> list[str]:
+        """Rows chosen for the home screen, in order (collections that no longer exist are dropped)."""
+        known = {"continue", "history", "favorites", "watchlist"}
+        known |= {f"collection:{c['id']}" for c in self.service.collections}
+        return [k for k in self.service.settings.get("home_sections") or [] if k in known]
+
+    def _home_items(self, key: str) -> list[dict]:
         s = self.service
-        items = []
-        if self.flt[0] == "all" and not self.query and not self.advanced:
+        if key == "continue":
             items = filters.filter_movies(s.movies, ("continue", None), s.membership, "", s.progress_of)
-            items.sort(key=lambda m: -s.last_played(m))   # the one you watched last comes first
-        row = self.continue_row.row
-        bar = row.horizontalScrollBar()
-        position = bar.value()
-        row.movie_model.set_movies(items)
-        QTimer.singleShot(0, lambda: bar.setValue(position))   # the layout only finishes later
-        self.continue_row.count.setText(str(len(items)))
-        self.continue_row.setVisible(bool(items))
+            return sorted(items, key=lambda m: -s.last_played(m))   # the one you watched last comes first
+        if key == "history":
+            items = filters.filter_movies(s.movies, ("history", None), s.membership, "", None, None, s.history_stamp)
+            return sorted(items, key=lambda m: -s.history_stamp(m))
+        flt = (key, None) if key in ("favorites", "watchlist") else ("collection", int(key.split(":")[1]))
+        return filters.sort_movies(filters.filter_movies(s.movies, flt, s.membership), self.sort_id)
+
+    def _new_home_row(self, key: str) -> HomeSection:
+        section = HomeSection("")
+        section.row.itemDelegate().progress_of = self.service.progress_of
+        section.row.movie_opened.connect(self.open_movie)
+        section.row.context_requested.connect(self._context_menu)
+        self._home_rows[key] = section
+        return section
+
+    def _refresh_home(self) -> None:
+        """Rows above \"All movies\", as chosen in \"Edit home\"; hidden outside that screen."""
+        on_home = self.flt[0] == "all" and not self.query and not self.advanced
+        keys = self._home_keys() if on_home else []
+        for key in [k for k in self._home_rows if k not in keys]:
+            section = self._home_rows.pop(key)
+            self.home_box.removeWidget(section)
+            section.deleteLater()
+        titles = {"continue": "Continue watching", "history": "History", "favorites": "Favorites",
+                  "watchlist": "Watchlist"}
+        for position, key in enumerate(keys):
+            section = self._home_rows.get(key) or self._new_home_row(key)
+            self.home_box.removeWidget(section)
+            self.home_box.insertWidget(position, section)   # keeps the order chosen by the user
+            items = self._home_items(key)
+            row = section.row
+            bar = row.horizontalScrollBar()
+            scroll = bar.value()
+            row.movie_model.set_movies(items[:HOME_ROW_LIMIT])
+            QTimer.singleShot(0, lambda b=bar, v=scroll: b.setValue(v))   # the layout only finishes later
+            section.title.setText(titles.get(key) or self.service.collection_name(int(key.split(":")[1])))
+            section.count.setText(str(len(items)))
+            section.setVisible(bool(items))
+        self.edit_home_btn.setVisible(on_home)
+
+    def _edit_home(self) -> None:
+        dialog = HomeDialog(self.service, self._home_keys(), self)
+        if dialog.exec():
+            self.service.settings.update(home_sections=dialog.keys())
+            self._refresh_home()
 
     def _reveal_current(self, index) -> None:
         """Keyboard navigation: scrolls the page to the current movie."""
@@ -298,14 +346,17 @@ class MainWindow(QMainWindow):
             self.grid_page.ensureVisible(center.x(), center.y(), 0, CELL_H // 2)
 
     def refresh_view(self) -> None:
-        self._refresh_continue()
+        self._refresh_home()
         bar = self.grid_page.verticalScrollBar()
         position = bar.value()
         visible = filters.filter_movies(self.service.movies, self.flt, self.service.membership,
-                                        self.query, self.service.progress_of, self.advanced)
+                                        self.query, self.service.progress_of, self.advanced,
+                                        self.service.history_stamp)
         visible = filters.sort_movies(visible, self.sort_id)
         if self.flt[0] == "continue":   # the one you watched last comes first
             visible.sort(key=lambda m: -self.service.last_played(m))
+        elif self.flt[0] == "history":   # most recently watched first
+            visible.sort(key=lambda m: -self.service.history_stamp(m))
         self.grid.movie_model.set_movies(visible)
         bar.setValue(position)
         QTimer.singleShot(0, lambda: bar.setValue(position))   # the layout only finishes later
@@ -332,7 +383,7 @@ class MainWindow(QMainWindow):
     def _heading_text(self) -> str:
         kind, value = self.flt
         names = {"all": "All movies", "favorites": "Favorites", "watchlist": "Watchlist",
-                 "review": "Needs review", "continue": "Continue watching"}
+                 "review": "Needs review", "continue": "Continue watching", "history": "History"}
         if kind in names:
             return names[kind]
         if kind == "watched":
@@ -346,7 +397,7 @@ class MainWindow(QMainWindow):
         return str(value)
 
     def _rebuild_sidebar(self) -> None:
-        counts = filters.sidebar_counts(self.service.movies, self.service.progress_of)
+        counts = filters.sidebar_counts(self.service.movies, self.service.progress_of, self.service.history_stamp)
         self.sidebar.rebuild(counts, self.service.collections, self.service.membership, self.flt)
         if self.sidebar.current_filter != self.flt:   # the previous selection no longer exists
             self.flt = self.sidebar.current_filter
@@ -370,7 +421,7 @@ class MainWindow(QMainWindow):
         overlay = AdvancedSearch(
             s, self.stack.widget(1), self.advanced,
             lambda adv: len(filters.filter_movies(s.movies, self.flt, s.membership, self.query,
-                                                  s.progress_of, adv)))
+                                                  s.progress_of, adv, s.history_stamp)))
         overlay.applied.connect(self._on_advanced)
 
     def _clear_search(self) -> None:
@@ -402,11 +453,12 @@ class MainWindow(QMainWindow):
 
     def _on_movie_changed(self, movie_id: int) -> None:
         self.grid.movie_model.refresh_movie(movie_id)
-        self.continue_row.row.movie_model.refresh_movie(movie_id)
+        for section in self._home_rows.values():
+            section.row.movie_model.refresh_movie(movie_id)
         if self.flt[0] == "all" and not self.query and not self.advanced:
             self._home_timer.start()
         if self.flt[0] in ("favorites", "watchlist", "watched", "review", "stars") or self.advanced or (
-                self.flt[0] == "continue" and self._player is None):
+                self.flt[0] in ("continue", "history") and self._player is None):
             self.refresh_view()   # the movie may have entered/left the current section
         self._sidebar_timer.start()
 
@@ -569,7 +621,7 @@ class MainWindow(QMainWindow):
             self._player.deleteLater()
             self._player = self._player_origin = None
             self.grid.viewport().update()   # progress bars
-            if self.flt[0] in ("continue", "all"):
+            if self.flt[0] in ("continue", "history", "all"):
                 self.refresh_view()
 
     def _discard_detail(self) -> None:

@@ -18,7 +18,7 @@ _KEY, _SEARCH, _ON = Qt.UserRole, Qt.UserRole + 1, Qt.UserRole + 2
 _icons: dict[bool, QIcon] = {}
 
 
-def _check_icon(checked: bool) -> QIcon:
+def check_icon(checked: bool) -> QIcon:
     """Empty box, or the same box with just a blue check mark (drawn, so it needs no image files)."""
     if checked not in _icons:
         size, ratio = 16, 2
@@ -48,7 +48,7 @@ class Check(QCheckBox):
         self._sync()
 
     def _sync(self) -> None:
-        self.setIcon(_check_icon(self.isChecked()))
+        self.setIcon(check_icon(self.isChecked()))
 
 
 class NumberField(QWidget):
@@ -157,7 +157,7 @@ class CheckList(QWidget):
             "QListWidget::item { padding: 3px 6px; }")
         self.list.setIconSize(QSize(16, 16))
         for key, text in items:   # the check mark is the item's icon; itemClicked toggles it (box or text)
-            item = QListWidgetItem(_check_icon(False), text)
+            item = QListWidgetItem(check_icon(False), text)
             item.setData(_KEY, key)
             item.setData(_SEARCH, normalize_text(text))
             item.setData(_ON, False)
@@ -181,7 +181,7 @@ class CheckList(QWidget):
     @staticmethod
     def _mark(item: QListWidgetItem, on: bool) -> None:
         item.setData(_ON, on)
-        item.setIcon(_check_icon(on))
+        item.setIcon(check_icon(on))
 
     def _toggle(self, item: QListWidgetItem) -> None:
         self._mark(item, not item.data(_ON))

@@ -22,6 +22,11 @@ def _renderer(name: str, color: str) -> QSvgRenderer:
     return _renderers[key]
 
 
+def draw_icon(painter: QPainter, name: str, color: str, rect: QRectF) -> None:
+    """Draws one of the SVG icons inside `rect` (for custom painting, e.g. the poster badges)."""
+    _renderer(name, color).render(painter, rect)
+
+
 class IconButton(QPushButton):
     """Square button with an SVG icon centered in it. `icon_on` is shown while the button is checked.
     The look of the button itself (hover background...) comes from theme.py through `object_name`; the icon takes the
