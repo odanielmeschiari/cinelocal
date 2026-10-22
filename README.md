@@ -179,10 +179,6 @@ saved positions, with no way back), delete these folders yourself:
   
 - **Watchlist**: movies you want to watch in the future. Add them with the `Watchlist` button in the details or from the
   right-click menu; the list lives in the sidebar.  
-- **Metadata source** (Settings): TMDB (default) or OMDb. OMDb is free (1,000 requests/day), only has data in
-  English and provides no backdrop image or trailer. When you switch sources, use **Metadata → Force update**
-  to re-identify the movies already downloaded.
-
   ![Description](examples/description.png "Description")
   
 - **Rescan** (`F5`): runs when the app opens; detects new movies and removes the ones that disappeared from disk.
@@ -224,9 +220,7 @@ cinelocal/
   scanner.py                folder scanning and filename cleanup
   library.py                syncs disk ↔ database (new, removed, moved)
   tmdb.py                   TMDB HTTP client
-  omdb.py                   OMDb HTTP client (returns the same shape as TMDB)
   opensubtitles.py          OpenSubtitles HTTP client: finds and saves subtitles next to the videos
-  providers.py              picks the client for the configured source
   parsing.py                parses responses and picks the best match
   metadata_service.py       identifies the movie, downloads metadata and images
   images.py                 poster/thumbnail/backdrop cache

@@ -14,9 +14,9 @@ from .config import DEFAULT_SETTINGS, TRACK_LANGUAGES, Settings
 from .db import Database
 from .library import sync_library
 from .metadata_service import find_candidates, find_series_candidates, process_movie, process_series
-from .providers import make_client, same_provider
 from .movie_fields import decorate
 from .opensubtitles import OpenSubtitlesClient, OpenSubtitlesError, fetch_subtitle, has_subtitle
+from .tmdb import TMDBClient
 from .workers import FuncWorker, UpdateWorker
 
 
@@ -50,12 +50,8 @@ class LibraryService(QObject):
         return bool(self.api_key.strip())
 
     @property
-    def provider(self) -> str:
-        return self.settings.get("provider")
-
-    @property
     def api_key(self) -> str:
-        return self.settings.get("omdb_api_key" if self.provider == "omdb" else "tmdb_api_key")
+        return self.settings.get("tmdb_api_key")
 
     @property
     def language(self) -> str:
@@ -137,7 +133,7 @@ class LibraryService(QObject):
         self.movie_changed.emit(movie_id)
 
     def _client(self):
-        return make_client(self.provider, self.api_key, self.language)
+        return TMDBClient(self.api_key, self.language)
 
     # -- asynchronous execution -----------------------------------------------------
     def run_async(self, fn, on_result=None, on_error=None) -> None:
@@ -328,12 +324,11 @@ class LibraryService(QObject):
             return False
 
         # Movies already identified keep their match (including manual corrections).
-        forced = {m["id"]: m["tmdb_id"] for m in targets
-                  if m["status"] == "matched" and same_provider(self.provider, m["tmdb_id"])}
+        forced = {m["id"]: m["tmdb_id"] for m in targets if m["status"] == "matched" and m["tmdb_id"]}
         snapshot = [{k: m[k] for k in ("id", "clean_title", "year_guess", "tmdb_id", "status", "kind")}
                     for m in targets]
         worker = UpdateWorker(self.db, self.api_key, self.language,
-                              snapshot, forced, self, provider=self.provider)
+                              snapshot, forced, self)
         worker.progress.connect(self.progress)
         worker.movie_done.connect(self._on_movie_done)
         worker.finished_all.connect(self._on_update_done)
@@ -371,7 +366,7 @@ class LibraryService(QObject):
         movie = self.by_id.get(movie_id)
         if movie is None:
             return
-        if tmdb_id is None and movie["status"] == "matched" and same_provider(self.provider, movie["tmdb_id"]):
+        if tmdb_id is None and movie["status"] == "matched" and movie["tmdb_id"]:
             tmdb_id = movie["tmdb_id"]
         snapshot = {k: movie[k] for k in ("id", "clean_title", "year_guess", "tmdb_id", "status", "kind")}
         process = process_series if movie_id < 0 else process_movie
@@ -419,9 +414,9 @@ class LibraryService(QObject):
         find = find_series_candidates if series else find_candidates
         self.run_async(lambda: find(self._client(), query, year), on_result, on_error)
 
-    def test_key(self, key: str, on_result, on_error, provider: str | None = None) -> None:
+    def test_key(self, key: str, on_result, on_error) -> None:
         def job():
-            make_client(provider or self.provider, key, self.language).test_key()
+            TMDBClient(key, self.language).test_key()
             return True
         self.run_async(job, on_result, on_error)
 

@@ -8,18 +8,12 @@ from PySide6.QtWidgets import (QComboBox, QDialog, QFileDialog, QFormLayout, QHB
                                QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget)
 
 from ..config import LANGUAGES, TRACK_LANGUAGES
-from ..providers import PROVIDERS
 from ..service import LibraryService
 from .restore_dialog import RestoreDialog
 
-_HELP = {
-    "tmdb": ('Free: create an account at <a href="https://www.themoviedb.org/signup">themoviedb.org</a>, '
-             'open <a href="https://www.themoviedb.org/settings/api">Settings → API</a> and copy the '
-             '“API Key” (or the “Read Access Token”).'),
-    "omdb": ('Free (1,000 requests/day): request a key at <a href="https://www.omdbapi.com/apikey.aspx">'
-             'omdbapi.com/apikey</a> and activate it with the link sent to your email. OMDb only has English '
-             'data and provides no backdrop image or trailer.'),
-}
+_HELP = ('Free: create an account at <a href="https://www.themoviedb.org/signup">themoviedb.org</a>, '
+         'open <a href="https://www.themoviedb.org/settings/api">Settings → API</a> and copy the '
+         '“API Key” (or the “Read Access Token”).')
 _HELP_SUBTITLES = ('With a key, the subtitle of each new movie is downloaded automatically, in the language above '
                    '(or the metadata language), and saved next to the video. Free: create an account at '
                    '<a href="https://www.opensubtitles.com/en/consumers">opensubtitles.com</a> and register an API '
@@ -59,15 +53,7 @@ class SettingsDialog(QDialog):
         browse.clicked.connect(self._browse_folder)
         form.addRow("Movies folder", self._with_button(self.folder_edit, browse))
 
-        self.provider = QComboBox()
-        for code, name in PROVIDERS.items():
-            self.provider.addItem(name, code)
-        self.provider.setCurrentIndex(max(0, self.provider.findData(s.get("provider"))))
-        form.addRow("Metadata source", self.provider)
-        self._keys = {"tmdb": s.get("tmdb_api_key"), "omdb": s.get("omdb_api_key")}
-        self._shown = self.provider.currentData()
-
-        self.key_edit = QLineEdit(self._keys[self._shown])
+        self.key_edit = QLineEdit(s.get("tmdb_api_key"))
         self.key_edit.setEchoMode(QLineEdit.Password)
         self.key_edit.setPlaceholderText("Paste your API key here")
         self.test_btn = QPushButton("Test")
@@ -77,12 +63,11 @@ class SettingsDialog(QDialog):
         self.key_status = QLabel("")
         self.key_status.setObjectName("muted")
         form.addRow("", self.key_status)
-        self.help_label = help_label = QLabel(_HELP[self._shown])
+        self.help_label = help_label = QLabel(_HELP)
         help_label.setOpenExternalLinks(True)
         help_label.setWordWrap(True)
         help_label.setObjectName("muted")
         form.addRow("", help_label)
-        self.provider.currentIndexChanged.connect(self._on_provider)
 
         self.language = QComboBox()
         for code, name in LANGUAGES.items():
@@ -193,13 +178,6 @@ class SettingsDialog(QDialog):
         if path:
             self.player_edit.setText(path)
 
-    def _on_provider(self) -> None:
-        self._keys[self._shown] = self.key_edit.text()
-        self._shown = self.provider.currentData()
-        self.key_edit.setText(self._keys[self._shown])
-        self.help_label.setText(_HELP[self._shown])
-        self.key_status.setText("")
-
     def _test_key(self) -> None:
         key = self.key_edit.text().strip()
         if not key:
@@ -207,7 +185,7 @@ class SettingsDialog(QDialog):
             return
         self.key_status.setText("Testing…")
         self.test_btn.setEnabled(False)
-        self.service.test_key(key, self._key_ok, self._key_failed, self.provider.currentData())
+        self.service.test_key(key, self._key_ok, self._key_failed)
 
     def _key_ok(self, _result) -> None:
         if not self._closed:
@@ -220,12 +198,9 @@ class SettingsDialog(QDialog):
             self.key_status.setText(f"Error: {exc}")
 
     def values(self) -> dict:
-        self._keys[self._shown] = self.key_edit.text()
         return {
             "library_path": self.folder_edit.text().strip(),
-            "tmdb_api_key": self._keys["tmdb"].strip(),
-            "omdb_api_key": self._keys["omdb"].strip(),
-            "provider": self.provider.currentData(),
+            "tmdb_api_key": self.key_edit.text().strip(),
             "language": self.language.currentData(),
             "player_command": self.player_edit.text().strip(),
             "default_player": self.default_player.currentData(),

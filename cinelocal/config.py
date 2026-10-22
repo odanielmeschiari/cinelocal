@@ -55,8 +55,6 @@ TRACK_LANGUAGES = {
 DEFAULT_SETTINGS = {
     "library_path": "",
     "tmdb_api_key": "",
-    "omdb_api_key": "",
-    "provider": "tmdb",
     "language": "en-US",
     "player_command": "",
     "audio_language": "",     # "" = whatever the file defaults to, or a key of TRACK_LANGUAGES
