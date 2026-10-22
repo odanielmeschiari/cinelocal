@@ -147,11 +147,10 @@ class SeriesDialog(QWidget):
         more.setMenu(more_menu)
         for w in (self.watch_btn, self.fav_btn, self.seen_btn, more):
             w.setFixedSize(ACTION_BOX, ACTION_BOX)
-        actions.addStretch(1)   # the buttons are centered
         for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.trailer_btn, more):
             actions.addWidget(w)
         actions.addStretch(1)
-        right.addLayout(actions)
+        column.addLayout(actions)   # under the poster and details, from the poster's left edge
         self.review = ReviewBox("Write your own comments about this series…")
         self.review.rating_changed.connect(self._set_rating)
         self.review.comment_saved.connect(self._save_comment)

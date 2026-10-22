@@ -102,7 +102,7 @@ class MovieDialog(QWidget):
         scroll.setWidget(body)
         right.addWidget(scroll, 1)
 
-        actions = QHBoxLayout()
+        actions = self._actions = QHBoxLayout()   # under the poster and details, from the poster's left edge
         actions.setSpacing(12)
         self.watch_btn = QPushButton("▶")
         self.watch_btn.setToolTip("Watch")
@@ -143,11 +143,10 @@ class MovieDialog(QWidget):
         more.setMenu(more_menu)
         for w in (self.watch_btn, self.fav_btn, self.seen_btn, more):
             w.setFixedSize(ACTION_BOX, ACTION_BOX)
-        actions.addStretch(1)   # the buttons are centered
         for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.coll_btn, self.trailer_btn, more):
             actions.addWidget(w)
         actions.addStretch(1)
-        right.addLayout(actions)
+        page.addLayout(actions)
 
     def _text_block(self, layout: QVBoxLayout, heading: str, muted: bool = False) -> QLabel:
         head = QLabel(heading)
@@ -267,6 +266,7 @@ class MovieDialog(QWidget):
         self._backdrop_scaled = None
         side = side_margin(self.width())
         self._content.setContentsMargins(side, 0, side, 0)
+        self._actions.setContentsMargins(side, 0, side, 0)
         super().resizeEvent(event)
 
     def _leave(self) -> None:
