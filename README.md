@@ -123,7 +123,7 @@ saved positions, with no way back), delete these folders yourself:
 ## Usage
 
 - **All movies** (default screen): rows above the grid (← → arrows to move through the movies) that
-  disappear when empty or while searching, and scroll together with the grid. Use **Edit home** to choose
+  disappear when empty or while searching, and scroll together with the grid. Use **Edit home** (in Settings) to choose
   which rows appear — *Continue watching*, *History*, *Favorites*, *Watchlist* and any of your collections —
   and in what order (by default only *Continue watching*).
 - **Grid**: click a poster to open the details (in the same window; `←  Back`, `Esc` or `Alt`+`←` return to the list

@@ -183,11 +183,6 @@ class MainWindow(QMainWindow):
 
         self.views = QStackedWidget()
         self.grid = MovieFlow()
-        self.edit_home_btn = QPushButton("Edit home")   # only on the home screen (“All movies”)
-        self.edit_home_btn.setToolTip("Choose which rows are shown above the movies, and their order")
-        home_head = QHBoxLayout()
-        home_head.addStretch(1)
-        home_head.addWidget(self.edit_home_btn)
         self.home_box = QVBoxLayout()   # rows chosen in "Edit home"; only in "All movies", if they have items
         self.home_box.setSpacing(10)
         self.grid_page = QScrollArea()   # scrolls the "Continue watching" row together with the grid
@@ -199,7 +194,6 @@ class MainWindow(QMainWindow):
         grid_col = QVBoxLayout(self.grid_content)
         grid_col.setContentsMargins(0, 0, 0, 0)
         grid_col.setSpacing(10)
-        grid_col.addLayout(home_head)
         grid_col.addLayout(self.home_box)
         grid_col.addLayout(head)   # "All movies" title below the home rows
         grid_col.addWidget(self.grid)
@@ -235,7 +229,6 @@ class MainWindow(QMainWindow):
         self.sort_combo.currentIndexChanged.connect(self._on_sort)
         self.grid.movie_opened.connect(self.open_movie)
         self.grid.context_requested.connect(self._context_menu)
-        self.edit_home_btn.clicked.connect(self._edit_home)
         self.grid.itemDelegate().progress_of = s.progress_of
         self.grid.selectionModel().currentChanged.connect(self._reveal_current)
 
@@ -331,7 +324,6 @@ class MainWindow(QMainWindow):
             section.title.setText(titles.get(key) or self.service.collection_name(int(key.split(":")[1])))
             section.count.setText(str(len(items)))
             section.setVisible(bool(items))
-        self.edit_home_btn.setVisible(on_home)
 
     def _edit_home(self) -> None:
         dialog = HomeDialog(self.service, self._home_keys(), self)
@@ -666,6 +658,7 @@ class MainWindow(QMainWindow):
         old = {k: s.get(k) for k in ("library_path", "tmdb_api_key", "language")}
         had_key = self.service.has_key
         dialog = SettingsDialog(self.service, self, intro=intro, focus_key=focus_key)
+        dialog.edit_home_requested.connect(self._edit_home)
         dialog.exec()
         if dialog.restored:
             self._discard_detail()

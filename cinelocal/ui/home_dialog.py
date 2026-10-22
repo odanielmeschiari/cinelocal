@@ -42,6 +42,7 @@ class HomeDialog(QDialog):
         for key in order:
             item = QListWidgetItem(titles[key] + ("  (collection)" if key.startswith("collection:") else ""))
             item.setData(_KEY, key)
+            item.setSizeHint(QSize(0, 36))   # the stylesheet padding isn't counted otherwise: rows overlapped
             self._mark(item, key in enabled)
             self.list.addItem(item)
         self.list.itemClicked.connect(lambda item: self._mark(item, not item.data(_ON)))

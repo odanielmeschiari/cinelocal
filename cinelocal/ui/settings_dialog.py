@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
                                QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget)
 
@@ -22,6 +23,8 @@ _HELP = {
 
 
 class SettingsDialog(QDialog):
+    edit_home_requested = Signal()
+
     def __init__(self, service: LibraryService, parent=None, intro: str = "",
                  focus_key: bool = False):
         super().__init__(parent)
@@ -112,6 +115,10 @@ class SettingsDialog(QDialog):
         root.addLayout(form)
 
         buttons = QHBoxLayout()
+        edit_home = QPushButton("Edit home…")
+        edit_home.setToolTip("Choose which rows are shown above the movies, and their order")
+        edit_home.clicked.connect(self.edit_home_requested)
+        buttons.addWidget(edit_home)
         restore = QPushButton("Restore app…")
         restore.clicked.connect(self._restore)
         buttons.addWidget(restore)
