@@ -1,20 +1,132 @@
 """Advanced search: an overlay on top of the library with every filter available in the local data."""
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFrame, QGridLayout, QHBoxLayout,
-                               QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
-                               QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget)
+from PySide6.QtCore import QEvent, QLocale, QPointF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QDoubleValidator, QIcon, QIntValidator, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QInputDialog, QLabel,
+                               QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox, QPushButton,
+                               QScrollArea, QToolButton, QVBoxLayout, QWidget)
 
 from .. import filters
 from ..service import LibraryService
 from ..utils import normalize_text, star_text
+from .theme import COLORS
 
-_KEY, _SEARCH = Qt.UserRole, Qt.UserRole + 1
+_KEY, _SEARCH, _ON = Qt.UserRole, Qt.UserRole + 1, Qt.UserRole + 2
+
+
+_icons: dict[bool, QIcon] = {}
+
+
+def _check_icon(checked: bool) -> QIcon:
+    """Empty box, or the same box with just a blue check mark (drawn, so it needs no image files)."""
+    if checked not in _icons:
+        size, ratio = 16, 2
+        pixmap = QPixmap(size * ratio, size * ratio)
+        pixmap.setDevicePixelRatio(ratio)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(QPen(QColor(COLORS["muted"]), 1.2))
+        painter.drawRoundedRect(1, 1, size - 2, size - 2, 4, 4)
+        if checked:
+            painter.setPen(QPen(QColor(COLORS["accent_hover"]), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.drawPolyline([QPointF(3.8, 8.4), QPointF(6.9, 11.5), QPointF(12.4, 4.6)])
+        painter.end()
+        _icons[checked] = QIcon(pixmap)
+    return _icons[checked]
+
+
+class Check(QCheckBox):
+    """Check box drawn as a blue check mark (the whole row, icon included, is clickable)."""
+
+    def __init__(self, text: str, parent=None):
+        super().__init__(text, parent)
+        self.setStyleSheet("QCheckBox::indicator { width: 0; height: 0; margin: 0; border: none; background: transparent; }")
+        self.setIconSize(QSize(16, 16))
+        self.toggled.connect(self._sync)
+        self._sync()
+
+    def _sync(self) -> None:
+        self.setIcon(_check_icon(self.isChecked()))
+
+
+class NumberField(QWidget):
+    """Number you can type, step with the up/down buttons (or arrow keys) or pick from a menu of presets.
+    Empty means "no limit"."""
+    changed = Signal()
+
+    def __init__(self, presets=(), step=1, low=0, high=10**9, decimals=0, start=None, label=str, parent=None):
+        super().__init__(parent)
+        self._step, self._low, self._high, self._decimals = step, low, high, decimals
+        self._start = start if start is not None else (presets[0] if presets else low)
+        self.edit = QLineEdit()
+        self.edit.setFixedWidth(84)
+        if decimals:
+            validator = QDoubleValidator(low, high, decimals)
+            validator.setNotation(QDoubleValidator.StandardNotation)
+        else:
+            validator = QIntValidator(low, high)
+        validator.setLocale(QLocale.c())   # always "." as the decimal separator and no thousands separator
+        self.edit.setValidator(validator)
+        self.edit.installEventFilter(self)
+        self.edit.textChanged.connect(lambda _t: self.changed.emit())
+        self.edit.editingFinished.connect(lambda: self.set_value(self._clamp(self.value())))
+
+        arrows = QVBoxLayout()
+        arrows.setSpacing(1)
+        for kind, direction in ((Qt.UpArrow, 1), (Qt.DownArrow, -1)):
+            button = QToolButton()
+            button.setArrowType(kind)
+            button.setAutoRepeat(True)
+            button.setFixedSize(22, 15)
+            button.setStyleSheet("QToolButton { padding: 0; border-radius: 4px; }")
+            button.clicked.connect(lambda _c=False, d=direction: self._step_by(d))
+            arrows.addWidget(button)
+        menu = QMenu(self)
+        menu.addAction("Any", lambda: self.set_value(None))
+        for value in presets:
+            menu.addAction(label(value), lambda v=value: self.set_value(v))
+        drop = QToolButton()
+        drop.setArrowType(Qt.DownArrow)
+        drop.setMenu(menu)
+        drop.setPopupMode(QToolButton.InstantPopup)
+        drop.setFixedSize(26, 31)
+        drop.setToolTip("Preset values")
+        drop.setStyleSheet("QToolButton { padding: 0; border-radius: 6px; }")
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(3)
+        row.addWidget(self.edit)
+        row.addLayout(arrows)
+        row.addWidget(drop)
+
+    def value(self):
+        try:
+            return float(self.edit.text()) if self._decimals else int(self.edit.text())
+        except ValueError:
+            return None
+
+    def set_value(self, value) -> None:
+        self.edit.setText("" if value is None else f"{value:g}" if self._decimals else str(int(value)))
+
+    def _clamp(self, value):
+        return None if value is None else round(min(max(value, self._low), self._high), self._decimals)
+
+    def _step_by(self, direction: int) -> None:
+        value = self.value()
+        self.set_value(self._clamp(self._start if value is None else value + direction * self._step))
+
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self.edit and event.type() == QEvent.KeyPress and event.key() in (Qt.Key_Up, Qt.Key_Down):
+            self._step_by(1 if event.key() == Qt.Key_Up else -1)
+            return True
+        return False
 
 
 class CheckList(QWidget):
-    """Searchable list of choices with check boxes (the search box only shows up on long lists)."""
+    """Searchable list of choices with check marks; "Select all" / "Clear" act on the rows being shown."""
     changed = Signal()
 
     def __init__(self, items: list[tuple], empty_hint: str = "", parent=None):
@@ -25,27 +137,37 @@ class CheckList(QWidget):
         self.box = QLineEdit()
         self.box.setPlaceholderText("Filter the list…")
         self.box.setClearButtonEnabled(True)
-        self.box.setVisible(len(items) > 8)
+        self.box.setVisible(len(items) > 12)
+        actions = QHBoxLayout()
+        actions.setSpacing(6)
+        for text, state in (("Select all", True), ("Clear", False)):
+            button = QPushButton(text)
+            button.setStyleSheet("padding: 3px 10px;")
+            button.clicked.connect(lambda _c=False, st=state: self._set_visible(st))
+            actions.addWidget(button)
+        actions.addStretch(1)
+        self.actions = QWidget()
+        self.actions.setLayout(actions)
+        actions.setContentsMargins(0, 0, 0, 0)
+        self.actions.setVisible(bool(items))
         self.list = QListWidget()
         self.list.setSelectionMode(QListWidget.NoSelection)
         self.list.setFixedHeight(150)
         self.list.setStyleSheet(
-            "QListWidget::item { padding: 3px 6px; }"
-            "QListWidget::indicator { width: 14px; height: 14px; border-radius: 4px;"
-            " border: 1px solid #1f2b40; background: #131a26; }"
-            "QListWidget::indicator:checked { background: #2f80ff; border-color: #2f80ff; }")
-        for key, text in items:   # no ItemIsUserCheckable: itemClicked toggles, so the whole row is clickable
-            item = QListWidgetItem(text)
+            "QListWidget::item { padding: 3px 6px; }")
+        self.list.setIconSize(QSize(16, 16))
+        for key, text in items:   # the check mark is the item's icon; itemClicked toggles it (box or text)
+            item = QListWidgetItem(_check_icon(False), text)
             item.setData(_KEY, key)
             item.setData(_SEARCH, normalize_text(text))
-            item.setCheckState(Qt.Unchecked)
+            item.setData(_ON, False)
             self.list.addItem(item)
         self.hint = QLabel(empty_hint)
         self.hint.setObjectName("muted")
         self.hint.setWordWrap(True)
         self.hint.setVisible(not items and bool(empty_hint))
         self.list.setVisible(bool(items))
-        for w in (self.box, self.list, self.hint):
+        for w in (self.box, self.actions, self.list, self.hint):
             column.addWidget(w)
         self.box.textChanged.connect(self._filter)
         self.list.itemClicked.connect(self._toggle)
@@ -56,30 +178,29 @@ class CheckList(QWidget):
             item = self.list.item(i)
             item.setHidden(not all(t in item.data(_SEARCH) for t in terms))
 
+    @staticmethod
+    def _mark(item: QListWidgetItem, on: bool) -> None:
+        item.setData(_ON, on)
+        item.setIcon(_check_icon(on))
+
     def _toggle(self, item: QListWidgetItem) -> None:
-        item.setCheckState(Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked)
+        self._mark(item, not item.data(_ON))
+        self.changed.emit()
+
+    def _set_visible(self, on: bool) -> None:
+        for i in range(self.list.count()):
+            if not self.list.item(i).isHidden():
+                self._mark(self.list.item(i), on)
         self.changed.emit()
 
     def checked(self) -> list:
         items = (self.list.item(i) for i in range(self.list.count()))
-        return [item.data(_KEY) for item in items if item.checkState() == Qt.Checked]
+        return [item.data(_KEY) for item in items if item.data(_ON)]
 
     def set_checked(self, keys) -> None:
         keys = set(keys)
         for i in range(self.list.count()):
-            item = self.list.item(i)
-            item.setCheckState(Qt.Checked if item.data(_KEY) in keys else Qt.Unchecked)
-
-
-def _spin(low: int, high: int, special: str = "Any", suffix: str = "", step: int = 1) -> QSpinBox:
-    spin = QSpinBox()
-    spin.setRange(low, high)
-    spin.setSpecialValueText(special)   # shown at the minimum value, which means "no limit"
-    spin.setSuffix(suffix)
-    spin.setSingleStep(step)
-    spin.setGroupSeparatorShown(True)
-    spin.setMinimumWidth(110)
-    return spin
+            self._mark(self.list.item(i), self.list.item(i).data(_KEY) in keys)
 
 
 def _row(*widgets) -> QHBoxLayout:
@@ -172,10 +293,11 @@ class AdvancedSearch(QWidget):
         self.kind = QComboBox()
         for label, value in (("Movies and series", None), ("Movies only", "movie"), ("Series only", "series")):
             self.kind.addItem(label, value)
-        self.runtime_min = _spin(0, 600, suffix=" min", step=5)
-        self.runtime_max = _spin(0, 600, suffix=" min", step=5)
+        minutes = dict(presets=(60, 90, 120, 150, 180), step=5, high=1000, label=lambda v: f"{v} min")
+        self.runtime_min = NumberField(**minutes)
+        self.runtime_max = NumberField(**minutes)
         form.addLayout(_row("Type", self.kind, "   Runtime (series: per episode)  from",
-                            self.runtime_min, "to", self.runtime_max))
+                            self.runtime_min, "to", self.runtime_max, "min"))
 
         # -- release year, ratings --
         section("Release and ratings")
@@ -183,30 +305,24 @@ class AdvancedSearch(QWidget):
         self.year_mode = QComboBox()
         self.year_mode.addItem("Between", "between")
         self.year_mode.addItem("Only in", "exact")
-        self.year_from = _spin(low - 1, max(high, low), step=1)
-        self.year_from.setGroupSeparatorShown(False)
-        self.year_to = _spin(low - 1, max(high, low), step=1)
-        self.year_to.setGroupSeparatorShown(False)
+        decades = tuple(range(low // 10 * 10 + 10, high + 1, 10))
+        self.year_from = NumberField(decades, 1, 1800, 2100, start=low)
+        self.year_to = NumberField(tuple(reversed(decades)), 1, 1800, 2100, start=high)
         self.year_and = QLabel("and")
         form.addLayout(_row("Year", self.year_mode, self.year_from, self.year_and, self.year_to))
-        self.rating_min = QDoubleSpinBox()
-        self.rating_max = QDoubleSpinBox()
-        for spin in (self.rating_min, self.rating_max):
-            spin.setRange(0, 10)
-            spin.setDecimals(1)
-            spin.setSingleStep(0.5)
-            spin.setMinimumWidth(110)
-        self.rating_min.setSpecialValueText("Any")
-        self.rating_max.setValue(10)
+        rating = dict(presets=(5, 6, 7, 8, 9), step=0.5, high=10, decimals=1, label=lambda v: f"{v:g}")
+        self.rating_min = NumberField(**rating)
+        self.rating_max = NumberField(**rating)
         form.addLayout(_row("TMDB rating from", self.rating_min, "to", self.rating_max))
-        self.votes_min = _spin(0, 100_000_000, step=100)
-        self.votes_max = _spin(0, 100_000_000, step=1000)
+        votes = dict(presets=(100, 500, 1000, 5000, 10000, 100000), step=100, label=lambda v: f"{v:,}")
+        self.votes_min = NumberField(**votes)
+        self.votes_max = NumberField(**votes)
         form.addLayout(_row("TMDB votes from", self.votes_min, "to", self.votes_max))
 
         # -- genre and age rating --
         section("Genre and age rating")
         self.genres = CheckList(named(options["genres"]))
-        self.genres_all = QCheckBox("Must have all the selected genres")
+        self.genres_all = Check("Must have all the selected genres")
         genres_box = QWidget()
         column = QVBoxLayout(genres_box)
         column.setContentsMargins(0, 0, 0, 0)
@@ -228,26 +344,19 @@ class AdvancedSearch(QWidget):
         self.watched = QComboBox()
         for label, value in (("Watched or not", None), ("Watched", True), ("Unwatched", False)):
             self.watched.addItem(label, value)
-        self.favorite = QCheckBox("Favorites")
-        self.watchlist = QCheckBox("Watchlist")
-        self.in_progress = QCheckBox("Continue watching")
+        self.favorite = Check("Favorites")
+        self.watchlist = Check("Watchlist")
+        self.in_progress = Check("Continue watching")
         form.addLayout(_row(self.watched, self.favorite, self.watchlist, self.in_progress))
-        self.added_days = _spin(0, 3650, suffix=" days", step=1)
-        form.addLayout(_row("Added in the last", self.added_days))
+        self.added_days = NumberField((7, 30, 90, 180, 365), 1, 1, 36500, label=lambda v: f"{v} days")
+        form.addLayout(_row("Added in the last", self.added_days, "days"))
         s = self.service
         self.collections = CheckList(
             [(c["id"], f"{c['name']}  ({len(s.membership.get(c['id'], ()))})") for c in s.collections],
             "You have not created any collections yet.")
-        stars_box = QWidget()
-        column = QVBoxLayout(stars_box)
-        column.setContentsMargins(0, 0, 0, 0)
-        column.setSpacing(2)
-        self.stars = {}
-        for value in (5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5, 0):
-            self.stars[value] = QCheckBox(star_text(value) if value else "Not rated")
-            column.addWidget(self.stars[value])
-        column.addStretch(1)
-        pair(("My collections", self.collections), ("My rating", stars_box))
+        self.stars = CheckList([(v, star_text(v) if v else "Not rated")
+                                for v in (5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5, 0)])
+        pair(("My collections", self.collections), ("My rating", self.stars))
 
         # -- footer --
         foot = QHBoxLayout()
@@ -273,80 +382,66 @@ class AdvancedSearch(QWidget):
             w.currentIndexChanged.connect(self._changed)
         for w in (self.runtime_min, self.runtime_max, self.year_from, self.year_to, self.votes_min,
                   self.votes_max, self.added_days, self.rating_min, self.rating_max):
-            w.valueChanged.connect(self._changed)
-        for w in (self.genres_all, self.favorite, self.watchlist, self.in_progress, *self.stars.values()):
+            w.changed.connect(self._changed)
+        for w in (self.genres_all, self.favorite, self.watchlist, self.in_progress):
             w.toggled.connect(self._changed)
-        for w in (self.genres, self.certs, self.directors, self.cast, self.collections):
+        for w in (self.genres, self.certs, self.directors, self.cast, self.collections, self.stars):
             w.changed.connect(self._changed)
 
     # ---------------------------------------------------------------------- criteria --
+    def _numbers(self) -> dict:
+        return {"year_min": self.year_from, "year_max": self.year_to, "rating_min": self.rating_min,
+                "rating_max": self.rating_max, "votes_min": self.votes_min, "votes_max": self.votes_max,
+                "runtime_min": self.runtime_min, "runtime_max": self.runtime_max,
+                "added_days": self.added_days}
+
+    def _lists(self) -> dict:
+        return {"genres": self.genres, "certifications": self.certs, "directors": self.directors,
+                "cast": self.cast, "collections": self.collections, "stars": self.stars}
+
     def criteria(self) -> dict:
         c: dict = {}
         if self.kind.currentData():
             c["kind"] = self.kind.currentData()
-        if self.genres.checked():
-            c["genres"] = self.genres.checked()
-            if self.genres_all.isChecked():
-                c["genres_all"] = True
-        year_low = self.year_from.value() if self.year_from.value() > self.year_from.minimum() else None
-        year_high = self.year_to.value() if self.year_to.value() > self.year_to.minimum() else None
-        if self.year_mode.currentData() == "exact":
-            year_high = year_low
-        if year_low is not None:
-            c["year_min"] = year_low
-        if year_high is not None:
-            c["year_max"] = year_high
-        if self.rating_min.value() > 0:
-            c["rating_min"] = self.rating_min.value()
-        if self.rating_max.value() < 10:
-            c["rating_max"] = self.rating_max.value()
-        for key, spin in (("votes_min", self.votes_min), ("votes_max", self.votes_max),
-                          ("runtime_min", self.runtime_min), ("runtime_max", self.runtime_max),
-                          ("added_days", self.added_days)):
-            if spin.value():
-                c[key] = spin.value()
-        for key, widget in (("certifications", self.certs), ("directors", self.directors),
-                            ("cast", self.cast), ("collections", self.collections)):
+        for key, widget in self._lists().items():
             if widget.checked():
                 c[key] = widget.checked()
+        if "genres" in c and self.genres_all.isChecked():
+            c["genres_all"] = True
+        for key, field in self._numbers().items():
+            value = field.value()
+            if value:   # empty or 0 = no limit
+                c[key] = value
+        if c.get("rating_max", 0) >= 10:
+            del c["rating_max"]
+        if self.year_mode.currentData() == "exact":
+            c.pop("year_max", None)
+            if "year_min" in c:
+                c["year_max"] = c["year_min"]
         if self.watched.currentData() is not None:
             c["watched"] = self.watched.currentData()
         for key, box in (("favorite", self.favorite), ("watchlist", self.watchlist),
                          ("in_progress", self.in_progress)):
             if box.isChecked():
                 c[key] = True
-        stars = [value for value, box in self.stars.items() if box.isChecked()]
-        if stars:
-            c["stars"] = stars
         return c
 
     def load(self, c: dict) -> None:
         self._loading = True
         self.kind.setCurrentIndex(max(0, self.kind.findData(c.get("kind"))))
-        self.genres.set_checked(c.get("genres", ()))
+        for key, widget in self._lists().items():
+            widget.set_checked(c.get(key, ()))
         self.genres_all.setChecked(bool(c.get("genres_all")))
         exact = c.get("year_min") is not None and c.get("year_min") == c.get("year_max")
         self.year_mode.setCurrentIndex(1 if exact else 0)
-        self.year_from.setValue(c.get("year_min") or self.year_from.minimum())
-        self.year_to.setValue(c.get("year_max") or self.year_to.minimum())
-        self.rating_min.setValue(c.get("rating_min", 0))
-        self.rating_max.setValue(c.get("rating_max", 10))
-        for key, spin in (("votes_min", self.votes_min), ("votes_max", self.votes_max),
-                          ("runtime_min", self.runtime_min), ("runtime_max", self.runtime_max),
-                          ("added_days", self.added_days)):
-            spin.setValue(c.get(key, 0))
-        for key, widget in (("certifications", self.certs), ("directors", self.directors),
-                            ("cast", self.cast), ("collections", self.collections)):
-            widget.set_checked(c.get(key, ()))
+        for key, field in self._numbers().items():
+            field.set_value(c.get(key))
         self.watched.setCurrentIndex(max(0, self.watched.findData(c.get("watched"))))
         for key, box in (("favorite", self.favorite), ("watchlist", self.watchlist),
                          ("in_progress", self.in_progress)):
             box.setChecked(bool(c.get(key)))
-        for value, box in self.stars.items():
-            box.setChecked(value in c.get("stars", ()))
         self._loading = False
         self._sync_year()
-        self._changed()
 
     def _sync_year(self) -> None:
         between = self.year_mode.currentData() == "between"

@@ -156,6 +156,18 @@ class MainWindow(QMainWindow):
         info_row.addWidget(info_btn)
         column.addWidget(self.infobar)
 
+        self.filterbar = QFrame()   # shown while an advanced search is active
+        self.filterbar.setObjectName("infobar")
+        filter_row = QHBoxLayout(self.filterbar)
+        filter_row.setContentsMargins(16, 6, 10, 6)
+        self.filter_label = QLabel("")
+        filter_row.addWidget(self.filter_label, 1)
+        clear_btn = QPushButton("Clear search")
+        clear_btn.clicked.connect(self._clear_search)
+        filter_row.addWidget(clear_btn)
+        self.filterbar.hide()
+        column.addWidget(self.filterbar)
+
         head = QHBoxLayout()
         self.heading = QLabel("All movies")
         self.heading.setObjectName("heading")
@@ -302,6 +314,8 @@ class MainWindow(QMainWindow):
         self.heading.setText(self._heading_text())
         self.count_label.setText(f"{len(visible)} of {total}" if len(visible) != total
                                  else f"{total} movie{'' if total == 1 else 's'}")
+        self.filterbar.setVisible(bool(self.advanced))
+        self.filter_label.setText(f"Advanced search: {len(visible)} of {total}")
         if visible:
             self.views.setCurrentWidget(self.grid_page)
         else:
@@ -358,6 +372,15 @@ class MainWindow(QMainWindow):
             lambda adv: len(filters.filter_movies(s.movies, self.flt, s.membership, self.query,
                                                   s.progress_of, adv)))
         overlay.applied.connect(self._on_advanced)
+
+    def _clear_search(self) -> None:
+        """Back to the whole catalog: no advanced filters, no text search, section \"All\"."""
+        self.advanced = {}
+        self.advanced_btn.setChecked(False)
+        self.flt = ("all", None)
+        self.search.clear()
+        self._rebuild_sidebar()
+        self.refresh_view()
 
     def _on_advanced(self, criteria: dict) -> None:
         self.advanced = criteria
