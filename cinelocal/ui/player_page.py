@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QRect, Qt, QTimer, QVariantAnimation, Signal
-from PySide6.QtGui import QCursor, QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QCursor, QGuiApplication, QKeySequence, QLinearGradient, QPainter, QShortcut
 from PySide6.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
                                QSizePolicy, QSlider, QStyle, QToolTip, QVBoxLayout, QWidget, QWidgetAction)
 
@@ -22,9 +22,7 @@ SPU_STEP_US = 250_000     # subtitle delay step (microseconds)
 ICON_BOX = 46             # side (px) of the square icon buttons (play, settings, fullscreen)
 FADE_MS = 500             # duration of the controls' fade-out
 IDLE_HIDE_SECONDS = 2.5   # in fullscreen, controls and pointer disappear after this much idle time
-# in fullscreen the bars float over the video, on a gradient that fades into the picture
-_TOP_SHADE = "#page { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0,0,0,200), stop:1 rgba(0,0,0,0)); }"
-_BOTTOM_SHADE = "#page { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0,0,0,0), stop:1 rgba(0,0,0,200)); }"
+SHADE_ALPHA = 200         # in fullscreen the bars float over the video, on a gradient that fades into the picture
 # key, label, minimum, maximum, default (in %). Sharpness 0 = filter off.
 _ADJUSTMENTS = (("brightness", "Brightness", 0, 200, 100), ("contrast", "Contrast", 0, 200, 100),
                 ("saturation", "Color", 0, 300, 100), ("sharpness", "Sharpness", 0, 100, 0))
@@ -89,6 +87,27 @@ class _SeekSlider(QSlider):
         super().mousePressEvent(event)
 
 
+class _Bar(QWidget):
+    """Top or bottom bar. Floating over the video (a translucent window) it paints its own gradient replacing
+    whatever was there (CompositionMode_Source); otherwise partial repaints (clock, play icon) would pile up on
+    the old pixels and the icons would overlap."""
+
+    def __init__(self, bottom: bool):
+        super().__init__()
+        self.bottom, self.floating = bottom, False
+        self.setAttribute(Qt.WA_StyledBackground)
+
+    def paintEvent(self, event) -> None:
+        if not self.floating:
+            return super().paintEvent(event)
+        gradient = QLinearGradient(0, 0, 0, self.height())
+        gradient.setColorAt(0, QColor(0, 0, 0, 0 if self.bottom else SHADE_ALPHA))
+        gradient.setColorAt(1, QColor(0, 0, 0, SHADE_ALPHA if self.bottom else 0))
+        painter = QPainter(self)
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
+        painter.fillRect(event.rect(), gradient)
+
+
 class VlcPlayerPage(QWidget):
     back_requested = Signal()
     external_requested = Signal()     # open this movie in another player
@@ -148,7 +167,7 @@ class VlcPlayerPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self.topbar = QWidget()          # back on the left (same place as the details screen), title in the center
+        self.topbar = _Bar(bottom=False)          # back on the left (same place as the details screen), title in the center
         self.topbar.setObjectName("page")
         top = QHBoxLayout(self.topbar)
         top.setContentsMargins(34, 20, 34, 10)
@@ -169,7 +188,7 @@ class VlcPlayerPage(QWidget):
         self.video.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.video, 1)
 
-        self.controls = QWidget()
+        self.controls = _Bar(bottom=True)
         self.controls.setObjectName("page")
         row = QHBoxLayout(self.controls)
         row.setContentsMargins(14, 8, 14, 8)
@@ -524,7 +543,7 @@ class VlcPlayerPage(QWidget):
         """Fullscreen: the bars leave the layout and become translucent windows above the video (which
         VLC draws in its own native window, so ordinary child widgets could not overlap it). Windowed: back."""
         layout = self.layout()
-        for widget, shade in ((self.topbar, _TOP_SHADE), (self.controls, _BOTTOM_SHADE)):
+        for widget in (self.topbar, self.controls):
             layout.removeWidget(widget)
             if on:
                 widget.setParent(self.window(), Qt.Tool | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus)
@@ -532,7 +551,8 @@ class VlcPlayerPage(QWidget):
                 widget.setParent(self, Qt.Widget)
             widget.setAttribute(Qt.WA_TranslucentBackground, on)
             widget.setAttribute(Qt.WA_ShowWithoutActivating, on)
-            widget.setStyleSheet(shade if on else "")
+            widget.floating = on
+            widget.setStyleSheet("#page { background: transparent; }" if on else "")
             widget.setWindowOpacity(1.0)
         if not on:
             layout.insertWidget(0, self.topbar)
@@ -584,6 +604,7 @@ class VlcPlayerPage(QWidget):
     def _set_chrome_opacity(self, value) -> None:
         for w in (self.topbar, self.controls):
             w.setWindowOpacity(float(value))
+            w.update()   # translucent windows (Windows) only apply the opacity when repainted
 
     def _finish_fade(self) -> None:
         for w in (self.topbar, self.controls):
@@ -595,6 +616,7 @@ class VlcPlayerPage(QWidget):
         self._fade.stop()
         for w in (self.topbar, self.controls):
             w.setWindowOpacity(1.0)
+            w.update()
 
     def _escape(self) -> None:
         if self._fullscreen:
