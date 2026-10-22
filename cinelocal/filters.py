@@ -104,7 +104,7 @@ def matches_advanced(movie: dict, adv: dict, membership: dict[int, set[int]],
 
 
 def advanced_options(movies: list[dict]) -> dict:
-    """What the advanced search can choose from: [(name, count)] sorted by count, and the range of years."""
+    """What the advanced search can choose from: [(name, count)] in alphabetical order, and the range of years."""
     genres: Counter = Counter()
     directors: Counter = Counter()
     cast: Counter = Counter()
@@ -119,7 +119,7 @@ def advanced_options(movies: list[dict]) -> dict:
     years = [y for y in years if y]
 
     def ranked(counter: Counter) -> list[tuple[str, int]]:
-        return sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))
+        return sorted(counter.items(), key=lambda kv: (normalize_text(kv[0]), kv[0]))
 
     return {"genres": ranked(genres), "directors": ranked(directors), "cast": ranked(cast),
             "certifications": ranked(certifications), "years": (min(years), max(years)) if years else None}

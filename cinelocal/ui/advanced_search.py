@@ -352,7 +352,7 @@ class AdvancedSearch(QWidget):
         form.addLayout(_row("Added in the last", self.added_days, "days"))
         s = self.service
         self.collections = CheckList(
-            [(c["id"], f"{c['name']}  ({len(s.membership.get(c['id'], ()))})") for c in s.collections],
+            [(c["id"], f"{c['name']}  ({len(s.membership.get(c['id'], ()))})") for c in sorted(s.collections, key=lambda c: normalize_text(c["name"]))],
             "You have not created any collections yet.")
         self.stars = CheckList([(v, star_text(v) if v else "Not rated")
                                 for v in (5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5, 0)])
