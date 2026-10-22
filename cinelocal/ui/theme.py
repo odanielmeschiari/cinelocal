@@ -49,6 +49,9 @@ QPushButton[primary="true"]:hover { background: $accent_hover; border-color: $ac
 QPushButton#iconBtn { background: transparent; border: none; border-radius: 10px; padding: 0; font-size: 26pt; }
 QPushButton#iconBtn:hover { background: $surface2; border: none; }
 QPushButton#iconBtn:pressed { background: $surface3; }
+QPushButton#plainIcon { background: transparent; border: none; padding: 0 6px; font-size: 26pt; }
+QPushButton#plainIcon:hover { background: transparent; color: $accent_hover; }
+QPushButton#plainIcon:pressed { background: transparent; color: $accent; }
 QPushButton::menu-indicator, QToolButton::menu-indicator { image: none; width: 0; }
 
 QTreeWidget#sidebar { background: $surface; border: none; outline: 0; padding: 10px 6px; }

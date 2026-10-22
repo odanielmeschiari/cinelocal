@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QComboBox, QDialog, QFileDialog, QFormLayout, QHB
 from ..config import LANGUAGES, TRACK_LANGUAGES
 from ..providers import PROVIDERS
 from ..service import LibraryService
+from .restore_dialog import RestoreDialog
 
 _HELP = {
     "tmdb": ('Free: create an account at <a href="https://www.themoviedb.org/signup">themoviedb.org</a>, '
@@ -27,6 +28,7 @@ class SettingsDialog(QDialog):
         self.service = service
         self._closed = False
         self.saved = False
+        self.restored = False
         s = service.settings
         self.setWindowTitle("Settings")
         self.setModal(True)
@@ -110,6 +112,9 @@ class SettingsDialog(QDialog):
         root.addLayout(form)
 
         buttons = QHBoxLayout()
+        restore = QPushButton("Restore app…")
+        restore.clicked.connect(self._restore)
+        buttons.addWidget(restore)
         buttons.addStretch(1)
         cancel = QPushButton("Cancel")
         save = QPushButton("Save")
@@ -145,6 +150,12 @@ class SettingsDialog(QDialog):
     def _save(self) -> None:
         self.saved = True
         self.accept()
+
+    def _restore(self) -> None:
+        dialog = RestoreDialog(self)
+        if dialog.exec() and self.service.restore(dialog.selected()):
+            self.restored = True
+            self.reject()   # unsaved changes in this window are discarded: the settings may have just been reset
 
     def done(self, result: int) -> None:
         self._closed = True

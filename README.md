@@ -39,7 +39,7 @@ chmod +x *.sh   # some zip extractors lose the executable permission
 
 The script installs any missing system libraries (it asks for the administrator password),
 creates a virtual environment with PySide6 and adds **CineLocal** to the application menu.
-To just try it without installing: `./run.sh`. To remove it: `./uninstall.sh` (`--purge` also deletes the data).
+To remove it: `./uninstall.sh` (`--purge` also deletes the data).
 
 ## Installation (Windows 10/11)
 
@@ -53,7 +53,7 @@ To just try it without installing: `./run.sh`. To remove it: `./uninstall.sh` (`
 
 The script copies the app to `%LOCALAPPDATA%\Programs\cinelocal`, creates a virtual environment with PySide6
 (needs internet, ~200 MB) and adds the Start Menu shortcut. It does not need administrator rights.
-To just try it without installing: `run.bat`. To remove it: `uninstall.bat` (`--purge` also deletes the data).
+To remove it: `uninstall.bat` (`--purge` also deletes the data).
 
 ## Uninstalling
 

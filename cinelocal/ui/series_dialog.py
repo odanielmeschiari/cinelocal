@@ -53,7 +53,8 @@ class SeriesDialog(QWidget):
         page = QVBoxLayout(self)
         page.setContentsMargins(34, 20, 34, 20)
         page.setSpacing(10)
-        self.back_btn = QPushButton("←  Back")
+        self.back_btn = QPushButton("←")
+        self.back_btn.setObjectName("plainIcon")
         self.back_btn.setToolTip("Back to the list (Esc)")
         self.back_btn.clicked.connect(self._leave)
         page.addWidget(self.back_btn, 0, Qt.AlignLeft)
@@ -113,13 +114,15 @@ class SeriesDialog(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self.watch_btn = QPushButton("Watch")
+        self.watch_btn = QPushButton("▶")
         self.watch_btn.setProperty("primary", True)
         self.watch_btn.clicked.connect(lambda: self.play_requested.emit(self.movie_id))
-        self.fav_btn = QPushButton("Favorite")
+        self.fav_btn = QPushButton("♡")
+        self.fav_btn.setToolTip("Favorite")
         self.fav_btn.setCheckable(True)
         self.fav_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "favorite", on))
-        self.seen_btn = QPushButton("Watched")
+        self.seen_btn = QPushButton("✓")
+        self.seen_btn.setToolTip("Mark as watched")
         self.seen_btn.setCheckable(True)
         self.seen_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watched", on))
         self.list_btn = QPushButton("Watchlist")
@@ -127,7 +130,10 @@ class SeriesDialog(QWidget):
         self.list_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watchlist", on))
         self.trailer_btn = QPushButton("Trailer")
         self.trailer_btn.clicked.connect(self._open_trailer)
-        more = QPushButton("More")
+        more = QPushButton("⋮")
+        more.setObjectName("plainIcon")
+        more.setStyleSheet("font-size: 18pt;")
+        more.setToolTip("More")
         more_menu = QMenu(more)
         more_menu.addAction("Refresh metadata", lambda: self.service.apply_match(self.movie_id))
         more_menu.addAction("Fix match…", self._fix_match)
@@ -218,8 +224,8 @@ class SeriesDialog(QWidget):
         self.update()
 
         for button, value, on_text, off_text in (
-                (self.fav_btn, s["favorite"], "Favorited", "Favorite"),
-                (self.seen_btn, s["watched"], "Watched", "Mark as watched"),
+                (self.fav_btn, s["favorite"], "♥", "♡"),
+                (self.seen_btn, s["watched"], "✓", "✓"),
                 (self.list_btn, s["watchlist"], "On Watchlist", "Watchlist")):
             button.blockSignals(True)
             button.setChecked(value)
@@ -228,7 +234,7 @@ class SeriesDialog(QWidget):
         self.trailer_btn.setVisible(bool(s["trailer_key"]))
         nxt = self.service.by_id.get(self.service.next_episode(self.series_id))
         self.watch_btn.setEnabled(nxt is not None)
-        self.watch_btn.setText(f"Watch S{nxt['season']}E{nxt['episode']}" if nxt else "Watch")
+        self.watch_btn.setToolTip(f"Watch S{nxt['season']}E{nxt['episode']}" if nxt else "Watch")
         self._fill_seasons()
 
     def _fill_seasons(self) -> None:
@@ -295,10 +301,10 @@ class SeriesDialog(QWidget):
             info.addWidget(w)
         layout.addLayout(info, 1)
 
-        play = QPushButton("Watch")
+        play = QPushButton("▶")
         play.setToolTip("Watch this episode")
         play.clicked.connect(lambda _checked=False, i=e["id"]: self.play_requested.emit(i))
-        seen = QPushButton("Watched")
+        seen = QPushButton("✓")
         seen.setCheckable(True)
         seen.setChecked(e["watched"])
         seen.setToolTip("Mark as watched")

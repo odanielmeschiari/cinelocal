@@ -147,7 +147,8 @@ class VlcPlayerPage(QWidget):
         self.topbar.setObjectName("page")
         top = QHBoxLayout(self.topbar)
         top.setContentsMargins(34, 20, 34, 10)
-        back = self._button("←  Back", self.back_requested.emit)
+        back = self._button("←", self.back_requested.emit)
+        back.setObjectName("plainIcon")
         back.setToolTip("Back (Esc)")
         name = self.title_label = QLabel(title)
         name.setObjectName("muted")
@@ -170,6 +171,7 @@ class VlcPlayerPage(QWidget):
         row.setContentsMargins(14, 8, 14, 8)
         row.setSpacing(10)
         self.play_btn = self._icon_button("❚❚", self.toggle_pause)
+        self.play_btn.setStyleSheet("font-size: 18pt;")   # the pause bars are heavier than the gear and fullscreen glyphs
         self.play_btn.setToolTip("Pause / play (Space)")
         self.elapsed, self.total = QLabel("0:00"), QLabel("0:00")
         self.seek = _SeekSlider(Qt.Horizontal)

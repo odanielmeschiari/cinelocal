@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -68,3 +69,7 @@ def delete_images(movie_id: int, poster: bool = True, backdrop: bool = True) -> 
             _file(kind, movie_id).unlink()
         except OSError:
             pass
+
+
+def delete_all_images() -> None:
+    shutil.rmtree(_ROOT, ignore_errors=True)

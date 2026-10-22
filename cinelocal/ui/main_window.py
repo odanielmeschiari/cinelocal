@@ -549,6 +549,11 @@ class MainWindow(QMainWindow):
         had_key = self.service.has_key
         dialog = SettingsDialog(self.service, self, intro=intro, focus_key=focus_key)
         dialog.exec()
+        if dialog.restored:
+            self._discard_detail()
+            self._update_infobar()
+            self.stack.setCurrentIndex(1 if s.get("library_path") else 0)
+            return
         if not dialog.saved:
             return
         s.update(**dialog.values())

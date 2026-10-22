@@ -306,6 +306,35 @@ class Database:
             self._many("DELETE FROM series WHERE id = ?", [(i,) for i in ids])
         return ids
 
+    # -- restore -------------------------------------------------------------------
+    def restore(self, metadata=False, history=False, favorites=False, collections=False,
+                reviews=False, everything=False) -> None:
+        """Erases the chosen kinds of data. `everything` also forgets the library itself (a rescan rebuilds it)."""
+        with self._lock:
+            run = self._conn.execute
+            if everything:
+                for table in ("collection_movies", "collections", "movies", "series"):
+                    run(f"DELETE FROM {table}")
+            if metadata and not everything:
+                for table, extra in (("movies", ", ep_title = NULL, ep_overview = NULL, ep_air_date = NULL,"
+                                                " ep_runtime = NULL, ep_rating = NULL"), ("series", "")):
+                    run(f"UPDATE {table} SET status = 'pending', tmdb_id = NULL, title = NULL, original_title = NULL,"
+                        " year = NULL, release_date = NULL, overview = NULL, tagline = NULL, runtime = NULL,"
+                        " rating = NULL, votes = NULL, genres_json = '[]', director = NULL, cast_json = '[]',"
+                        f" trailer_key = NULL, has_poster = 0, has_backdrop = 0, updated_at = ?{extra}", (time.time(),))
+            if history and not everything:
+                run("UPDATE movies SET watched = 0")
+            if favorites and not everything:
+                run("UPDATE movies SET favorite = 0, watchlist = 0")
+                run("UPDATE series SET favorite = 0, watchlist = 0")
+            if reviews and not everything:
+                for table in ("movies", "series"):
+                    run(f"UPDATE {table} SET user_rating = 0, user_comment = ''")
+            if collections and not everything:
+                run("DELETE FROM collection_movies")
+                run("DELETE FROM collections")
+            self._conn.commit()
+
     # -- collections ------------------------------------------------------------
     def all_collections(self) -> list[dict]:
         rows = self._query("SELECT id, name FROM collections ORDER BY name COLLATE NOCASE")

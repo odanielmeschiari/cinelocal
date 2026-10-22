@@ -43,7 +43,8 @@ class MovieDialog(QWidget):
         page = QVBoxLayout(self)
         page.setContentsMargins(34, 20, 34, 30)
         page.setSpacing(14)
-        self.back_btn = QPushButton("←  Back")
+        self.back_btn = QPushButton("←")
+        self.back_btn.setObjectName("plainIcon")
         self.back_btn.setToolTip("Back to the list (Esc)")
         self.back_btn.clicked.connect(self._leave)
         page.addWidget(self.back_btn, 0, Qt.AlignLeft)
@@ -103,13 +104,16 @@ class MovieDialog(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self.watch_btn = QPushButton("Watch")
+        self.watch_btn = QPushButton("▶")
+        self.watch_btn.setToolTip("Watch")
         self.watch_btn.setProperty("primary", True)
         self.watch_btn.clicked.connect(self._watch)
-        self.fav_btn = QPushButton("Favorite")
+        self.fav_btn = QPushButton("♡")
+        self.fav_btn.setToolTip("Favorite")
         self.fav_btn.setCheckable(True)
         self.fav_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "favorite", on))
-        self.seen_btn = QPushButton("Watched")
+        self.seen_btn = QPushButton("✓")
+        self.seen_btn.setToolTip("Mark as watched")
         self.seen_btn.setCheckable(True)
         self.seen_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watched", on))
         self.list_btn = QPushButton("Watchlist")
@@ -121,7 +125,10 @@ class MovieDialog(QWidget):
         self.coll_btn.setMenu(coll_menu)
         self.trailer_btn = QPushButton("Trailer")
         self.trailer_btn.clicked.connect(self._open_trailer)
-        more = QPushButton("More")
+        more = QPushButton("⋮")
+        more.setObjectName("plainIcon")
+        more.setStyleSheet("font-size: 18pt;")
+        more.setToolTip("More")
         more_menu = QMenu(more)
         more_menu.addAction("Refresh metadata", self._refresh)
         more_menu.addAction("Fix match…", self._fix_match)
@@ -196,8 +203,8 @@ class MovieDialog(QWidget):
         self._load_backdrop(m)
 
         for button, value, on_text, off_text in (
-                (self.fav_btn, m["favorite"], "Favorited", "Favorite"),
-                (self.seen_btn, m["watched"], "Watched", "Mark as watched"),
+                (self.fav_btn, m["favorite"], "♥", "♡"),
+                (self.seen_btn, m["watched"], "✓", "✓"),
                 (self.list_btn, m["watchlist"], "On Watchlist", "Watchlist")):
             button.blockSignals(True)
             button.setChecked(value)

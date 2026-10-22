@@ -1,6 +1,7 @@
 """Central service: in-memory library state plus the operations used by the interface."""
 from __future__ import annotations
 
+import copy
 import os
 import time
 import traceback
@@ -8,7 +9,7 @@ import traceback
 from PySide6.QtCore import QObject, Signal
 
 from . import images, player
-from .config import Settings
+from .config import DEFAULT_SETTINGS, Settings
 from .db import Database
 from .library import sync_library
 from .metadata_service import find_candidates, find_series_candidates, process_movie, process_series
@@ -317,6 +318,31 @@ class LibraryService(QObject):
         if movie_id in self.by_id:
             self.by_id[movie_id].update(user_rating=rating, user_comment=comment)
             self.movie_changed.emit(movie_id)
+
+    def restore(self, kinds: set[str]) -> bool:
+        """Erases data. kinds: 'metadata' (and covers), 'history', 'favorites', 'collections', 'reviews',
+        'settings' or 'everything' (the library too, back to a first run). False if busy."""
+        if self.updating or self._scanning:
+            self.error.emit("Wait for the scan or metadata update in progress to finish.")
+            return False
+        everything = "everything" in kinds
+        if everything or "metadata" in kinds:
+            images.delete_all_images()
+        self.db.restore(metadata="metadata" in kinds, history="history" in kinds,
+                        favorites="favorites" in kinds, collections="collections" in kinds,
+                        reviews="reviews" in kinds, everything=everything)
+        reset = {}
+        if everything or "history" in kinds:
+            reset["resume"] = DEFAULT_SETTINGS["resume"]
+        if everything or "settings" in kinds:   # the sort order and the install offer are not touched
+            reset.update({k: v for k, v in DEFAULT_SETTINGS.items()
+                          if k not in ("resume", "sort_id", "skip_install_prompt")})
+        self.settings.update(**copy.deepcopy(reset))
+        self.reload()
+        self.library_changed.emit()
+        if self.has_key and self._pending():   # erased metadata is downloaded again, as after any scan
+            self.start_update("pending")
+        return True
 
     def remember_tracks(self, path: str, choices: dict) -> None:
         """Keeps the audio/subtitle tracks picked by hand for this file (used the next time it plays)."""
