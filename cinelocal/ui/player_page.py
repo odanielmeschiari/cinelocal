@@ -194,7 +194,7 @@ class VlcPlayerPage(QWidget):
         self.volume.valueChanged.connect(lambda _v: self._prefs_changed())
         self.settings_btn = self._svg_button("settings", None)      # audio, subtitles and picture all live here
         self.settings_btn.setToolTip("Settings")
-        self.fullscreen_btn = self._icon_button("⛶", self.toggle_fullscreen)
+        self.fullscreen_btn = self._svg_button("fullscreen", self.toggle_fullscreen)
         self.fullscreen_btn.setToolTip("Fullscreen (F)")
         menu = QMenu(self.settings_btn)
         for text, fill in (("Audio", self._fill_audio_menu), ("Subtitles", self._fill_subtitle_menu),
@@ -211,24 +211,11 @@ class VlcPlayerPage(QWidget):
             row.addWidget(w, 1 if w is self.seek else 0)
         layout.addWidget(self.controls)
 
-    def _button(self, text: str, slot) -> QPushButton:
-        button = QPushButton(text)
-        button.setFocusPolicy(Qt.NoFocus)   # the space bar is a player shortcut, not the button's
-        button.clicked.connect(lambda _checked=False: slot())
-        return button
-
     def _svg_button(self, icon: str, slot, object_name: str = "iconBtn") -> IconButton:
         button = IconButton(icon, object_name=object_name, box=ICON_BOX)
         button.setFocusPolicy(Qt.NoFocus)   # the space bar is a player shortcut, not the button's
         if slot:
             button.clicked.connect(lambda _checked=False: slot())
-        return button
-
-    def _icon_button(self, symbol: str, slot) -> QPushButton:
-        """Square, borderless button whose symbol fills almost the whole box (look defined in theme.py)."""
-        button = self._button(symbol, slot or (lambda: None))
-        button.setObjectName("iconBtn")
-        button.setFixedSize(ICON_BOX, ICON_BOX)
         return button
 
     # -- audio and subtitles (tracks already in the file) ---------------------------------
