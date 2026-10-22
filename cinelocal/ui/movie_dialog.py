@@ -140,9 +140,11 @@ class MovieDialog(QWidget):
         more.setMenu(more_menu)
         for w in (self.watch_btn, self.fav_btn, self.seen_btn, more):
             w.setFixedSize(ACTION_BOX, ACTION_BOX)
-        for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.coll_btn, self.trailer_btn, more):
+        for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.coll_btn, self.trailer_btn):
             actions.addWidget(w)
         actions.addStretch(1)
+        actions.addWidget(more)   # "More" at the right edge
+        actions.setContentsMargins(0, 0, 8, 0)   # same right edge as the text above (the scroll body has 8px)
         page.addLayout(actions)
 
     def _text_block(self, layout: QVBoxLayout, heading: str, muted: bool = False) -> QLabel:
