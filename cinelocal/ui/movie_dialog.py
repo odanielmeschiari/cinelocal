@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QUrl, Qt, Signal
-from PySide6.QtGui import (QColor, QDesktopServices, QKeySequence, QLinearGradient, QPainter,
-                           QPixmap, QShortcut)
+from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox, QPushButton,
                                QScrollArea, QVBoxLayout, QWidget)
 
@@ -11,8 +10,8 @@ from .. import images
 from ..service import LibraryService
 from ..utils import format_runtime, format_votes
 from .dialogs import populate_collections_menu
-from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, ReviewBox, cap_offset,
-                             side_margin)
+from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP, GlyphButton,
+                             ReviewBox, backdrop_gradient, cap_offset, side_margin)
 from .match_dialog import MatchDialog
 from .theme import COLORS
 from .widgets import rounded_pixmap
@@ -90,7 +89,7 @@ class MovieDialog(QWidget):
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(0, 8, 8, 0)
-        body_layout.setSpacing(6)
+        body_layout.setSpacing(8)
         self.overview = self._text_block(body_layout, "OVERVIEW")
         self.director = self._text_block(body_layout, "DIRECTOR")
         self.cast = self._text_block(body_layout, "CAST")
@@ -104,7 +103,7 @@ class MovieDialog(QWidget):
         right.addWidget(scroll, 1)
 
         actions = QHBoxLayout()
-        actions.setSpacing(8)
+        actions.setSpacing(12)
         self.watch_btn = QPushButton("▶")
         self.watch_btn.setToolTip("Watch")
         self.watch_btn.setStyleSheet("QPushButton { font-size: 20pt; border: none; border-radius: 10px; padding: 0; }")
@@ -121,14 +120,17 @@ class MovieDialog(QWidget):
         self.seen_btn.setObjectName("bigIcon")
         self.seen_btn.setCheckable(True)
         self.seen_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watched", on))
-        self.list_btn = QPushButton("Watchlist")
+        self.list_btn = GlyphButton("tag")
+        self.list_btn.setToolTip("Watchlist")
         self.list_btn.setCheckable(True)
         self.list_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watchlist", on))
-        self.coll_btn = QPushButton("Collections")
+        self.coll_btn = GlyphButton("book")
+        self.coll_btn.setToolTip("Collections")
         coll_menu = QMenu(self.coll_btn)
         coll_menu.aboutToShow.connect(lambda: self._fill_collections(coll_menu))
         self.coll_btn.setMenu(coll_menu)
-        self.trailer_btn = QPushButton("Trailer")
+        self.trailer_btn = GlyphButton("clapper")
+        self.trailer_btn.setToolTip("Trailer")
         self.trailer_btn.clicked.connect(self._open_trailer)
         more = QPushButton("⋮")
         more.setObjectName("plainIcon")
@@ -139,17 +141,18 @@ class MovieDialog(QWidget):
         more_menu.addAction("Fix match…", self._fix_match)
         more_menu.addAction("Show in folder", self._show_folder)
         more.setMenu(more_menu)
-        for w in (self.watch_btn, self.fav_btn, self.seen_btn):
+        for w in (self.watch_btn, self.fav_btn, self.seen_btn, more):
             w.setFixedSize(ACTION_BOX, ACTION_BOX)
-        for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.coll_btn, self.trailer_btn):
+        actions.addStretch(1)   # the buttons are centered
+        for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.coll_btn, self.trailer_btn, more):
             actions.addWidget(w)
         actions.addStretch(1)
-        actions.addWidget(more)
         right.addLayout(actions)
 
     def _text_block(self, layout: QVBoxLayout, heading: str, muted: bool = False) -> QLabel:
         head = QLabel(heading)
         head.setObjectName("section")
+        head.setContentsMargins(0, SECTION_GAP, 0, 0)
         text = QLabel()
         text.setWordWrap(True)
         text.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -211,12 +214,14 @@ class MovieDialog(QWidget):
 
         for button, value, on_text, off_text in (
                 (self.fav_btn, m["favorite"], "♥", "♡"),
-                (self.seen_btn, m["watched"], "✓", "✓"),
-                (self.list_btn, m["watchlist"], "On Watchlist", "Watchlist")):
+                (self.seen_btn, m["watched"], "✓", "✓")):
             button.blockSignals(True)
             button.setChecked(value)
             button.setText(on_text if value else off_text)
             button.blockSignals(False)
+        self.list_btn.blockSignals(True)
+        self.list_btn.setChecked(m["watchlist"])
+        self.list_btn.blockSignals(False)
         self.trailer_btn.setVisible(bool(m["trailer_key"]))
 
     def _load_poster(self, m: dict) -> None:
@@ -255,12 +260,7 @@ class MovieDialog(QWidget):
             if self._backdrop_scaled is None or self._backdrop_scaled.width() != self.width():
                 self._backdrop_scaled = self._backdrop.scaledToWidth(self.width(), Qt.SmoothTransformation)
             painter.drawPixmap(0, 0, self._backdrop_scaled, 0, 0, self.width(), BACKDROP_HEIGHT)
-            gradient = QLinearGradient(0, 0, 0, BACKDROP_HEIGHT)
-            top, bottom = QColor(bg), QColor(bg)
-            top.setAlpha(150)
-            gradient.setColorAt(0, top)
-            gradient.setColorAt(1, bottom)
-            painter.fillRect(0, 0, self.width(), BACKDROP_HEIGHT, gradient)
+            painter.fillRect(0, 0, self.width(), BACKDROP_HEIGHT, backdrop_gradient(BACKDROP_HEIGHT, bg))
         painter.end()
 
     def resizeEvent(self, event) -> None:

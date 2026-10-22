@@ -1,17 +1,16 @@
 """Series page: general metadata, seasons and episodes (each with its own metadata)."""
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer, QUrl, Qt, Signal
-from PySide6.QtGui import (QColor, QDesktopServices, QKeySequence, QLinearGradient, QPainter,
-                           QPixmap, QShortcut)
+from PySide6.QtCore import QPoint, QTimer, QUrl, Qt, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QMenu, QPushButton,
                                QScrollArea, QVBoxLayout, QWidget)
 
 from .. import images
 from ..service import LibraryService
 from ..utils import format_runtime, format_votes
-from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, ReviewBox, cap_offset,
-                             side_margin)
+from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP, GlyphButton,
+                             ReviewBox, backdrop_gradient, cap_offset, side_margin)
 from .match_dialog import MatchDialog
 from .theme import COLORS
 from .widgets import rounded_pixmap
@@ -84,7 +83,7 @@ class SeriesDialog(QWidget):
         right = QVBoxLayout()
         right.setSpacing(8)
         # Empty space above the details. It starts at DETAILS_OFFSET and is trimmed by _fit_offset() so that
-        # only half of the first episode peeks out at the bottom of the window.
+        # the first episodes are visible without scrolling.
         self._right_gap = QWidget()
         self._right_gap.setFixedHeight(DETAILS_OFFSET)
         right.addWidget(self._right_gap)
@@ -92,6 +91,7 @@ class SeriesDialog(QWidget):
         self.title = QLabel()
         self.title.setObjectName("movieTitle")
         self.title.setWordWrap(True)
+        self.title.setAlignment(Qt.AlignLeft | Qt.AlignTop)   # letters start at the label top
         self.meta = QLabel()
         self.meta.setObjectName("muted")
         self.rating = QLabel()
@@ -114,7 +114,7 @@ class SeriesDialog(QWidget):
         self.cast = self._text_block(right, "CAST")
 
         actions = QHBoxLayout()
-        actions.setSpacing(8)
+        actions.setSpacing(12)
         self.watch_btn = QPushButton("▶")
         self.watch_btn.setStyleSheet("QPushButton { font-size: 20pt; border: none; border-radius: 10px; padding: 0; }")
         self.watch_btn.setProperty("primary", True)
@@ -130,10 +130,12 @@ class SeriesDialog(QWidget):
         self.seen_btn.setObjectName("bigIcon")
         self.seen_btn.setCheckable(True)
         self.seen_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watched", on))
-        self.list_btn = QPushButton("Watchlist")
+        self.list_btn = GlyphButton("tag")
+        self.list_btn.setToolTip("Watchlist")
         self.list_btn.setCheckable(True)
         self.list_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watchlist", on))
-        self.trailer_btn = QPushButton("Trailer")
+        self.trailer_btn = GlyphButton("clapper")
+        self.trailer_btn.setToolTip("Trailer")
         self.trailer_btn.clicked.connect(self._open_trailer)
         more = QPushButton("⋮")
         more.setObjectName("plainIcon")
@@ -143,18 +145,16 @@ class SeriesDialog(QWidget):
         more_menu.addAction("Refresh metadata", lambda: self.service.apply_match(self.movie_id))
         more_menu.addAction("Fix match…", self._fix_match)
         more.setMenu(more_menu)
-        for w in (self.watch_btn, self.fav_btn, self.seen_btn):
+        for w in (self.watch_btn, self.fav_btn, self.seen_btn, more):
             w.setFixedSize(ACTION_BOX, ACTION_BOX)
-        for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.trailer_btn):
+        actions.addStretch(1)   # the buttons are centered
+        for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.trailer_btn, more):
             actions.addWidget(w)
         actions.addStretch(1)
-        actions.addWidget(more)
         right.addLayout(actions)
         self.review = ReviewBox("Write your own comments about this series…")
         self.review.rating_changed.connect(self._set_rating)
         self.review.comment_saved.connect(self._save_comment)
-        right.addSpacing(6)
-        right.addWidget(self.review)
         right.addStretch(1)
 
         self.season_combo = QComboBox()
@@ -168,11 +168,13 @@ class SeriesDialog(QWidget):
         self.ep_box = QVBoxLayout()
         self.ep_box.setSpacing(8)
         column.addLayout(self.ep_box)
+        column.addWidget(self.review)   # below the episodes, so they are the first thing under the details
         column.addStretch(1)
 
     def _text_block(self, layout: QVBoxLayout, heading: str) -> QLabel:
         head = QLabel(heading)
         head.setObjectName("section")
+        head.setContentsMargins(0, SECTION_GAP, 0, 0)
         text = QLabel()
         text.setObjectName("detailText")
         text.setWordWrap(True)
@@ -232,12 +234,14 @@ class SeriesDialog(QWidget):
 
         for button, value, on_text, off_text in (
                 (self.fav_btn, s["favorite"], "♥", "♡"),
-                (self.seen_btn, s["watched"], "✓", "✓"),
-                (self.list_btn, s["watchlist"], "On Watchlist", "Watchlist")):
+                (self.seen_btn, s["watched"], "✓", "✓")):
             button.blockSignals(True)
             button.setChecked(value)
             button.setText(on_text if value else off_text)
             button.blockSignals(False)
+        self.list_btn.blockSignals(True)
+        self.list_btn.setChecked(s["watchlist"])
+        self.list_btn.blockSignals(False)
         self.trailer_btn.setVisible(bool(s["trailer_key"]))
         nxt = self.service.by_id.get(self.service.next_episode(self.series_id))
         self.watch_btn.setEnabled(nxt is not None)
@@ -349,12 +353,7 @@ class SeriesDialog(QWidget):
             if self._backdrop_scaled is None or self._backdrop_scaled.width() != self.width():
                 self._backdrop_scaled = self._backdrop.scaledToWidth(self.width(), Qt.SmoothTransformation)
             painter.drawPixmap(0, 0, self._backdrop_scaled, 0, 0, self.width(), BACKDROP_HEIGHT)
-            gradient = QLinearGradient(0, 0, 0, BACKDROP_HEIGHT)
-            top, bottom = QColor(bg), QColor(bg)
-            top.setAlpha(170)
-            gradient.setColorAt(0, top)
-            gradient.setColorAt(1, bottom)
-            painter.fillRect(0, 0, self.width(), BACKDROP_HEIGHT, gradient)
+            painter.fillRect(0, 0, self.width(), BACKDROP_HEIGHT, backdrop_gradient(BACKDROP_HEIGHT, bg))
         painter.end()
 
     def resizeEvent(self, event) -> None:
@@ -368,21 +367,27 @@ class SeriesDialog(QWidget):
         self._offset = offset
         self._right_gap.setFixedHeight(offset)
         self._left_gap.setFixedHeight(offset + self._cap)
+        body = self.scroll.widget()
+        body.layout().activate()
+        # The poster's top lines up with the top of the title's letters, whatever spacing the layouts add.
+        delta = self.title.mapTo(body, QPoint(0, 0)).y() + self._cap - self.poster.mapTo(body, QPoint(0, 0)).y()
+        if delta:
+            self._left_gap.setFixedHeight(max(0, offset + self._cap + delta))
+            body.layout().activate()
 
     def _fit_offset(self) -> None:
-        """Raises the poster and details just enough for the middle of the first episode to sit at the bottom edge
-        of the window (half of the row visible, hinting that there is more below). Never lower than DETAILS_OFFSET."""
-        if self.scroll.verticalScrollBar().value() > 0 or self.ep_box.count() == 0:
+        """Raises the poster and details just enough for the first episodes to be visible without scrolling: the middle
+        of the second episode sits at the bottom edge of the window (the first is whole and the next one peeks out,
+        hinting that there is more below). Never lower than DETAILS_OFFSET."""
+        if self.scroll.verticalScrollBar().value() > 0:
             return   # do not move the content under the user's scroll
-        first = self.ep_box.itemAt(0).widget()
-        if first is None:
-            return
-        body = self.scroll.widget()
-        self._set_offset(0)
-        body.layout().activate()
-        middle = first.mapTo(body, first.rect().center()).y()   # grows 1:1 with the offset
-        self._set_offset(max(0, min(DETAILS_OFFSET, self.scroll.viewport().height() - middle)))
-        body.layout().activate()
+        offset = self._offset
+        if self.ep_box.count():
+            row = self.ep_box.itemAt(min(1, self.ep_box.count() - 1)).widget()
+            self._set_offset(0)
+            middle = row.mapTo(self.scroll.widget(), row.rect().center()).y()   # grows 1:1 with the offset
+            offset = max(0, min(DETAILS_OFFSET, self.scroll.viewport().height() - middle))
+        self._set_offset(offset)
 
     def _leave(self) -> None:
         self.review.autosave()
