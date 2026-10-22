@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QMenu, QP
 from .. import images
 from ..service import LibraryService
 from ..utils import format_runtime, format_votes
-from .detail_widgets import DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, ReviewBox, cap_offset
+from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, ReviewBox, cap_offset,
+                             side_margin)
 from .match_dialog import MatchDialog
 from .theme import COLORS
 from .widgets import rounded_pixmap
@@ -63,7 +64,7 @@ class SeriesDialog(QWidget):
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.NoFrame)
         body = QWidget()
-        column = QVBoxLayout(body)
+        column = self._column = QVBoxLayout(body)
         column.setContentsMargins(0, 0, 8, 0)
         column.setSpacing(14)
         self.scroll.setWidget(body)
@@ -115,7 +116,7 @@ class SeriesDialog(QWidget):
         actions = QHBoxLayout()
         actions.setSpacing(8)
         self.watch_btn = QPushButton("▶")
-        self.watch_btn.setStyleSheet("QPushButton { font-size: 20pt; border: none; padding: 2px 24px; }")
+        self.watch_btn.setStyleSheet("QPushButton { font-size: 20pt; border: none; border-radius: 10px; padding: 0; }")
         self.watch_btn.setProperty("primary", True)
         self.watch_btn.clicked.connect(lambda: self.play_requested.emit(self.movie_id))
         self.fav_btn = QPushButton("♡")
@@ -142,6 +143,8 @@ class SeriesDialog(QWidget):
         more_menu.addAction("Refresh metadata", lambda: self.service.apply_match(self.movie_id))
         more_menu.addAction("Fix match…", self._fix_match)
         more.setMenu(more_menu)
+        for w in (self.watch_btn, self.fav_btn, self.seen_btn):
+            w.setFixedSize(ACTION_BOX, ACTION_BOX)
         for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.trailer_btn):
             actions.addWidget(w)
         actions.addStretch(1)
@@ -356,6 +359,8 @@ class SeriesDialog(QWidget):
 
     def resizeEvent(self, event) -> None:
         self._backdrop_scaled = None
+        side = side_margin(self.width())
+        self._column.setContentsMargins(side, 0, side + 8, 0)
         super().resizeEvent(event)
         QTimer.singleShot(0, self._fit_offset)
 

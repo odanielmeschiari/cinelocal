@@ -11,7 +11,8 @@ from .. import images
 from ..service import LibraryService
 from ..utils import format_runtime, format_votes
 from .dialogs import populate_collections_menu
-from .detail_widgets import DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, ReviewBox, cap_offset
+from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, ReviewBox, cap_offset,
+                             side_margin)
 from .match_dialog import MatchDialog
 from .theme import COLORS
 from .widgets import rounded_pixmap
@@ -48,7 +49,7 @@ class MovieDialog(QWidget):
         self.back_btn.setToolTip("Back to the list (Esc)")
         self.back_btn.clicked.connect(self._leave)
         page.addWidget(self.back_btn, 0, Qt.AlignLeft)
-        root = QHBoxLayout()
+        root = self._content = QHBoxLayout()
         root.setSpacing(30)
         page.addLayout(root, 1)
 
@@ -106,7 +107,7 @@ class MovieDialog(QWidget):
         actions.setSpacing(8)
         self.watch_btn = QPushButton("▶")
         self.watch_btn.setToolTip("Watch")
-        self.watch_btn.setStyleSheet("QPushButton { font-size: 20pt; border: none; padding: 2px 24px; }")
+        self.watch_btn.setStyleSheet("QPushButton { font-size: 20pt; border: none; border-radius: 10px; padding: 0; }")
         self.watch_btn.setProperty("primary", True)
         self.watch_btn.clicked.connect(self._watch)
         self.fav_btn = QPushButton("♡")
@@ -138,6 +139,8 @@ class MovieDialog(QWidget):
         more_menu.addAction("Fix match…", self._fix_match)
         more_menu.addAction("Show in folder", self._show_folder)
         more.setMenu(more_menu)
+        for w in (self.watch_btn, self.fav_btn, self.seen_btn):
+            w.setFixedSize(ACTION_BOX, ACTION_BOX)
         for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.coll_btn, self.trailer_btn):
             actions.addWidget(w)
         actions.addStretch(1)
@@ -262,6 +265,8 @@ class MovieDialog(QWidget):
 
     def resizeEvent(self, event) -> None:
         self._backdrop_scaled = None
+        side = side_margin(self.width())
+        self._content.setContentsMargins(side, 0, side, 0)
         super().resizeEvent(event)
 
     def _leave(self) -> None:

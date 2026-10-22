@@ -9,6 +9,8 @@ from .theme import COLORS
 POSTER_SIZE = (240, 360)
 DETAILS_OFFSET = 150      # empty space above the details, so they leave the backdrop image visible
 STAR_COLOR = "#ffd25e"
+ACTION_BOX = 44           # side (px) of the square play / favorite / watched buttons
+CONTENT_MAX = 1040        # widest the details get; in wider windows the side margins grow (content stays centered)
 # Bigger text than the global theme (widget-level rules beat the application's, so other pages are unaffected)
 DETAIL_STYLE = """
 QLabel#movieTitle { font-size: 30pt; }
@@ -17,6 +19,11 @@ QLabel#section { font-size: 11pt; }
 QLabel#detailText, QLabel#muted { font-size: 13pt; }
 QTextEdit { font-size: 13pt; }
 """
+
+
+def side_margin(window_width: int) -> int:
+    """Extra left/right margin that keeps the details at most CONTENT_MAX wide, centered (page margins are 34)."""
+    return max(0, (window_width - 2 * 34 - CONTENT_MAX) // 2)
 
 
 def cap_offset(label: QLabel) -> int:
