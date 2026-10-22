@@ -16,12 +16,15 @@ from .dialogs import (ask_new_collection, ask_rename_collection, confirm_delete_
                       populate_collections_menu)
 from .grid import CELL_H, MovieFlow
 from .home import HomeSection
+from .icons import IconButton
 from .match_dialog import MatchDialog
 from .movie_dialog import MovieDialog
 from .player_page import VlcPlayerPage, unavailable_reason
 from .series_dialog import SeriesDialog
 from .settings_dialog import SettingsDialog
 from .sidebar import Sidebar
+
+TOOL_BOX, TOOL_ICON = 36, 20   # top-bar icon buttons: a bit smaller than the detail/player ones (44, 24)
 
 
 class MainWindow(QMainWindow):
@@ -113,9 +116,11 @@ class MainWindow(QMainWindow):
         for sort_id, label, *_ in filters.SORT_OPTIONS:
             self.sort_combo.addItem(label, sort_id)
         self.sort_combo.setCurrentIndex(max(0, self.sort_combo.findData(self.sort_id)))
-        rescan = QPushButton("Rescan")
+        rescan = IconButton("refresh", box=TOOL_BOX, size=TOOL_ICON)
+        rescan.setToolTip("Rescan")
         rescan.clicked.connect(self.service.start_scan)
-        meta = QPushButton("Metadata")
+        meta = IconButton("big_data", box=TOOL_BOX, size=TOOL_ICON)
+        meta.setToolTip("Metadata")
         meta_menu = QMenu(meta)
         meta_menu.addAction("Fetch metadata for pending movies",
                             lambda: self.service.start_update("pending"))
@@ -123,7 +128,7 @@ class MainWindow(QMainWindow):
         meta_menu.addSeparator()
         meta_menu.addAction("Review unmatched movies…", self.review_all)
         meta.setMenu(meta_menu)
-        settings = QPushButton("Settings")
+        settings = IconButton("gear", box=TOOL_BOX, size=TOOL_ICON)
         settings.setToolTip("Settings (Ctrl+,)")
         settings.clicked.connect(lambda: self.open_settings())
         bar.addWidget(self.search, 1)
