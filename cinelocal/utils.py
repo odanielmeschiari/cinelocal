@@ -32,5 +32,10 @@ def format_runtime(minutes) -> str:
     return f"{hours}h {mins:02d}min" if hours else f"{mins}min"
 
 
+def star_text(value) -> str:
+    """The user's rating as stars; a half star is shown as ½ (4.5 -> ★★★★½)."""
+    return "★" * int(value) + ("½" if value % 1 else "")
+
+
 def format_votes(votes) -> str:
     return f"{int(votes or 0):,}"

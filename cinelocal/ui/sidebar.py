@@ -6,6 +6,7 @@ from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import QAbstractItemView, QMenu, QTreeWidget, QTreeWidgetItem
 
 from ..filters import Filter
+from ..utils import star_text
 from .theme import COLORS
 
 _NEW_COLLECTION = ("new_collection", None)
@@ -62,7 +63,7 @@ class Sidebar(QTreeWidget):
         if counts["stars"]:
             self._header("MY RATING")
             for n, count in counts["stars"]:
-                self._entry("★" * n, ("stars", n), count)
+                self._entry(star_text(n), ("stars", n), count)
 
         if counts["genres"]:
             self._header("GENRES")

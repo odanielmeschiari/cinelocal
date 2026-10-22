@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QColor, QLinearGradient
+from PySide6.QtGui import QColor, QLinearGradient, QPainter
 from PySide6.QtWidgets import (QHBoxLayout, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget)
 
 from .theme import COLORS
@@ -46,9 +46,33 @@ def cap_offset(label: QLabel) -> int:
     return max(0, metrics.ascent() - metrics.capHeight())
 
 
+class _StarButton(QPushButton):
+    """A star that can be full, half (left half filled) or empty. Which half was clicked is kept in `left_half`."""
+
+    def __init__(self, parent=None):
+        super().__init__("★", parent)
+        self.fill = 0.0          # 0, 0.5 or 1
+        self.left_half = False
+
+    def mousePressEvent(self, event) -> None:
+        self.left_half = event.position().x() < self.width() / 2
+        super().mousePressEvent(event)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)   # background and the star in the "empty" color
+        if self.fill == 0.5:        # the left half again, in the star color
+            painter = QPainter(self)
+            painter.setClipRect(0, 0, self.width() // 2, self.height())
+            painter.setFont(self.font())
+            painter.setPen(QColor(STAR_COLOR))
+            painter.drawText(self.rect(), Qt.AlignCenter, "★")
+            painter.end()
+
+
 class _Stars(QWidget):
-    """Five clickable stars (1-5); clicking the current rating again clears it."""
-    changed = Signal(int)
+    """Five clickable stars; the left half of a star gives a half rating (3.5...), the right half a whole one.
+    Clicking the current rating again clears it."""
+    changed = Signal(float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -58,26 +82,31 @@ class _Stars(QWidget):
         row.setSpacing(0)
         self._buttons = []
         for n in range(1, 6):
-            button = QPushButton("★")
+            button = _StarButton()
             button.setObjectName("iconBtn")
             button.setFixedSize(46, 46)
             button.setFocusPolicy(Qt.NoFocus)
-            button.setToolTip(f"{n} of 5 (click again to clear)")
-            button.clicked.connect(lambda _checked=False, n=n: self.changed.emit(0 if n == self.value else n))
+            button.setToolTip(f"{n} of 5 (left half = half a star; click again to clear)")
+            button.clicked.connect(lambda _checked=False, n=n, b=button: self._pick(n - 0.5 if b.left_half else n))
             row.addWidget(button)
             self._buttons.append(button)
         row.addStretch(1)
         self.set_value(0)
 
-    def set_value(self, value: int) -> None:
+    def _pick(self, value: float) -> None:
+        self.changed.emit(0 if value == self.value else value)
+
+    def set_value(self, value: float) -> None:
         self.value = value
         for n, button in enumerate(self._buttons, 1):
-            button.setStyleSheet(f"color: {STAR_COLOR if n <= value else COLORS['muted']};")
+            button.fill = 1 if n <= value else 0.5 if n - 0.5 == value else 0
+            button.setStyleSheet(f"color: {STAR_COLOR if button.fill == 1 else COLORS['muted']};")
+            button.update()
 
 
 class ReviewBox(QWidget):
     """The user's own rating (stars) and comment. The comment is saved by the button and when the field loses focus."""
-    rating_changed = Signal(int)     # 0 = no rating
+    rating_changed = Signal(float)   # 0 = no rating; half stars allowed (3.5)
     comment_saved = Signal(str)
 
     def __init__(self, placeholder: str, parent=None):

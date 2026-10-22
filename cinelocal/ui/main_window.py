@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLab
 
 from .. import filters
 from ..service import LibraryService
+from ..utils import star_text
 from .dialogs import (ask_new_collection, ask_rename_collection, confirm_delete_collection,
                       populate_collections_menu)
 from .grid import CELL_H, MovieFlow
@@ -319,7 +320,7 @@ class MainWindow(QMainWindow):
         if kind == "decade":
             return f"{value}s"
         if kind == "stars":
-            return f"My rating: {'★' * value}"
+            return f"My rating: {star_text(value)}"
         return str(value)
 
     def _rebuild_sidebar(self) -> None:
