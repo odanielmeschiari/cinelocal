@@ -16,7 +16,7 @@ from .library import sync_library
 from .metadata_service import find_candidates, find_series_candidates, process_movie, process_series
 from .providers import make_client, same_provider
 from .movie_fields import decorate
-from .opensubtitles import OpenSubtitlesClient, OpenSubtitlesError, fetch_subtitle
+from .opensubtitles import OpenSubtitlesClient, OpenSubtitlesError, fetch_subtitle, has_subtitle
 from .workers import FuncWorker, UpdateWorker
 
 
@@ -198,11 +198,12 @@ class LibraryService(QObject):
         self._report(exc)
 
     # -- subtitles (OpenSubtitles) --------------------------------------------------------
-    def _subtitle_languages(self) -> str:
+    def _subtitle_languages(self, manual: bool = False) -> str:
         """OpenSubtitles language(s) to download ('' = none): the subtitle language of the settings or, while it's
-        left on "file default", the metadata language."""
+        left on "file default", the metadata language. Automatic downloads are skipped when subtitles are turned
+        off (or forced only); a search the user asked for is not."""
         choice = self.settings.get("subtitle_language")
-        if choice in ("off", "forced"):
+        if choice in ("off", "forced") and not manual:
             return ""
         code = choice if choice in TRACK_LANGUAGES else self.language[:2].lower()
         return "pt-br,pt-pt" if code == "pt" else code
@@ -269,6 +270,43 @@ class LibraryService(QObject):
             self._report(exc)
 
         self.run_async(job, done, failed_job)
+
+    def search_subtitle(self, path: str, on_saved) -> None:
+        """Looks for the subtitle of one video on OpenSubtitles because the user asked (player menu). Saves it
+        next to the video and calls on_saved(subtitle path)."""
+        key = (self.settings.get("opensubtitles_api_key") or "").strip()
+        movie = self.by_path(path)
+        if not key:
+            self.error.emit("Paste your OpenSubtitles API key in Settings first.")
+            return
+        if movie is None:
+            return
+        episode = movie.get("kind") == "episode"
+        client, languages = OpenSubtitlesClient(key), self._subtitle_languages(manual=True)
+        args = (movie["clean_title"], movie["year_guess"], languages,
+                movie["season"] if episode else None, movie["episode"] if episode else None)
+
+        def job():
+            return "exists" if has_subtitle(path) else fetch_subtitle(client, path, *args)
+
+        def done(result):
+            if result == "exists":
+                self.message.emit("This movie already has a subtitle file next to it.")
+            elif result:
+                self.message.emit("Subtitle downloaded from OpenSubtitles.")
+                on_saved(result)
+            else:
+                self.message.emit("No subtitle found on OpenSubtitles for this movie.")
+
+        def failed(exc):
+            if isinstance(exc, OpenSubtitlesError) and exc.kind == "auth":
+                self.error.emit(str(exc))
+            else:
+                self.message.emit(str(exc) if isinstance(exc, OpenSubtitlesError)
+                                  else "Could not save the subtitle (is the movies folder writable?).")
+
+        self.message.emit("Searching for a subtitle on OpenSubtitles…")
+        self.run_async(job, done, failed)
 
     # -- metadata update ----------------------------------------------------
     def start_update(self, mode: str = "pending", ids: list[int] | None = None) -> bool:

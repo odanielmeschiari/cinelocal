@@ -359,5 +359,101 @@ class ServiceQueueTests(unittest.TestCase):
         self.assertEqual(self.settings.get("subtitle_queue"), ["/m/B.mkv"])
 
 
+@unittest.skipUnless(importlib.util.find_spec("PySide6"), "needs PySide6 (the service is a QObject)")
+class ManualSearchTests(unittest.TestCase):
+    """The 'Search on OpenSubtitles' button of the player's subtitle menu."""
+
+    def setUp(self):
+        from cinelocal.config import Settings
+        from cinelocal.db import Database
+        from cinelocal.service import LibraryService
+
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.video = str(root / "The.Matrix.1999.mkv")
+        Path(self.video).write_bytes(b"x")
+        self.db = Database(root / "lib.db")
+        self.db.add_movies([dict(path=self.video, file_name="The.Matrix.1999.mkv", size=1,
+                                 clean_title="The Matrix", year_guess=1999, added_at=time.time())])
+        self.settings = Settings(root / "settings.json")
+        self.settings.update(opensubtitles_api_key="key", language="pt-BR")
+        self.service = LibraryService(self.db, self.settings)
+        self.service.reload()
+        self.service.run_async = lambda fn, ok=None, err=None: self._run(fn, ok, err)
+        self.messages, self.errors, self.saved = [], [], []
+        self.service.message.connect(self.messages.append)
+        self.service.error.connect(self.errors.append)
+
+    def _run(self, fn, ok, err):
+        try:
+            result = fn()
+        except Exception as exc:  # noqa: BLE001 - what the worker thread does
+            return err(exc)
+        ok(result)
+
+    def tearDown(self):
+        self.db.close()
+        self.tmp.cleanup()
+
+    def search(self, fake, path=None):
+        with mock.patch("cinelocal.service.fetch_subtitle", fake):
+            self.service.search_subtitle(path or self.video, self.saved.append)
+
+    def test_downloads_and_hands_the_file_to_the_player(self):
+        calls = []
+        self.search(lambda client, path, title, year, langs, season, episode:
+                    calls.append((title, year, langs, season, episode)) or path + ".pt-BR.srt")
+        self.assertEqual(calls, [("The Matrix", 1999, "pt-br,pt-pt", None, None)])
+        self.assertEqual(self.saved, [self.video + ".pt-BR.srt"])
+        self.assertEqual(self.messages[-1], "Subtitle downloaded from OpenSubtitles.")
+
+    def test_works_even_when_subtitles_are_turned_off_in_settings(self):
+        self.settings.update(subtitle_language="off")
+        langs = []
+        self.search(lambda client, path, title, year, l, season, episode: langs.append(l) or "x.srt")
+        self.assertEqual(langs, ["pt-br,pt-pt"])   # falls back to the metadata language (pt-BR)
+        self.assertEqual(self.saved, ["x.srt"])
+
+    def test_nothing_found_is_reported(self):
+        self.search(lambda *a: None)
+        self.assertEqual((self.saved, self.messages[-1]), ([], "No subtitle found on OpenSubtitles for this movie."))
+
+    def test_an_existing_subtitle_is_not_replaced(self):
+        Path(self.tmp.name, "The.Matrix.1999.en.srt").write_text("mine")
+        calls = []
+        self.search(lambda *a: calls.append(a))
+        self.assertEqual((calls, self.saved), ([], []))
+        self.assertIn("already has a subtitle", self.messages[-1])
+
+    def test_without_a_key_it_asks_for_one(self):
+        self.settings.update(opensubtitles_api_key="")
+        calls = []
+        self.search(lambda *a: calls.append(a))
+        self.assertEqual((calls, self.saved, len(self.errors)), ([], [], 1))
+
+    def test_errors_are_reported(self):
+        def rejected(*args):
+            raise OpenSubtitlesError("OpenSubtitles rejected the API key.", "auth")
+
+        def limit(*args):
+            raise OpenSubtitlesError("OpenSubtitles daily download limit reached.", "limit")
+
+        def read_only(*args):
+            raise PermissionError("read-only")
+
+        self.search(rejected)
+        self.assertEqual(self.errors, ["OpenSubtitles rejected the API key."])
+        self.search(limit)
+        self.assertEqual(self.messages[-1], "OpenSubtitles daily download limit reached.")
+        self.search(read_only)
+        self.assertIn("writable", self.messages[-1])
+        self.assertEqual(self.saved, [])
+
+    def test_a_video_outside_the_library_is_ignored(self):
+        calls = []
+        self.search(lambda *a: calls.append(a), path="/somewhere/else.mkv")
+        self.assertEqual((calls, self.messages, self.errors), ([], [], []))
+
+
 if __name__ == "__main__":
     unittest.main()

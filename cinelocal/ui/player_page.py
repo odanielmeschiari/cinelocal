@@ -117,6 +117,7 @@ class VlcPlayerPage(QWidget):
     ended = Signal(str)               # the video reached the end
     tracks_remembered = Signal(str, dict)   # path, audio/subtitle track names picked by hand
     prefs_changed = Signal(dict)      # volume and picture adjustments, to remember for the next movies
+    subtitle_search_requested = Signal(str)   # path: look for a subtitle for this movie on OpenSubtitles
 
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
@@ -259,6 +260,14 @@ class VlcPlayerPage(QWidget):
     def _fill_subtitle_menu(self, menu: QMenu) -> None:
         self._fill_tracks(menu, self._mp.video_get_spu_description() or [],
                           self._mp.video_get_spu(), self._pick_subtitle)
+        menu.addSeparator()
+        menu.addAction("Search on OpenSubtitles", lambda: self.subtitle_search_requested.emit(self._path))
+
+    def add_subtitle(self, path: str) -> None:
+        """Loads a subtitle file that was just saved next to the movie and shows it (VLC only looks for those
+        when it opens a file). Ignored if another movie is playing by now."""
+        if self._path and path.startswith(os.path.splitext(self._path)[0] + "."):
+            self._mp.add_slave(self._vlc.MediaSlaveType.subtitle, Path(path).as_uri(), True)
 
     def set_track_languages(self, audio: str, subtitles: str) -> None:
         """Preferred audio and subtitle languages ('' = file default, subtitles also 'off')."""
