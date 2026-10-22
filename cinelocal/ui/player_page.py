@@ -6,9 +6,9 @@ import sys
 import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QVariantAnimation, Signal
+from PySide6.QtCore import QPoint, QRect, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QCursor, QGuiApplication, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QApplication, QGraphicsOpacityEffect, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
+from PySide6.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
                                QSizePolicy, QSlider, QStyle, QToolTip, QVBoxLayout, QWidget, QWidgetAction)
 
 from ..tracks import choose_track, track_name as _track_name
@@ -22,6 +22,9 @@ SPU_STEP_US = 250_000     # subtitle delay step (microseconds)
 ICON_BOX = 46             # side (px) of the square icon buttons (play, settings, fullscreen)
 FADE_MS = 500             # duration of the controls' fade-out
 IDLE_HIDE_SECONDS = 2.5   # in fullscreen, controls and pointer disappear after this much idle time
+# in fullscreen the bars float over the video, on a gradient that fades into the picture
+_TOP_SHADE = "#page { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0,0,0,200), stop:1 rgba(0,0,0,0)); }"
+_BOTTOM_SHADE = "#page { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0,0,0,0), stop:1 rgba(0,0,0,200)); }"
 # key, label, minimum, maximum, default (in %). Sharpness 0 = filter off.
 _ADJUSTMENTS = (("brightness", "Brightness", 0, 200, 100), ("contrast", "Contrast", 0, 200, 100),
                 ("saturation", "Color", 0, 300, 100), ("sharpness", "Sharpness", 0, 100, 0))
@@ -513,7 +516,45 @@ class VlcPlayerPage(QWidget):
         self._fullscreen = on
         window.statusBar().setVisible(not on)
         window.showFullScreen() if on else window.showNormal()
+        self._float_bars(on)
         self._wake()   # restarts the countdown; when leaving fullscreen, everything shows again
+
+    # -- bars over the video (fullscreen) ------------------------------------------------
+    def _float_bars(self, on: bool) -> None:
+        """Fullscreen: the bars leave the layout and become translucent windows above the video (which
+        VLC draws in its own native window, so ordinary child widgets could not overlap it). Windowed: back."""
+        layout = self.layout()
+        for widget, shade in ((self.topbar, _TOP_SHADE), (self.controls, _BOTTOM_SHADE)):
+            layout.removeWidget(widget)
+            if on:
+                widget.setParent(self.window(), Qt.Tool | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus)
+            else:
+                widget.setParent(self, Qt.Widget)
+            widget.setAttribute(Qt.WA_TranslucentBackground, on)
+            widget.setAttribute(Qt.WA_ShowWithoutActivating, on)
+            widget.setStyleSheet(shade if on else "")
+            widget.setWindowOpacity(1.0)
+        if not on:
+            layout.insertWidget(0, self.topbar)
+            layout.addWidget(self.controls)
+        self._place_bars()
+        self.topbar.show()
+        self.controls.show()
+
+    def _place_bars(self) -> None:
+        if not self._fullscreen:
+            return
+        origin, width = self.video.mapToGlobal(QPoint(0, 0)), self.video.width()
+        top, bottom = self.topbar.sizeHint().height(), self.controls.sizeHint().height()
+        for widget, rect in ((self.topbar, QRect(origin.x(), origin.y(), width, top)),
+                             (self.controls, QRect(origin.x(), origin.y() + self.video.height() - bottom,
+                                                   width, bottom))):
+            if widget.geometry() != rect:
+                widget.setGeometry(rect)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._place_bars()
 
     # -- hide controls and pointer in fullscreen ---------------------------------------
     def _wake(self) -> None:
@@ -526,6 +567,7 @@ class VlcPlayerPage(QWidget):
             self.unsetCursor()
 
     def _autohide(self) -> None:
+        self._place_bars()
         pos = QCursor.pos()
         if pos != self._last_pos:   # VLC draws in its own window, so the mouse is read from here
             self._last_pos = pos
@@ -537,26 +579,22 @@ class VlcPlayerPage(QWidget):
                 or self.topbar.rect().contains(self.topbar.mapFromGlobal(pos))):
             return
         self._chrome_hidden = True
-        for w in (self.topbar, self.controls):
-            w.setGraphicsEffect(QGraphicsOpacityEffect(w))
         self._fade.start()
 
     def _set_chrome_opacity(self, value) -> None:
         for w in (self.topbar, self.controls):
-            if w.graphicsEffect() is not None:
-                w.graphicsEffect().setOpacity(float(value))
+            w.setWindowOpacity(float(value))
 
     def _finish_fade(self) -> None:
-        """End of the fade: only now do the controls leave the layout (the video fills the screen)."""
         for w in (self.topbar, self.controls):
             w.hide()
-            w.setGraphicsEffect(None)
+            w.setWindowOpacity(1.0)
         self.setCursor(Qt.BlankCursor)
 
     def _cancel_fade(self) -> None:
         self._fade.stop()
         for w in (self.topbar, self.controls):
-            w.setGraphicsEffect(None)
+            w.setWindowOpacity(1.0)
 
     def _escape(self) -> None:
         if self._fullscreen:
