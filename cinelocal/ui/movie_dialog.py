@@ -12,6 +12,7 @@ from ..utils import format_runtime, format_votes
 from .dialogs import populate_collections_menu
 from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP, GlyphButton,
                              ReviewBox, backdrop_gradient, cap_offset, side_margin)
+from .edit_dialog import EditDialog
 from .match_dialog import MatchDialog
 from .theme import COLORS
 from .widgets import rounded_pixmap
@@ -139,6 +140,7 @@ class MovieDialog(QWidget):
         more_menu = QMenu(more)
         more_menu.addAction("Refresh metadata", self._refresh)
         more_menu.addAction("Fix match…", self._fix_match)
+        more_menu.addAction("Edit metadata…", self._edit)
         more_menu.addAction("Show in folder", self._show_folder)
         more.setMenu(more_menu)
         for w in (self.watch_btn, self.fav_btn, self.seen_btn, more):
@@ -312,3 +314,6 @@ class MovieDialog(QWidget):
             self.service.show_in_folder(self.movie_id)
         except OSError as exc:
             QMessageBox.warning(self, "Could not open the folder", str(exc))
+
+    def _edit(self) -> None:
+        EditDialog(self.service, self.movie_id, self).exec()

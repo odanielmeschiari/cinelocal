@@ -448,6 +448,8 @@ class MainWindow(QMainWindow):
         page.set_saved_tracks((self.service.settings.get("track_choices") or {}).get(movie["path"], {}))
         page.tracks_remembered.connect(self.service.remember_tracks)
         page.external_requested.connect(lambda: self._open_external(self._playing_id))
+        page.next_requested.connect(self._play_next)
+        page.set_has_next(self._has_next(movie))
         self._player, self._player_origin = page, self.stack.currentWidget()
         self.stack.addWidget(page)
         resume = self.service.resume_info(movie["path"])[0]
@@ -472,13 +474,26 @@ class MainWindow(QMainWindow):
         ask = QMessageBox.question(
             self, "Next episode",
             f"Watch the next episode?\n\nS{nxt['season']}E{nxt['episode']} — {nxt['display_title']}")
-        if ask != QMessageBox.Yes or self._player is None:
-            return
+        if ask == QMessageBox.Yes and self._player is not None:
+            self._start_episode(nxt)
+
+    def _has_next(self, movie: dict) -> bool:
+        return movie.get("kind") == "episode" and self.service.episode_after(movie) is not None
+
+    def _play_next(self) -> None:
+        """'Next' button of the player: skips to the next episode of the series."""
+        movie = self.service.by_id.get(self._playing_id)
+        nxt = self.service.episode_after(movie) if movie else None
+        if nxt is not None and self._player is not None:
+            self._start_episode(nxt)
+
+    def _start_episode(self, nxt: dict) -> None:
         if not os.path.exists(nxt["path"]):
             self.statusBar().showMessage("The next episode's file was not found.", 6000)
             return
         self._playing_id = nxt["id"]
         self._player.set_title(self._movie_title(nxt))
+        self._player.set_has_next(self._has_next(nxt))
         self._player.start(nxt["path"], self.service.resume_info(nxt["path"])[0])
 
     def _play_from_start(self, movie_id: int) -> None:

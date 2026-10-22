@@ -90,7 +90,10 @@ METADATA_COLUMNS = {
 }
 FLAG_COLUMNS = {"watched", "favorite", "watchlist"}
 EPISODE_COLUMNS = {"ep_title", "ep_overview", "ep_air_date", "ep_runtime", "ep_rating"}
-_REVIEW_COLUMNS = (("user_rating", "INTEGER DEFAULT 0"), ("user_comment", "TEXT DEFAULT ''"))   # movies and series
+# Columns added after the first version, for movies and series: the user's review and the list of fields (and
+# "poster") edited by hand, which a metadata update must not overwrite.
+_REVIEW_COLUMNS = (("user_rating", "INTEGER DEFAULT 0"), ("user_comment", "TEXT DEFAULT ''"),
+                   ("custom_json", "TEXT DEFAULT '[]'"))
 # Series/episode columns added to databases created by earlier versions.
 _MIGRATIONS = (
     ("kind", "TEXT DEFAULT 'movie'"), ("series_id", "INTEGER"), ("season", "INTEGER"),
@@ -111,6 +114,7 @@ def _row_to_movie(row: sqlite3.Row) -> dict:
     m = dict(row)
     m["genres"] = _loads(m.pop("genres_json", None), [])
     m["cast"] = _loads(m.pop("cast_json", None), [])
+    m["custom"] = _loads(m.pop("custom_json", None), [])
     m["watched"] = bool(m["watched"])
     m["favorite"] = bool(m["favorite"])
     m["watchlist"] = bool(m["watchlist"])
@@ -123,6 +127,7 @@ def _row_to_series(row: sqlite3.Row) -> dict:
     s = dict(row)
     s["genres"] = _loads(s.pop("genres_json", None), [])
     s["cast"] = _loads(s.pop("cast_json", None), [])
+    s["custom"] = _loads(s.pop("custom_json", None), [])
     for key in ("favorite", "watchlist", "has_poster", "has_backdrop"):
         s[key] = bool(s[key])
     return s
@@ -223,6 +228,9 @@ class Database:
             elif key == "cast":
                 sets.append("cast_json = ?")
                 values.append(json.dumps(value, ensure_ascii=False))
+            elif key == "custom":
+                sets.append("custom_json = ?")
+                values.append(json.dumps(value))
             elif key in METADATA_COLUMNS:
                 sets.append(f"{key} = ?")
                 values.append(value)
@@ -321,7 +329,7 @@ class Database:
                     run(f"UPDATE {table} SET status = 'pending', tmdb_id = NULL, title = NULL, original_title = NULL,"
                         " year = NULL, release_date = NULL, overview = NULL, tagline = NULL, runtime = NULL,"
                         " rating = NULL, votes = NULL, genres_json = '[]', director = NULL, cast_json = '[]',"
-                        f" trailer_key = NULL, has_poster = 0, has_backdrop = 0, updated_at = ?{extra}", (time.time(),))
+                        f" trailer_key = NULL, has_poster = 0, has_backdrop = 0, custom_json = '[]', updated_at = ?{extra}", (time.time(),))
             if history and not everything:
                 run("UPDATE movies SET watched = 0")
             if favorites and not everything:

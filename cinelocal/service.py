@@ -272,6 +272,33 @@ class LibraryService(QObject):
         self.message.emit(f"Updating “{movie['display_title']}”…")
         self.run_async(job, done, self._report)
 
+    def edit_metadata(self, movie_id: int, fields: dict, poster_path: str = "") -> None:
+        """Saves metadata typed by the user for a movie or series, and a cover picked from a file. What was edited
+        is remembered (`custom`), so later metadata updates do not overwrite it. Raises ValueError/OSError if the
+        cover cannot be read."""
+        item = self.by_id.get(movie_id)
+        if item is None:
+            return
+        custom = set(item.get("custom", [])) | set(fields)
+        if poster_path:
+            with open(poster_path, "rb") as f:
+                if not images.store_poster(movie_id, f.read()):
+                    raise ValueError("The chosen file is not a valid image.")
+            custom.add("poster")
+            fields = {**fields, "has_poster": True}
+        table = "series" if movie_id < 0 else "movies"
+        self.db.save_metadata(abs(movie_id), {**fields, "custom": sorted(custom)}, table)
+        self._refresh_movie(movie_id)
+        self.library_changed.emit()
+
+    def reset_edits(self, movie_id: int) -> None:
+        """Forgets the user's edits of a movie or series and downloads its metadata again."""
+        if not self.has_key:
+            self.error.emit("Set your API key in Settings.")
+            return
+        self.db.save_metadata(abs(movie_id), {"custom": []}, "series" if movie_id < 0 else "movies")
+        self.apply_match(movie_id)
+
     def search_tmdb(self, query: str, year: int | None, on_result, on_error, series: bool = False) -> None:
         find = find_series_candidates if series else find_candidates
         self.run_async(lambda: find(self._client(), query, year), on_result, on_error)

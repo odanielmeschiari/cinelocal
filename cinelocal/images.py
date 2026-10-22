@@ -39,7 +39,11 @@ def _write_atomic(path: Path, data: bytes) -> None:
 
 
 def save_poster(client: TMDBClient, movie_id: int, tmdb_path: str) -> bool:
-    data = client.download_image("w500", tmdb_path)
+    return store_poster(movie_id, client.download_image("w500", tmdb_path))
+
+
+def store_poster(movie_id: int, data: bytes) -> bool:
+    """Saves image bytes as the poster (and its thumbnail). False if the data is not an image."""
     image = QImage.fromData(data)
     if image.isNull():
         return False

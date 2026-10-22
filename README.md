@@ -4,7 +4,7 @@ Local movie browser for Linux and Windows.
 Fast and offline: the internet is only used to download posters and metadata for new movies
 (or when you force an update).
 
-![Home screen](home.png "Home Screen")
+![Home screen](examples/home.png "Home Screen")
 
 ## Download (no installation)
 
@@ -130,7 +130,7 @@ saved positions, with no way back), delete these folders yourself:
 - **Instant search** (`Ctrl+F`) by title, actor, director or genre; **sorting** by title, year,
   rating or recently added.
 
-  ![Filters](filters.png "Filters")
+  ![Filters](examples/filters.png "Filters")
   
 - **Sidebar**: All, Favorites, Watched/Unwatched, **Collections** (a movie can be in several),
   Genres and Years (decades). Right-click a collection to rename or delete it.
@@ -138,7 +138,7 @@ saved positions, with no way back), delete these folders yourself:
   volume, `M` toggles mute, `F` toggles fullscreen and `Esc` goes back. It needs VLC installed (on Linux `install.sh` installs it) and,
   on Linux, X11 or XWayland (Wayland sessions run through XWayland automatically; a pure Wayland session without XWayland is not supported). Without that, or if you set a player in Settings (e.g. `mpv --fs`),
   the movie opens in the external player (`xdg-open` on Linux, the associated program on Windows).
-  Past 95% the movie is marked as watched; at the end of an episode, the player offers the next one. On the grid, a
+  Past 95% the movie is marked as watched; at the end of an episode, the player offers the next one (and in series, the **▶|** button next to pause skips to it). On the grid, a
   bar on the poster shows how much has been watched, and **Continue watching** (sidebar) gathers what is half-watched
   (series included, with the episode in progress); "Watch from the start" is in the right-click menu.
   Volume and picture adjustments are remembered between movies; the player's gear (⚙) also has **speed** (0.5x to 2x) and **subtitle
@@ -148,14 +148,14 @@ saved positions, with no way back), delete these folders yourself:
   In the player, the **⚙** gear gathers **Audio** and **Subtitles** (tracks that come in the file) and **Picture**
   (brightness, contrast, color and sharpness). In fullscreen, the controls and the pointer disappear after a few seconds without moving the mouse.
 
-  ![Player](player.png "Player")
+  ![Player](examples/player.png "Player")
   
 - **Series**: files with `S01E02`, `1x02` or `Season 1 Episode 2` in the name (or inside `Season N` folders)
   are grouped under a single series poster, which opens the list of seasons and episodes, each with its own metadata.
   (Portuguese names such as `Temporada 1 Episódio 2` are recognized too.)
   Series appear with a “Series” badge on the grid and are left out of collections.
 
-  ![Series](series.png "Series")
+  ![Series](examples/series.png "Series")
   
 - **Watchlist**: movies you want to watch in the future. Add them with the `Watchlist` button in the details or from the
   right-click menu; the list lives in the sidebar.  
@@ -163,10 +163,13 @@ saved positions, with no way back), delete these folders yourself:
   English and provides no backdrop image or trailer. When you switch sources, use **Metadata → Force update**
   to re-identify the movies already downloaded.
 
-  ![Description](description.png "Description")
+  ![Description](examples/description.png "Description")
   
 - **Rescan** (`F5`): runs when the app opens; detects new movies and removes the ones that disappeared from disk.
   Files moved to another subfolder keep their metadata, collections and flags.
+- **Edit metadata**: in the details of a movie or series, **⋮ → Edit metadata…** changes the title, year, runtime, genres,
+  director, tagline, overview and cast, and lets you pick your own cover image. What you edit (and the cover) is kept when
+  the metadata is updated; **Reset to original…** discards your edits and downloads the metadata again.
 - **Metadata**: fetch pending items, force an update of all (keeps confirmed matches)
   or review movies without a match. When the app is not sure (remakes, ambiguous title, nothing
   found), the movie gets a **Review** badge and you pick the right one in a dialog.
@@ -207,6 +210,7 @@ cinelocal/
   player.py                 opens the movie in the external player
   ui/                       theme (QSS), grid, sidebar, windows and dialogs
   ui/player_page.py         built-in player (libVLC)
+  ui/edit_dialog.py         manual editing of metadata and cover
 tests/test_core.py          tests for the logic without a GUI
 ```
 

@@ -11,6 +11,7 @@ from ..service import LibraryService
 from ..utils import format_runtime, format_votes
 from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP, GlyphButton,
                              ReviewBox, backdrop_gradient, cap_offset, side_margin)
+from .edit_dialog import EditDialog
 from .match_dialog import MatchDialog
 from .theme import COLORS
 from .widgets import rounded_pixmap
@@ -144,6 +145,7 @@ class SeriesDialog(QWidget):
         more_menu = QMenu(more)
         more_menu.addAction("Refresh metadata", lambda: self.service.apply_match(self.movie_id))
         more_menu.addAction("Fix match…", self._fix_match)
+        more_menu.addAction("Edit metadata…", self._edit)
         more.setMenu(more_menu)
         for w in (self.watch_btn, self.fav_btn, self.seen_btn, more):
             w.setFixedSize(ACTION_BOX, ACTION_BOX)
@@ -415,3 +417,6 @@ class SeriesDialog(QWidget):
         dialog.exec()
         if dialog.selected_tmdb_id:
             self.service.apply_match(self.movie_id, dialog.selected_tmdb_id)
+
+    def _edit(self) -> None:
+        EditDialog(self.service, self.movie_id, self).exec()

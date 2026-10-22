@@ -26,11 +26,12 @@ def find_series_candidates(client: TMDBClient, title: str, year: int | None) -> 
     return []
 
 
-def _download_images(client: TMDBClient, movie_id: int, raw: dict) -> tuple[bool, bool]:
-    has_poster = has_backdrop = False
+def _download_images(client: TMDBClient, movie_id: int, raw: dict, keep_poster: bool = False) -> tuple[bool, bool]:
+    """`keep_poster`: the user chose their own cover, so the poster is neither downloaded nor discarded."""
+    has_poster, has_backdrop = keep_poster, False
     for path, saver, is_poster in ((raw.get("poster_path"), images.save_poster, True),
                                    (raw.get("backdrop_path"), images.save_backdrop, False)):
-        if not path:
+        if not path or (is_poster and keep_poster):
             continue
         try:
             ok = saver(client, movie_id, path)
@@ -89,10 +90,11 @@ def process_series(db: Database, client: TMDBClient, series: dict, tmdb_id: int 
     if client.language != "en-US" and needs_fallback(raw):
         fallback = client.tv_details(tmdb_id, language="en-US")
 
-    fields = parse_details(raw, fallback)
+    custom = (db.get_series(series_id) or {}).get("custom", [])   # fields edited by the user are kept
+    fields = {k: v for k, v in parse_details(raw, fallback).items() if k not in custom}
     source = {"poster_path": raw.get("poster_path") or (fallback or {}).get("poster_path"),
               "backdrop_path": raw.get("backdrop_path") or (fallback or {}).get("backdrop_path")}
-    has_poster, has_backdrop = _download_images(client, -series_id, source)   # series images: negative id
+    has_poster, has_backdrop = _download_images(client, -series_id, source, "poster" in custom)   # series images: negative id
     images.delete_images(-series_id, poster=not has_poster, backdrop=not has_backdrop)
 
     fields.update(tmdb_id=tmdb_id, has_poster=has_poster, has_backdrop=has_backdrop, status="matched")
@@ -121,10 +123,11 @@ def process_movie(db: Database, client: TMDBClient, movie: dict, tmdb_id: int | 
     if client.language != "en-US" and needs_fallback(raw):
         fallback = client.movie_details(tmdb_id, language="en-US")
 
-    fields = parse_details(raw, fallback)
+    custom = (db.get_movie(movie_id) or {}).get("custom", [])   # fields edited by the user are kept
+    fields = {k: v for k, v in parse_details(raw, fallback).items() if k not in custom}
     source = {"poster_path": raw.get("poster_path") or (fallback or {}).get("poster_path"),
               "backdrop_path": raw.get("backdrop_path") or (fallback or {}).get("backdrop_path")}
-    has_poster, has_backdrop = _download_images(client, movie_id, source)
+    has_poster, has_backdrop = _download_images(client, movie_id, source, "poster" in custom)
     # With no new image, discard the old one (e.g. match corrected to another movie).
     images.delete_images(movie_id, poster=not has_poster, backdrop=not has_backdrop)
 

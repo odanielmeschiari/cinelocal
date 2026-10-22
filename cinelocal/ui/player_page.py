@@ -88,6 +88,7 @@ class _SeekSlider(QSlider):
 class VlcPlayerPage(QWidget):
     back_requested = Signal()
     external_requested = Signal()     # open this movie in another player
+    next_requested = Signal()         # play the next episode (series only)
     progress = Signal(str, int, int)  # path, position (ms), duration (ms); position 0 = clear
     finished = Signal(str)            # passed 95%: mark as watched
     ended = Signal(str)               # the video reached the end
@@ -173,6 +174,10 @@ class VlcPlayerPage(QWidget):
         self.play_btn = self._icon_button("❚❚", self.toggle_pause)
         self.play_btn.setStyleSheet("font-size: 18pt;")   # the pause bars are heavier than the gear and fullscreen glyphs
         self.play_btn.setToolTip("Pause / play (Space)")
+        self.next_btn = self._icon_button("▶|", self.next_requested.emit)   # shown only for series episodes
+        self.next_btn.setStyleSheet("font-size: 14pt;")
+        self.next_btn.setToolTip("Next episode")
+        self.next_btn.hide()
         self.elapsed, self.total = QLabel("0:00"), QLabel("0:00")
         self.seek = _SeekSlider(Qt.Horizontal)
         self.seek.setRange(0, 1000)
@@ -203,7 +208,7 @@ class VlcPlayerPage(QWidget):
         menu.addSeparator()
         menu.addAction("Open in another player", lambda: self.external_requested.emit())
         self.settings_btn.setMenu(menu)
-        for w in (self.play_btn, self.elapsed, self.seek, self.total, self.volume, self.volume_label,
+        for w in (self.play_btn, self.next_btn, self.elapsed, self.seek, self.total, self.volume, self.volume_label,
                   self.settings_btn, self.fullscreen_btn):
             row.addWidget(w, 1 if w is self.seek else 0)
         layout.addWidget(self.controls)
@@ -346,6 +351,9 @@ class VlcPlayerPage(QWidget):
     def set_title(self, title: str) -> None:
         self.title_label.setText(title)
 
+    def set_has_next(self, available: bool) -> None:
+        self.next_btn.setVisible(available)
+
     # -- brightness, contrast, color and sharpness --------------------------------------------------
     def _build_image_menu(self, menu: QMenu) -> None:
         panel = QWidget()
@@ -412,6 +420,8 @@ class VlcPlayerPage(QWidget):
 
     # -- playback ---------------------------------------------------------------
     def start(self, path: str, resume_ms: int = 0) -> None:
+        if self._path:
+            self._save_progress()   # switching episodes: keeps where the previous one stopped
         self._path = path
         self._finished_sent = self._ended_sent = False
         if resume_ms > 0:
