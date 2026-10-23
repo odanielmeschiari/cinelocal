@@ -460,6 +460,9 @@ class Database:
         except sqlite3.IntegrityError:
             raise ValueError(f"A tag named “{name}” already exists.") from None
 
+    def delete_tag(self, tag_id: int) -> None:
+        self._run("DELETE FROM tags WHERE id = ?", (tag_id,))   # movie_tags rows go away by ON DELETE CASCADE
+
     def set_movie_tag(self, movie_id: int, tag_id: int, present: bool) -> None:
         self.set_movie_tags([movie_id], tag_id, present)
 

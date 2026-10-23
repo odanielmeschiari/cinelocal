@@ -19,6 +19,7 @@ class Sidebar(QTreeWidget):
     rename_collection_requested = Signal(int)
     delete_collection_requested = Signal(int)
     edit_tag_requested = Signal(int)
+    delete_tag_requested = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -150,8 +151,12 @@ class Sidebar(QTreeWidget):
         if data[0] == "tag":
             menu = QMenu(self)
             edit = menu.addAction("Edit tag…")
-            if menu.exec(self.viewport().mapToGlobal(pos)) == edit:
+            delete = menu.addAction("Delete tag")
+            chosen = menu.exec(self.viewport().mapToGlobal(pos))
+            if chosen == edit:
                 self.edit_tag_requested.emit(data[1])
+            elif chosen == delete:
+                self.delete_tag_requested.emit(data[1])
             return
         if data[0] != "collection":
             return

@@ -743,6 +743,15 @@ class LibraryService(QObject):
                 self.movie_changed.emit(movie_id)
         self.library_changed.emit()
 
+    def delete_tag(self, tag_id: int) -> None:
+        affected = [movie_id for movie_id, tag_ids in self.tag_membership.items() if tag_id in tag_ids]
+        self.db.delete_tag(tag_id)
+        self._reload_tags()
+        for movie_id in affected:
+            if movie_id in self.by_id:
+                self.movie_changed.emit(movie_id)
+        self.library_changed.emit()
+
     def rename_tag(self, tag_id: int, name: str) -> None:
         self.db.rename_tag(tag_id, name)
         for tag in self.tags:

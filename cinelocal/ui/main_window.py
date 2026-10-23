@@ -179,7 +179,9 @@ class MainWindow(QMainWindow):
         self.filterbar.hide()
         column.addWidget(self.filterbar)
 
-        head = QHBoxLayout()
+        self.head_bar = QWidget()   # moves below the home rows (see _place_heading)
+        head = QHBoxLayout(self.head_bar)
+        head.setContentsMargins(0, 0, 0, 0)
         self.heading = QLabel("All movies")
         self.heading.setObjectName("heading")
         self.manage_btn = QPushButton("+")
@@ -195,7 +197,9 @@ class MainWindow(QMainWindow):
         head.addSpacing(12)
         head.addWidget(self.count_label, 0, Qt.AlignBottom)
         head.addStretch(1)
-        column.addLayout(head)
+        self.head_top = QVBoxLayout()
+        self.head_top.addWidget(self.head_bar)
+        column.addLayout(self.head_top)
 
         self.views = QStackedWidget()
         self.grid = MovieFlow()
@@ -211,6 +215,8 @@ class MainWindow(QMainWindow):
         grid_col.setContentsMargins(0, 0, 0, 0)
         grid_col.setSpacing(10)
         grid_col.addLayout(self.home_box)
+        self.head_inline = QVBoxLayout()   # heading between the home rows and the grid
+        grid_col.addLayout(self.head_inline)
         grid_col.addWidget(self.grid)
         grid_col.addStretch(1)
         self.empty = QLabel("")
@@ -240,6 +246,7 @@ class MainWindow(QMainWindow):
         self.sidebar.rename_collection_requested.connect(lambda cid: ask_rename_collection(self, s, cid))
         self.sidebar.delete_collection_requested.connect(self._delete_collection)
         self.sidebar.edit_tag_requested.connect(self._edit_tag)
+        self.sidebar.delete_tag_requested.connect(self._delete_tag)
         self.search.textChanged.connect(self._on_search)
         self.advanced_btn.clicked.connect(self._open_advanced)
         self.sort_combo.currentIndexChanged.connect(self._on_sort)
@@ -340,6 +347,15 @@ class MainWindow(QMainWindow):
             section.title.setText(titles.get(key) or self.service.collection_name(int(key.split(":")[1])))
             section.count.setText(str(len(items)))
             section.setVisible(bool(items))
+        self._place_heading()
+
+    def _place_heading(self) -> None:
+        """\"All movies\" goes right above the grid: below the home rows when they are shown."""
+        inline = any(not section.isHidden() for section in self._home_rows.values())
+        target, other = (self.head_inline, self.head_top) if inline else (self.head_top, self.head_inline)
+        if target.indexOf(self.head_bar) < 0:
+            other.removeWidget(self.head_bar)
+            target.addWidget(self.head_bar)
 
     def _edit_home(self) -> None:
         dialog = HomeDialog(self.service, self._home_keys(), self)
@@ -809,6 +825,14 @@ class MainWindow(QMainWindow):
 
     def _edit_tag(self, tag_id: int) -> None:
         TagDialog(self.service, tag_id, self).exec()
+
+    def _delete_tag(self, tag_id: int) -> None:
+        name = self._heading_for_filter(("tag", tag_id))
+        answer = QMessageBox.question(
+            self, "Delete tag",
+            f"Delete the tag “{name}”?\nThe movies will not be deleted, only lose the tag.")
+        if answer == QMessageBox.Yes:
+            self.service.delete_tag(tag_id)
 
     def _open_tag(self, tag_id: int) -> None:
         if self._detail is not None:
