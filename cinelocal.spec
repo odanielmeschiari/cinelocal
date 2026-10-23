@@ -23,9 +23,10 @@ def vlc_binaries():
         print("WARNING: VLC not found - building without the built-in player libraries")
         return []
     found = [(str(lib), ".") for lib in libs]
+    plugin_dir = "plugins" if win else "vlc/plugins"   # Windows: libVLC looks for "plugins" next to libvlccore.dll
     for plugin in plugins.rglob("*"):
         if plugin.suffix in (".dll", ".so"):
-            found.append((str(plugin), str(Path("vlc/plugins") / plugin.parent.relative_to(plugins))))
+            found.append((str(plugin), str(Path(plugin_dir) / plugin.parent.relative_to(plugins))))
     return found
 
 

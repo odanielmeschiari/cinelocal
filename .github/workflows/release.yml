@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-latest]   # the oldest Ubuntu keeps the binary working on older distros
     runs-on: ${{ matrix.os }}
@@ -41,7 +41,7 @@ jobs:
       - name: Check the built-in player of the packaged app (Windows)
         if: runner.os == 'Windows'
         run: |
-          if (-not ((Test-Path dist\CineLocal\_internal\libvlc.dll) -and (Test-Path dist\CineLocal\_internal\vlc\plugins))) { throw "libVLC is not in the build" }
+          if (-not ((Test-Path dist\CineLocal\_internal\libvlc.dll) -and (Test-Path dist\CineLocal\_internal\plugins))) { throw "libVLC is not in the build" }
           $p = Start-Process dist\CineLocal\CineLocal.exe -ArgumentList '--check-player','player-check.txt' -Wait -PassThru
           if (Test-Path player-check.txt) { Get-Content player-check.txt }
           if ($p.ExitCode -ne 0) { throw "the built-in player failed to load in the packaged app" }

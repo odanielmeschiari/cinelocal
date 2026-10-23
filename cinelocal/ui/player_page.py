@@ -37,7 +37,8 @@ def _use_bundled_vlc() -> None:
     lib = root / ("libvlc.dll" if sys.platform == "win32" else "libvlc.so.5")
     if getattr(sys, "frozen", False) and lib.is_file():
         os.environ.setdefault("PYTHON_VLC_LIB_PATH", str(lib))
-        os.environ.setdefault("VLC_PLUGIN_PATH", str(root / "vlc" / "plugins"))
+        # Windows: libVLC's default is "plugins" next to libvlccore.dll (the env var is not seen by its C runtime)
+        os.environ.setdefault("VLC_PLUGIN_PATH", str(root / ("plugins" if sys.platform == "win32" else "vlc/plugins")))
         if sys.platform == "win32":
             os.add_dll_directory(str(root))   # libvlc.dll needs libvlccore.dll and its dependencies from this folder
 
@@ -51,7 +52,7 @@ def load_error() -> str:
             import vlc
             instance = vlc.Instance()
             if instance is None:
-                raise RuntimeError("libVLC")
+                raise RuntimeError("libVLC loaded but could not start (plugins not found?)")
             _vlc = (vlc, instance)
         except (Exception, SystemExit) as e:  # noqa: BLE001 - python-vlc calls sys.exit() if it cannot load libVLC
             _error = (f"libVLC could not be loaded ({type(e).__name__}: {e}). "
