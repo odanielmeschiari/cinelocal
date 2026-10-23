@@ -451,6 +451,15 @@ class Database:
     def set_tag_color(self, tag_id: int, color: str) -> None:
         self._run("UPDATE tags SET color = ? WHERE id = ?", (color, tag_id))
 
+    def rename_tag(self, tag_id: int, name: str) -> None:
+        name = name.strip()
+        if not name:
+            raise ValueError("Enter a name for the tag.")
+        try:
+            self._run("UPDATE tags SET name = ? WHERE id = ?", (name, tag_id))
+        except sqlite3.IntegrityError:
+            raise ValueError(f"A tag named “{name}” already exists.") from None
+
     def set_movie_tag(self, movie_id: int, tag_id: int, present: bool) -> None:
         self.set_movie_tags([movie_id], tag_id, present)
 

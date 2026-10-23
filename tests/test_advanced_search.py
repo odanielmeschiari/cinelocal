@@ -58,6 +58,14 @@ class AdvancedFilterTests(unittest.TestCase):
         self.assertEqual(self.ids({"stars": [0]}), [1, -3])
         self.assertEqual(self.ids({"stars": [4]}), [2])
 
+    def test_tag_sidebar_filter_matches_tagged_movies(self):
+        self.a["tags"] = [{"id": 4, "name": "Favorites", "color": "#e57373"}]
+        self.assertEqual(self.ids({"tags": [4]}), [1])
+        self.assertEqual(
+            [m["id"] for m in filter_movies(self.all, ("tag", 4), self.members)],
+            [1],
+        )
+
     def test_added_days(self):
         self.a["added_at"] = 1_000_000
         self.assertTrue(matches_advanced(self.a, {"added_days": 1}, {}, now=1_000_000 + 3600))

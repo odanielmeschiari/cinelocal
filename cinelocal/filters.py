@@ -52,6 +52,8 @@ def matches(movie: dict, flt: Filter, membership: dict[int, set[int]], progress=
         return movie["status"] in ("ambiguous", "not_found")
     if kind == "collection":
         return movie["id"] in membership.get(value, ())
+    if kind == "tag":
+        return any(tag["id"] == value for tag in movie.get("tags", ()))
     if kind == "stars":      # the user's own 1-5 star rating
         return movie.get("user_rating") == value
     if kind == "genre":

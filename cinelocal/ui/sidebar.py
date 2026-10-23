@@ -11,6 +11,7 @@ from .theme import COLORS
 
 _NEW_COLLECTION = ("new_collection", None)
 _VALUE_ROLE = Qt.UserRole + 1
+_COLOR_ROLE = Qt.UserRole + 2
 
 
 class Sidebar(QTreeWidget):
@@ -18,6 +19,7 @@ class Sidebar(QTreeWidget):
     new_collection_requested = Signal()
     rename_collection_requested = Signal(int)
     delete_collection_requested = Signal(int)
+    edit_tag_requested = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -40,7 +42,9 @@ class Sidebar(QTreeWidget):
 
     # -- construction -----------------------------------------------------------------
     def rebuild(self, counts: dict, collections: list[dict],
-                membership: dict[int, set[int]], current: Filter) -> None:
+                membership: dict[int, set[int]], current: Filter,
+                tags: list[dict] | None = None,
+                tag_membership: dict[int, set[int]] | None = None) -> None:
         self._rebuilding = True
         self.clear()
 
@@ -61,6 +65,13 @@ class Sidebar(QTreeWidget):
         self._entry("New collection", _NEW_COLLECTION, None)
         for c in collections:
             self._entry(c["name"], ("collection", c["id"]), len(membership.get(c["id"], ())))
+
+        if tags:
+            self._header("TAGS")
+            tag_membership = tag_membership or {}
+            for tag in tags:
+                self._entry(tag["name"], ("tag", tag["id"]),
+                            sum(tag["id"] in ids for ids in tag_membership.values()), tag["color"])
 
         if counts["stars"]:
             self._header("MY RATING")
@@ -90,12 +101,15 @@ class Sidebar(QTreeWidget):
         item.setForeground(0, QBrush(QColor(COLORS["muted"])))
         self.addTopLevelItem(item)
 
-    def _entry(self, label: str, data: Filter, count: int | None) -> None:
+    def _entry(self, label: str, data: Filter, count: int | None, color: str | None = None) -> None:
         text = label if count is None else f"{label}   ({count})"
         item = QTreeWidgetItem([text])
         item.setData(0, Qt.UserRole, data[0])
         item.setData(0, _VALUE_ROLE, data[1])
         item.setToolTip(0, label)
+        if color:
+            item.setData(0, _COLOR_ROLE, color)
+            item.setForeground(0, QBrush(QColor(color)))
         self.addTopLevelItem(item)
 
     @staticmethod
@@ -135,7 +149,15 @@ class Sidebar(QTreeWidget):
     def _on_context(self, pos) -> None:
         item = self.itemAt(pos)
         data = self._filter_of(item) if item else None
-        if not data or data[0] != "collection":
+        if not data:
+            return
+        if data[0] == "tag":
+            menu = QMenu(self)
+            edit = menu.addAction("Edit tag…")
+            if menu.exec(self.viewport().mapToGlobal(pos)) == edit:
+                self.edit_tag_requested.emit(data[1])
+            return
+        if data[0] != "collection":
             return
         menu = QMenu(self)
         rename = menu.addAction("Rename collection…")

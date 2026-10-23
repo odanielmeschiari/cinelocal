@@ -29,6 +29,7 @@ class MovieDialog(QWidget):
     back_requested = Signal()
     play_requested = Signal(int)
     open_requested = Signal(int)   # another movie, chosen among the similar ones
+    filter_tag_requested = Signal(int)
 
     def __init__(self, service: LibraryService, movie_id: int, parent=None):
         super().__init__(parent)
@@ -260,6 +261,8 @@ class MovieDialog(QWidget):
         self.tags_box.setVisible(bool(tags) or bool(self.service.tags))
         for tag in tags:
             button = QPushButton(tag["name"])
+            button.clicked.connect(lambda _checked=False, tag_id=tag["id"]:
+                                    self.filter_tag_requested.emit(tag_id))
             color = QColor(tag["color"])
             foreground = "#17202a" if color.lightness() > 175 else "#ffffff"
             button.setStyleSheet(

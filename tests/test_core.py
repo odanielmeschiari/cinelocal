@@ -146,8 +146,12 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(self.db.get_movie(movie_id)["extra"], extra)
         self.assertEqual(self.db.all_tags(), [{"id": tag_id, "name": "Cult", "color": "#123456"}])
         self.assertEqual(self.db.tag_membership(), {movie_id: {tag_id}})
+        self.db.rename_tag(tag_id, "Cult classics")
+        self.assertEqual(self.db.all_tags()[0]["name"], "Cult classics")
         with self.assertRaises(ValueError):
-            self.db.create_tag("cult")
+            self.db.create_tag("cult classics")
+        with self.assertRaises(ValueError):
+            self.db.rename_tag(tag_id, " ")
 
     def test_filter_and_sort(self):
         for name in ("B 2001.mkv", "A 1999.mkv", "C.mkv"):

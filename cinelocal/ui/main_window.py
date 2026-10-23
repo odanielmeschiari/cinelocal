@@ -28,6 +28,7 @@ from .series_dialog import SeriesDialog
 from .settings_dialog import SettingsDialog
 from .sidebar import Sidebar
 from .stats_dialog import StatsDialog
+from .tag_dialog import TagDialog
 
 HOME_ROW_LIMIT = 40   # posters per row on the home screen (the section itself shows them all)
 TOOL_BOX, TOOL_ICON = 36, 20   # top-bar icon buttons: a bit smaller than the detail/player ones (44, 24)
@@ -231,6 +232,7 @@ class MainWindow(QMainWindow):
         self.sidebar.new_collection_requested.connect(lambda: ask_new_collection(self, s))
         self.sidebar.rename_collection_requested.connect(lambda cid: ask_rename_collection(self, s, cid))
         self.sidebar.delete_collection_requested.connect(self._delete_collection)
+        self.sidebar.edit_tag_requested.connect(self._edit_tag)
         self.search.textChanged.connect(self._on_search)
         self.advanced_btn.clicked.connect(self._open_advanced)
         self.sort_combo.currentIndexChanged.connect(self._on_sort)
@@ -389,6 +391,8 @@ class MainWindow(QMainWindow):
             return "Watched" if value else "Unwatched"
         if kind == "collection":
             return self.service.collection_name(value)
+        if kind == "tag":
+            return next((tag["name"] for tag in self.service.tags if tag["id"] == value), "Tag")
         if kind == "decade":
             return f"{value}s"
         if kind == "stars":
@@ -397,7 +401,8 @@ class MainWindow(QMainWindow):
 
     def _rebuild_sidebar(self) -> None:
         counts = filters.sidebar_counts(self.service.movies, self.service.progress_of, self.service.history_stamp)
-        self.sidebar.rebuild(counts, self.service.collections, self.service.membership, self.flt)
+        self.sidebar.rebuild(counts, self.service.collections, self.service.membership, self.flt,
+                             self.service.tags, self.service.tag_membership)
         if self.sidebar.current_filter != self.flt:   # the previous selection no longer exists
             self.flt = self.sidebar.current_filter
             self.refresh_view()
@@ -500,6 +505,7 @@ class MainWindow(QMainWindow):
         page.play_requested.connect(self.play_movie)
         if isinstance(page, MovieDialog):
             page.open_requested.connect(self.open_movie)
+            page.filter_tag_requested.connect(self._open_tag)
         self._detail = page
         self.stack.addWidget(page)
 
@@ -741,6 +747,23 @@ class MainWindow(QMainWindow):
 
     def _delete_collection(self, collection_id: int) -> None:
         confirm_delete_collection(self, self.service, collection_id)
+
+    def _edit_tag(self, tag_id: int) -> None:
+        TagDialog(self.service, tag_id, self).exec()
+
+    def _open_tag(self, tag_id: int) -> None:
+        if self._detail is not None:
+            self.close_movie()
+        self.flt = ("tag", tag_id)
+        self.advanced = {}
+        self.advanced_btn.setChecked(False)
+        self.query = ""
+        self.search.blockSignals(True)
+        self.search.clear()
+        self.search.blockSignals(False)
+        self._rebuild_sidebar()
+        self.grid_page.verticalScrollBar().setValue(0)
+        self.refresh_view()
 
     def _context_menu(self, ids: list[int], global_pos) -> None:
         s = self.service

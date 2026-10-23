@@ -714,6 +714,8 @@ class LibraryService(QObject):
         self.set_movie_tags([movie_id], tag_id, present)
 
     def set_movie_tags(self, movie_ids: list[int], tag_id: int, present: bool) -> None:
+        if not movie_ids:
+            return
         self.db.set_movie_tags(movie_ids, tag_id, present)
         for movie_id in movie_ids:
             tags = self.tag_membership.setdefault(movie_id, set())
@@ -739,6 +741,14 @@ class LibraryService(QObject):
             if movie is not None:
                 movie["tags"] = self._tags_for_movie(movie_id)
                 self.movie_changed.emit(movie_id)
+        self.library_changed.emit()
+
+    def rename_tag(self, tag_id: int, name: str) -> None:
+        self.db.rename_tag(tag_id, name)
+        for tag in self.tags:
+            if tag["id"] == tag_id:
+                tag["name"] = name.strip()
+                break
         self.library_changed.emit()
 
     # -- encerramento ----------------------------------------------------------------------

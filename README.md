@@ -134,7 +134,7 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   right-click opens the menu (favorite, watched, collections, tags, update, fix match). In details, use **More → More info**
   for file size, budget, box office, production countries and companies, languages, franchise and other TMDB data.
   Each movie can have multiple colored tags; add or remove them from details or the grid menu and change their color
-  from a tag's context menu.
+  from a tag's context menu. Click a tag on a movie's details page to filter the library to that tag.
 - **Instant search** (`Ctrl+F`) by title, actor, director or genre; **sorting** by title, year,
   rating, popularity, vote count, runtime or recently added (ascending and descending where applicable).
 - **Advanced search** (magnifier button next to the search box): opens a panel where you combine any
@@ -158,7 +158,8 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   ![Filters](examples/filters.png "Filters")
   
 - **Sidebar**: All, Favorites, Watched/Unwatched, **Collections** (a movie can be in several),
-  Genres and Years (decades). Right-click a collection to rename or delete it. **History** lists
+  **Tags** (below Collections), Genres and Years (decades). Click a tag to view its movies; right-click it to
+  edit its name and color and select which movies belong to it. Right-click a collection to rename or delete it. **History** lists
   everything you have watched, or started to watch, with the most recent first (movies marked as
   watched before the dates were recorded come last).
 - **Watch** opens the **built-in player** (based on libVLC): `Space` pauses, `←`/`→` skip 10 s, `↑`/`↓` change the
