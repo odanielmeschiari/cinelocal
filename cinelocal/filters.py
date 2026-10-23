@@ -14,6 +14,12 @@ SORT_OPTIONS = [
     ("year_asc", "Year (oldest)", "year", False),
     ("rating_desc", "Rating (highest)", "rating", True),
     ("rating_asc", "Rating (lowest)", "rating", False),
+    ("popularity_desc", "Popularity (highest)", "popularity", True),
+    ("popularity_asc", "Popularity (lowest)", "popularity", False),
+    ("votes_desc", "Votes (most)", "votes", True),
+    ("votes_asc", "Votes (fewest)", "votes", False),
+    ("runtime_asc", "Runtime (shortest)", "runtime", False),
+    ("runtime_desc", "Runtime (longest)", "runtime", True),
     ("added_desc", "Recently added", "added", True),
     ("myrating_desc", "My rating (highest)", "user_rating", True),
     ("myrating_asc", "My rating (lowest)", "user_rating", False),
@@ -84,6 +90,15 @@ def matches_advanced(movie: dict, adv: dict, membership: dict[int, set[int]],
             return False
     if "certifications" in adv and movie.get("certification") not in adv["certifications"]:
         return False
+    extra = movie.get("extra") or {}
+    if "countries" in adv and not set(extra.get("production_countries") or ()) & set(adv["countries"]):
+        return False
+    if "languages" in adv:
+        languages = set(extra.get("spoken_languages") or ())
+        if extra.get("original_language_name"):
+            languages.add(extra["original_language_name"])
+        if not languages & set(adv["languages"]):
+            return False
     if "directors" in adv and not _directors(movie) & set(adv["directors"]):
         return False
     if "cast" in adv and not {c["name"] for c in movie["cast"]} & set(adv["cast"]):
@@ -98,6 +113,8 @@ def matches_advanced(movie: dict, adv: dict, membership: dict[int, set[int]],
         return False
     if "collections" in adv and not any(movie["id"] in membership.get(c, ()) for c in adv["collections"]):
         return False
+    if "tags" in adv and not {tag["id"] for tag in movie.get("tags", ())} & set(adv["tags"]):
+        return False
     if "stars" in adv and (movie.get("user_rating") or 0) not in adv["stars"]:
         return False
     if "added_days" in adv and movie["added_at"] < (now or time.time()) - adv["added_days"] * 86400:
@@ -111,20 +128,35 @@ def advanced_options(movies: list[dict]) -> dict:
     directors: Counter = Counter()
     cast: Counter = Counter()
     certifications: Counter = Counter()
+    countries: Counter = Counter()
+    languages: Counter = Counter()
+    tags: Counter = Counter()
     for m in movies:
         genres.update(m["genres"])
         directors.update(_directors(m))
         cast.update({c["name"] for c in m["cast"]})
         if m.get("certification"):
             certifications[m["certification"]] += 1
+        extra = m.get("extra") or {}
+        countries.update(set(extra.get("production_countries") or ()))
+        language_names = set(extra.get("spoken_languages") or ())
+        if extra.get("original_language_name"):
+            language_names.add(extra["original_language_name"])
+        languages.update(language_names)
+        tags.update({(tag["id"], tag["name"]) for tag in m.get("tags", ())})
     years = [m.get("year") or m.get("year_guess") for m in movies]
     years = [y for y in years if y]
 
     def ranked(counter: Counter) -> list[tuple[str, int]]:
         return sorted(counter.items(), key=lambda kv: (normalize_text(kv[0]), kv[0]))
 
+    tag_options = sorted(((tag_id, name, count) for (tag_id, name), count in tags.items()),
+                         key=lambda item: (normalize_text(item[1]), item[1]))
     return {"genres": ranked(genres), "directors": ranked(directors), "cast": ranked(cast),
-            "certifications": ranked(certifications), "years": (min(years), max(years)) if years else None}
+            "certifications": ranked(certifications), "countries": ranked(countries),
+            "languages": ranked(languages), "tags": [(tag_id, f"{name}  ({count})")
+                                                       for tag_id, name, count in tag_options],
+            "years": (min(years), max(years)) if years else None}
 
 
 def filter_movies(movies: list[dict], flt: Filter, membership: dict[int, set[int]],
@@ -151,6 +183,12 @@ def _sort_value(movie: dict, field: str):
         return movie.get("user_rating") or None   # unrated movies go last
     if field == "rating":
         return movie.get("rating") if movie.get("votes") else None
+    if field == "runtime":
+        return movie.get("runtime") if movie.get("kind") != "series" else None
+    if field == "votes":
+        return movie.get("votes") or None
+    if field == "popularity":
+        return (movie.get("extra") or {}).get("popularity")
     return movie["added_at"]
 
 

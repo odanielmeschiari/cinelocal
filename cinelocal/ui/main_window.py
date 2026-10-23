@@ -7,7 +7,7 @@ from PySide6.QtCore import (QEasingCurve, QParallelAnimationGroup, QPoint,
                             QPropertyAnimation, Qt, QTimer)
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
-                               QLineEdit, QMainWindow, QMenu, QMessageBox, QProgressBar,
+                               QInputDialog, QLineEdit, QMainWindow, QMenu, QMessageBox, QProgressBar,
                                QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
 from .. import filters
@@ -771,6 +771,15 @@ class MainWindow(QMainWindow):
         if all(i > 0 for i in ids):   # collections only hold movies
             collections_menu = menu.addMenu("Collections")
             populate_collections_menu(collections_menu, s, ids, self)
+            tags_menu = menu.addMenu("Tags")
+            for tag in s.tags:
+                action = tags_menu.addAction(tag["name"])
+                action.setCheckable(True)
+                action.setChecked(all(tag["id"] in s.tag_membership.get(movie_id, set()) for movie_id in ids))
+                action.triggered.connect(
+                    lambda checked, tag_id=tag["id"]: s.set_movie_tags(ids, tag_id, checked))
+            tags_menu.addSeparator()
+            tags_menu.addAction("Create tag…", lambda: self._create_tag_for(ids))
         if self.flt[0] == "collection":
             menu.addAction("Remove from this collection",
                            lambda: s.set_in_collection(self.flt[1], ids, False))
@@ -779,6 +788,16 @@ class MainWindow(QMainWindow):
         if single:
             menu.addAction("Fix match…", lambda: self._fix_match(ids[0]))
         menu.exec(global_pos)
+
+    def _create_tag_for(self, movie_ids: list[int]) -> None:
+        name, accepted = QInputDialog.getText(self, "Create tag", "Tag name:")
+        if not accepted or not name.strip():
+            return
+        try:
+            tag_id = self.service.create_tag(name)
+            self.service.set_movie_tags(movie_ids, tag_id, True)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Could not create tag", str(exc))
 
     def _play(self, movie_id: int) -> None:
         try:

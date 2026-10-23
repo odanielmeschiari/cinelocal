@@ -10,7 +10,7 @@ from .. import images
 from ..service import LibraryService
 from ..utils import format_runtime, format_votes
 from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP,
-                             ReviewBox, backdrop_gradient, cap_offset, side_margin)
+                             ReviewBox, backdrop_gradient, cap_offset, show_more_info, side_margin)
 from .edit_dialog import EditDialog
 from .icons import IconButton
 from .match_dialog import MatchDialog
@@ -139,6 +139,7 @@ class SeriesDialog(QWidget):
         more = IconButton("menu", object_name="plainIcon")
         more.setToolTip("More")
         more_menu = QMenu(more)
+        more_menu.addAction("More info", self._more_info)
         more_menu.addAction("Refresh metadata", lambda: self.service.apply_match(self.movie_id))
         more_menu.addAction("Fix match…", self._fix_match)
         more_menu.addAction("Edit metadata…", self._edit)
@@ -405,6 +406,14 @@ class SeriesDialog(QWidget):
         key = self.service.by_id[self.movie_id]["trailer_key"]
         if key:
             QDesktopServices.openUrl(QUrl(f"https://www.youtube.com/watch?v={key}"))
+
+    def _more_info(self) -> None:
+        series = self.service.by_id[self.movie_id]
+        episodes = self.service.episodes.get(self.series_id, [])
+        total_size = sum(episode.get("size") or 0 for episode in episodes)
+        show_more_info(self, series["display_title"], series.get("extra") or {}, total_size,
+                       series.get("franchise"), "Episode files size",
+                       (("Episodes in library", str(len(episodes))),))
 
     def _fix_match(self) -> None:
         dialog = MatchDialog(self.service, self.service.by_id[self.movie_id], self)

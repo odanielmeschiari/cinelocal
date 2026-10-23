@@ -333,6 +333,11 @@ class AdvancedSearch(QWidget):
                                "menu to download them.")
         pair(("Genres", genres_box), ("Age rating", self.certs))
 
+        section("Countries and languages")
+        self.countries = CheckList(named(options["countries"]), "No production countries saved yet.")
+        self.languages = CheckList(named(options["languages"]), "No spoken languages saved yet.")
+        pair(("Production countries", self.countries), ("Languages", self.languages))
+
         # -- people --
         section("People")
         self.directors = CheckList(named(options["directors"]), "No directors saved yet.")
@@ -354,9 +359,10 @@ class AdvancedSearch(QWidget):
         self.collections = CheckList(
             [(c["id"], f"{c['name']}  ({len(s.membership.get(c['id'], ()))})") for c in sorted(s.collections, key=lambda c: normalize_text(c["name"]))],
             "You have not created any collections yet.")
+        self.tags = CheckList(options["tags"], "You have not created any tags yet.")
         self.stars = CheckList([(v, star_text(v) if v else "Not rated")
                                 for v in (5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5, 0)])
-        pair(("My collections", self.collections), ("My rating", self.stars))
+        pair(("My collections", self.collections), ("My tags", self.tags), ("My rating", self.stars))
 
         # -- footer --
         foot = QHBoxLayout()
@@ -385,7 +391,8 @@ class AdvancedSearch(QWidget):
             w.changed.connect(self._changed)
         for w in (self.genres_all, self.favorite, self.watchlist, self.in_progress):
             w.toggled.connect(self._changed)
-        for w in (self.genres, self.certs, self.directors, self.cast, self.collections, self.stars):
+        for w in (self.genres, self.certs, self.countries, self.languages, self.directors, self.cast,
+                  self.collections, self.tags, self.stars):
             w.changed.connect(self._changed)
 
     # ---------------------------------------------------------------------- criteria --
@@ -396,8 +403,9 @@ class AdvancedSearch(QWidget):
                 "added_days": self.added_days}
 
     def _lists(self) -> dict:
-        return {"genres": self.genres, "certifications": self.certs, "directors": self.directors,
-                "cast": self.cast, "collections": self.collections, "stars": self.stars}
+        return {"genres": self.genres, "certifications": self.certs, "countries": self.countries,
+                "languages": self.languages, "directors": self.directors, "cast": self.cast,
+                "collections": self.collections, "tags": self.tags, "stars": self.stars}
 
     def criteria(self) -> dict:
         c: dict = {}

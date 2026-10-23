@@ -133,6 +133,22 @@ class LibraryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.db.create_collection("terror")
 
+    def test_tags_and_additional_metadata_persist(self):
+        self.touch("A.mkv")
+        sync_library(self.db, str(self.root))
+        (movie_id,) = [movie["id"] for movie in self.db.all_movies()]
+        tag_id = self.db.create_tag("Cult")
+        self.db.set_movie_tag(movie_id, tag_id, True)
+        self.db.set_tag_color(tag_id, "#123456")
+        extra = {"budget": 1234, "production_countries": ["Brazil"]}
+        self.db.save_metadata(movie_id, {"extra": extra})
+
+        self.assertEqual(self.db.get_movie(movie_id)["extra"], extra)
+        self.assertEqual(self.db.all_tags(), [{"id": tag_id, "name": "Cult", "color": "#123456"}])
+        self.assertEqual(self.db.tag_membership(), {movie_id: {tag_id}})
+        with self.assertRaises(ValueError):
+            self.db.create_tag("cult")
+
     def test_filter_and_sort(self):
         for name in ("B 2001.mkv", "A 1999.mkv", "C.mkv"):
             self.touch(name)

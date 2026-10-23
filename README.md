@@ -131,9 +131,12 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   and in what order (by default only *Continue watching*).
 - **Grid**: click a poster to open the details (in the same window; `←  Back`, `Esc` or `Alt`+`←` return to the list
   exactly where you were). `Ctrl`/`Shift`+click selects several movies;
-  right-click opens the menu (favorite, watched, collections, update, fix match).
+  right-click opens the menu (favorite, watched, collections, tags, update, fix match). In details, use **More → More info**
+  for file size, budget, box office, production countries and companies, languages, franchise and other TMDB data.
+  Each movie can have multiple colored tags; add or remove them from details or the grid menu and change their color
+  from a tag's context menu.
 - **Instant search** (`Ctrl+F`) by title, actor, director or genre; **sorting** by title, year,
-  rating or recently added.
+  rating, popularity, vote count, runtime or recently added (ascending and descending where applicable).
 - **Advanced search** (magnifier button next to the search box): opens a panel where you combine any
   of the filters below; only the ones you fill in count, and a movie must match all of them. It works
   on the data already saved locally, on top of the section selected in the sidebar. The button shows
@@ -143,8 +146,9 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   - Content: movies or series, runtime (the runtime limits only apply to movies; series are not filtered by it).
   - Release and ratings: year (a range or a single year), TMDB rating and number of votes.
   - Genre (any or all of the chosen ones) and age rating.
+  - Production countries, spoken languages and movie tags.
   - People: directors and cast, picked from the ones in your library.
-  - My library: watched/unwatched, favorites, watchlist, in progress, your collections, your own
+  - My library: watched/unwatched, favorites, watchlist, in progress, your collections, your tags, your own
     star ratings and how recently the movie was added.
 
   Number fields accept typed values, the ▲▼ buttons or preset values from the ▾ menu; lists have

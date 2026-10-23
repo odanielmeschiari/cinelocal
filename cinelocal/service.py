@@ -40,6 +40,8 @@ class LibraryService(QObject):
         self.by_id: dict[int, dict] = {}
         self.collections: list[dict] = []
         self.membership: dict[int, set[int]] = {}
+        self.tags: list[dict] = []
+        self.tag_membership: dict[int, set[int]] = {}
         self._update_worker: UpdateWorker | None = None
         self._jobs: set[FuncWorker] = set()
         self._scanning = False
@@ -80,6 +82,7 @@ class LibraryService(QObject):
             self.by_id.update({e["id"]: e for e in items})
         self.collections = self.db.all_collections()
         self.membership = self.db.membership()
+        self._reload_tags()
 
     def _series_entry(self, row: dict) -> dict:
         """Series in the same format as a movie, for the grid, filters and search (id = -series id)."""
@@ -134,6 +137,7 @@ class LibraryService(QObject):
             return
         current.clear()
         current.update(decorate(fresh))   # update in place: the grid model sees the change
+        current["tags"] = self._tags_for_movie(movie_id)
         self.movie_changed.emit(movie_id)
 
     def _client(self):
@@ -474,7 +478,7 @@ class LibraryService(QObject):
             self.movie_changed.emit(movie_id)
 
     def restore(self, kinds: set[str]) -> bool:
-        """Erases data. kinds: 'metadata' (and covers), 'history', 'favorites', 'collections', 'reviews',
+        """Erases data. kinds: 'metadata' (and covers), 'history', 'favorites', 'collections', 'tags', 'reviews',
         'settings' or 'everything' (the library too, back to a first run). False if busy."""
         if self.updating or self._scanning:
             self.error.emit("Wait for the scan or metadata update in progress to finish.")
@@ -484,6 +488,7 @@ class LibraryService(QObject):
             images.delete_all_images()
         self.db.restore(metadata="metadata" in kinds, history="history" in kinds,
                         favorites="favorites" in kinds, collections="collections" in kinds,
+                        tags="tags" in kinds,
                         reviews="reviews" in kinds, everything=everything)
         reset = {}
         if everything or "history" in kinds:
@@ -685,6 +690,55 @@ class LibraryService(QObject):
     def _reload_collections(self) -> None:
         self.collections = self.db.all_collections()
         self.membership = self.db.membership()
+        self.library_changed.emit()
+
+    def _tags_for_movie(self, movie_id: int) -> list[dict]:
+        tag_by_id = {tag["id"]: tag for tag in self.tags}
+        return [tag_by_id[tag_id] for tag_id in sorted(self.tag_membership.get(movie_id, ()))
+                if tag_id in tag_by_id]
+
+    def _reload_tags(self) -> None:
+        self.tags = self.db.all_tags()
+        self.tag_membership = self.db.tag_membership()
+        for movie in self.movies:
+            if movie.get("id", 0) > 0:
+                movie["tags"] = self._tags_for_movie(movie["id"])
+
+    def create_tag(self, name: str) -> int:
+        tag_id = self.db.create_tag(name)
+        self._reload_tags()
+        self.library_changed.emit()
+        return tag_id
+
+    def set_movie_tag(self, movie_id: int, tag_id: int, present: bool) -> None:
+        self.set_movie_tags([movie_id], tag_id, present)
+
+    def set_movie_tags(self, movie_ids: list[int], tag_id: int, present: bool) -> None:
+        self.db.set_movie_tags(movie_ids, tag_id, present)
+        for movie_id in movie_ids:
+            tags = self.tag_membership.setdefault(movie_id, set())
+            if present:
+                tags.add(tag_id)
+            else:
+                tags.discard(tag_id)
+            movie = self.by_id.get(movie_id)
+            if movie is not None:
+                movie["tags"] = self._tags_for_movie(movie_id)
+                self.movie_changed.emit(movie_id)
+        self.library_changed.emit()
+
+    def set_tag_color(self, tag_id: int, color: str) -> None:
+        self.db.set_tag_color(tag_id, color)
+        for tag in self.tags:
+            if tag["id"] == tag_id:
+                tag["color"] = color
+                break
+        affected = [movie_id for movie_id, tag_ids in self.tag_membership.items() if tag_id in tag_ids]
+        for movie_id in affected:
+            movie = self.by_id.get(movie_id)
+            if movie is not None:
+                movie["tags"] = self._tags_for_movie(movie_id)
+                self.movie_changed.emit(movie_id)
         self.library_changed.emit()
 
     # -- encerramento ----------------------------------------------------------------------

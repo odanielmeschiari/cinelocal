@@ -91,6 +91,40 @@ def parse_details(raw: dict, fallback: dict | None = None) -> dict:
     cast = [{"name": p["name"], "character": p.get("character") or ""}
             for p in credits.get("cast", [])[:12]]
     videos = (raw.get("videos") or {}).get("results") or (fb.get("videos") or {}).get("results") or []
+    spoken = raw.get("spoken_languages") or fb.get("spoken_languages") or []
+    original_language = raw.get("original_language") or fb.get("original_language")
+    language_names = list(dict.fromkeys(
+        language.get("english_name") or language.get("name") or language.get("iso_639_1")
+        for language in spoken if language.get("english_name") or language.get("name") or language.get("iso_639_1")))
+    language_name = next((language.get("english_name") or language.get("name")
+                          for language in spoken if language.get("iso_639_1") == original_language), None)
+    if original_language and not language_name:
+        language_name = original_language
+    countries = [country.get("name") for country in raw.get("production_countries") or []
+                 if country.get("name")]
+    if not countries:
+        countries = list(raw.get("origin_country") or [])
+    companies = [company.get("name") for company in raw.get("production_companies") or []
+                 if company.get("name")]
+    if not companies:
+        companies = [network.get("name") for network in raw.get("networks") or [] if network.get("name")]
+    franchise = (raw.get("belongs_to_collection") or {}).get("name")
+    extra = {
+        "budget": raw.get("budget") or None,
+        "revenue": raw.get("revenue") or None,
+        "production_countries": countries,
+        "production_companies": companies,
+        "original_language": original_language,
+        "original_language_name": language_name,
+        "spoken_languages": language_names,
+        "popularity": raw.get("popularity") or None,
+        "homepage": raw.get("homepage") or None,
+        "status": raw.get("status") or None,
+        "imdb_id": raw.get("imdb_id") or None,
+        "number_of_seasons": raw.get("number_of_seasons") or None,
+        "number_of_episodes": raw.get("number_of_episodes") or None,
+        "in_production": raw.get("in_production"),
+    }
 
     fields = {
         "title": pick("title"),
@@ -108,7 +142,8 @@ def parse_details(raw: dict, fallback: dict | None = None) -> dict:
         "cast": cast,
         "trailer_key": _pick_trailer(videos),
         "certification": pick("certification"),
+        "extra": extra,
     }
     if "belongs_to_collection" in raw:   # only movies have it: the franchise ("The Matrix Collection"), or none
-        fields["franchise"] = (raw["belongs_to_collection"] or {}).get("name") or None
+        fields["franchise"] = franchise or None
     return fields

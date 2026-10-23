@@ -3,8 +3,10 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QColor, QLinearGradient, QPainter
-from PySide6.QtWidgets import (QHBoxLayout, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QDialog, QFormLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit,
+                               QVBoxLayout, QWidget)
 
+from ..utils import format_size
 from .theme import COLORS
 
 POSTER_SIZE = (240, 360)
@@ -44,6 +46,51 @@ def cap_offset(label: QLabel) -> int:
     label.ensurePolished()
     metrics = label.fontMetrics()
     return max(0, metrics.ascent() - metrics.capHeight())
+
+
+def show_more_info(parent: QWidget, title: str, extra: dict, file_size: int | None = None,
+                   franchise: str | None = None, size_label: str = "File size",
+                   other_rows: tuple[tuple[str, str], ...] = ()) -> None:
+    """Show locally stored TMDB production data and file details."""
+    details = [
+        (size_label, format_size(file_size) if file_size else None),
+        ("Budget", f"${int(extra['budget']):,}" if extra.get("budget") else None),
+        ("Box office", f"${int(extra['revenue']):,}" if extra.get("revenue") else None),
+        ("Production countries", ", ".join(extra.get("production_countries") or [])),
+        ("Production companies", ", ".join(extra.get("production_companies") or [])),
+        ("Original language", extra.get("original_language_name")),
+        ("Other spoken languages", ", ".join(extra.get("spoken_languages") or [])),
+        ("Franchise", franchise),
+        ("Popularity", f"{extra['popularity']:,.2f}" if isinstance(extra.get("popularity"), (int, float)) else None),
+        ("Status", extra.get("status")),
+        ("In production", ("Yes" if extra["in_production"] else "No")
+         if extra.get("in_production") is not None else None),
+        ("IMDb ID", extra.get("imdb_id")),
+        ("Homepage", extra.get("homepage")),
+        ("Seasons", extra.get("number_of_seasons")),
+        ("Episodes", extra.get("number_of_episodes")),
+        *other_rows,
+    ]
+    dialog = QDialog(parent)
+    dialog.setWindowTitle(f"More info — {title}")
+    dialog.setMinimumWidth(480)
+    layout = QVBoxLayout(dialog)
+    form = QFormLayout()
+    shown = False
+    for label, value in details:
+        if value not in (None, ""):
+            value_label = QLabel(str(value))
+            value_label.setWordWrap(True)
+            value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            form.addRow(f"{label}:", value_label)
+            shown = True
+    if not shown:
+        form.addRow(QLabel("No additional information is available for this title yet."))
+    layout.addLayout(form)
+    close = QPushButton("Close")
+    close.clicked.connect(dialog.accept)
+    layout.addWidget(close, 0, Qt.AlignRight)
+    dialog.exec()
 
 
 class TechBadges(QWidget):

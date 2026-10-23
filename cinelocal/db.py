@@ -5,6 +5,7 @@ import json
 import sqlite3
 import threading
 import time
+import zlib
 from pathlib import Path
 
 from .utils import comparable_title
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS movies (
     rating REAL,
     votes INTEGER,
     genres_json TEXT DEFAULT '[]',
+    extra_json TEXT DEFAULT '{}',
     director TEXT,
     cast_json TEXT DEFAULT '[]',
     trailer_key TEXT,
@@ -57,6 +59,7 @@ CREATE TABLE IF NOT EXISTS series (
     rating REAL,
     votes INTEGER,
     genres_json TEXT DEFAULT '[]',
+    extra_json TEXT DEFAULT '{}',
     director TEXT,
     cast_json TEXT DEFAULT '[]',
     trailer_key TEXT,
@@ -81,7 +84,22 @@ CREATE TABLE IF NOT EXISTS collection_movies (
     added_at REAL NOT NULL,
     PRIMARY KEY (collection_id, movie_id)
 );
+
+CREATE TABLE IF NOT EXISTS tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    color TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS movie_tags (
+    movie_id INTEGER NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
+    tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (movie_id, tag_id)
+);
 """
+
+TAG_COLORS = ("#e57373", "#f06292", "#ba68c8", "#9575cd", "#7986cb", "#64b5f6",
+              "#4dd0e1", "#4db6ac", "#81c784", "#aed581", "#ffd54f", "#ffb74d")
 
 METADATA_COLUMNS = {
     "tmdb_id", "title", "original_title", "year", "release_date", "overview", "tagline",
@@ -103,6 +121,7 @@ _MIGRATIONS = (
     ("franchise", "TEXT"),    # name of the TMDB collection the movie belongs to ("The Matrix Collection")
     ("franchise_linked", "INTEGER DEFAULT 0"),   # 1 once the movie was put in its franchise collection
     ("tech_json", "TEXT"),    # resolution and codecs read from the file (null = not read yet, {} = unreadable)
+    ("extra_json", "TEXT DEFAULT '{}'"),
     *_REVIEW_COLUMNS,
 )
 
@@ -120,6 +139,8 @@ def _row_to_movie(row: sqlite3.Row) -> dict:
     m["cast"] = _loads(m.pop("cast_json", None), [])
     m["custom"] = _loads(m.pop("custom_json", None), [])
     m["tech"] = _loads(m.pop("tech_json", None), None)
+    m["extra"] = _loads(m.pop("extra_json", None), {})
+    m["tags"] = []
     m["watched"] = bool(m["watched"])
     m["favorite"] = bool(m["favorite"])
     m["watchlist"] = bool(m["watchlist"])
@@ -133,6 +154,7 @@ def _row_to_series(row: sqlite3.Row) -> dict:
     s["genres"] = _loads(s.pop("genres_json", None), [])
     s["cast"] = _loads(s.pop("cast_json", None), [])
     s["custom"] = _loads(s.pop("custom_json", None), [])
+    s["extra"] = _loads(s.pop("extra_json", None), {})
     for key in ("favorite", "watchlist", "has_poster", "has_backdrop"):
         s[key] = bool(s[key])
     return s
@@ -159,7 +181,7 @@ class Database:
                     self._conn.commit()
                 except sqlite3.OperationalError:
                     pass
-            for column, ddl in _REVIEW_COLUMNS:   # migration: the user's rating of a whole series
+            for column, ddl in (*_REVIEW_COLUMNS, ("extra_json", "TEXT DEFAULT '{}'")):
                 try:
                     self._conn.execute(f"ALTER TABLE series ADD COLUMN {column} {ddl}")
                     self._conn.commit()
@@ -236,6 +258,9 @@ class Database:
             elif key == "custom":
                 sets.append("custom_json = ?")
                 values.append(json.dumps(value))
+            elif key == "extra":
+                sets.append("extra_json = ?")
+                values.append(json.dumps(value, ensure_ascii=False))
             elif key == "franchise":   # a different franchise has to be linked again
                 sets += ["franchise = ?", "franchise_linked = CASE WHEN franchise IS ? THEN franchise_linked ELSE 0 END"]
                 values += [value, value]
@@ -333,13 +358,13 @@ class Database:
         return ids
 
     # -- restore -------------------------------------------------------------------
-    def restore(self, metadata=False, history=False, favorites=False, collections=False,
+    def restore(self, metadata=False, history=False, favorites=False, collections=False, tags=False,
                 reviews=False, everything=False) -> None:
         """Erases the chosen kinds of data. `everything` also forgets the library itself (a rescan rebuilds it)."""
         with self._lock:
             run = self._conn.execute
             if everything:
-                for table in ("collection_movies", "collections", "movies", "series"):
+                for table in ("movie_tags", "tags", "collection_movies", "collections", "movies", "series"):
                     run(f"DELETE FROM {table}")
             if metadata and not everything:
                 for table, extra in (("movies", ", ep_title = NULL, ep_overview = NULL, ep_air_date = NULL,"
@@ -348,7 +373,8 @@ class Database:
                     run(f"UPDATE {table} SET status = 'pending', tmdb_id = NULL, title = NULL, original_title = NULL,"
                         " year = NULL, release_date = NULL, overview = NULL, tagline = NULL, runtime = NULL,"
                         " rating = NULL, votes = NULL, genres_json = '[]', director = NULL, cast_json = '[]',"
-                        f" trailer_key = NULL, has_poster = 0, has_backdrop = 0, custom_json = '[]', certification = NULL, updated_at = ?{extra}", (time.time(),))
+                        " trailer_key = NULL, has_poster = 0, has_backdrop = 0, custom_json = '[]', certification = NULL,"
+                        f" extra_json = '{{}}', updated_at = ?{extra}", (time.time(),))
             if history and not everything:
                 run("UPDATE movies SET watched = 0, watched_at = NULL")
             if favorites and not everything:
@@ -360,6 +386,9 @@ class Database:
             if collections and not everything:
                 run("DELETE FROM collection_movies")
                 run("DELETE FROM collections")
+            if tags and not everything:
+                run("DELETE FROM movie_tags")
+                run("DELETE FROM tags")
             self._conn.commit()
 
     # -- collections ------------------------------------------------------------
@@ -398,3 +427,39 @@ class Database:
         else:
             self._many("DELETE FROM collection_movies WHERE collection_id = ? AND movie_id = ?",
                        [(collection_id, i) for i in movie_ids])
+
+    # -- movie tags ------------------------------------------------------------
+    def all_tags(self) -> list[dict]:
+        return [dict(r) for r in self._query("SELECT id, name, color FROM tags ORDER BY name COLLATE NOCASE")]
+
+    def tag_membership(self) -> dict[int, set[int]]:
+        result: dict[int, set[int]] = {}
+        for row in self._query("SELECT movie_id, tag_id FROM movie_tags"):
+            result.setdefault(row["movie_id"], set()).add(row["tag_id"])
+        return result
+
+    def create_tag(self, name: str) -> int:
+        name = name.strip()
+        if not name:
+            raise ValueError("Enter a name for the tag.")
+        color = TAG_COLORS[zlib.crc32(name.casefold().encode("utf-8")) % len(TAG_COLORS)]
+        try:
+            return self._run("INSERT INTO tags (name, color) VALUES (?, ?)", (name, color)).lastrowid
+        except sqlite3.IntegrityError:
+            raise ValueError(f"A tag named “{name}” already exists.") from None
+
+    def set_tag_color(self, tag_id: int, color: str) -> None:
+        self._run("UPDATE tags SET color = ? WHERE id = ?", (color, tag_id))
+
+    def set_movie_tag(self, movie_id: int, tag_id: int, present: bool) -> None:
+        self.set_movie_tags([movie_id], tag_id, present)
+
+    def set_movie_tags(self, movie_ids: list[int], tag_id: int, present: bool) -> None:
+        if not movie_ids:
+            return
+        if present:
+            self._many("INSERT OR IGNORE INTO movie_tags (movie_id, tag_id) VALUES (?, ?)",
+                       [(movie_id, tag_id) for movie_id in movie_ids])
+        else:
+            self._many("DELETE FROM movie_tags WHERE movie_id = ? AND tag_id = ?",
+                       [(movie_id, tag_id) for movie_id in movie_ids])

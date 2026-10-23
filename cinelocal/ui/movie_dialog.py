@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import QUrl, Qt, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QPainter, QPixmap, QShortcut
-from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox,
-                               QScrollArea, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QColorDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMenu,
+                               QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
 from .. import images
 from ..mediainfo import badges
@@ -13,7 +13,8 @@ from ..similar import similar_movies
 from ..utils import format_runtime, format_size, format_votes
 from .dialogs import populate_collections_menu
 from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP,
-                             ReviewBox, TechBadges, backdrop_gradient, cap_offset, side_margin)
+                             ReviewBox, TechBadges, backdrop_gradient, cap_offset, show_more_info,
+                             side_margin)
 from .edit_dialog import EditDialog
 from .home import HomeSection
 from .icons import IconButton
@@ -97,6 +98,19 @@ class MovieDialog(QWidget):
         body_layout.setContentsMargins(0, 8, 8, 0)
         body_layout.setSpacing(8)
         self.overview = self._text_block(body_layout, "OVERVIEW")
+        self.tag_head = QLabel("TAGS")
+        self.tag_head.setObjectName("section")
+        self.tag_head.setContentsMargins(0, SECTION_GAP, 0, 0)
+        body_layout.addWidget(self.tag_head)
+        self.tags_box = QWidget()
+        self.tags_row = QHBoxLayout(self.tags_box)
+        self.tags_row.setContentsMargins(0, 0, 0, 0)
+        self.tags_row.setSpacing(6)
+        self.tag_add_btn = QPushButton("+ Tag")
+        self.tag_add_btn.clicked.connect(self._show_tags_menu)
+        self.tags_row.addWidget(self.tag_add_btn)
+        self.tags_row.addStretch(1)
+        body_layout.addWidget(self.tags_box)
         self.director = self._text_block(body_layout, "DIRECTOR")
         self.cast = self._text_block(body_layout, "CAST")
         self.similar = HomeSection("Similar in your library")
@@ -143,6 +157,7 @@ class MovieDialog(QWidget):
         more = IconButton("menu", object_name="plainIcon")
         more.setToolTip("More")
         more_menu = QMenu(more)
+        more_menu.addAction("More info", self._more_info)
         more_menu.addAction("Refresh metadata", self._refresh)
         more_menu.addAction("Fix match…", self._fix_match)
         more_menu.addAction("Edit metadata…", self._edit)
@@ -212,6 +227,7 @@ class MovieDialog(QWidget):
 
         overview = m["overview"] or ("No overview available." if m["status"] == "matched" else "")
         self._set_block(self.overview, overview)
+        self._populate_tags(m)
         self._set_block(self.director, m["director"] or "")
         self._set_block(self.cast, ", ".join(c["name"] for c in m["cast"][:10]))
         similar = similar_movies(m, self.service.movies)
@@ -233,6 +249,69 @@ class MovieDialog(QWidget):
         self.list_btn.setChecked(m["watchlist"])
         self.list_btn.blockSignals(False)
         self.trailer_btn.setVisible(bool(m["trailer_key"]))
+
+    def _populate_tags(self, movie: dict) -> None:
+        while self.tags_row.count() > 2:
+            item = self.tags_row.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        tags = movie.get("tags", [])
+        self.tag_head.setVisible(bool(tags) or bool(self.service.tags))
+        self.tags_box.setVisible(bool(tags) or bool(self.service.tags))
+        for tag in tags:
+            button = QPushButton(tag["name"])
+            color = QColor(tag["color"])
+            foreground = "#17202a" if color.lightness() > 175 else "#ffffff"
+            button.setStyleSheet(
+                f"QPushButton {{ background: {tag['color']}; color: {foreground}; border: none;"
+                " border-radius: 11px; padding: 4px 10px; font-weight: 600; }"
+                f"QPushButton:hover {{ background: {color.lighter(115).name()}; }}")
+            button.setToolTip("Right-click to change the color or remove this tag.")
+            button.setContextMenuPolicy(Qt.CustomContextMenu)
+            button.customContextMenuRequested.connect(
+                lambda pos, current=tag, widget=button: self._tag_context_menu(current, widget, pos))
+            self.tags_row.insertWidget(self.tags_row.count() - 2, button)
+
+    def _show_tags_menu(self) -> None:
+        menu = QMenu(self)
+        movie_id = self.movie_id
+        current = {tag["id"] for tag in self.service.by_id[movie_id].get("tags", [])}
+        for tag in self.service.tags:
+            action = menu.addAction(tag["name"])
+            action.setCheckable(True)
+            action.setChecked(tag["id"] in current)
+            action.triggered.connect(
+                lambda checked, tag_id=tag["id"]: self.service.set_movie_tag(movie_id, tag_id, checked))
+        if self.service.tags:
+            menu.addSeparator()
+        menu.addAction("Create new tag…", self._create_tag)
+        menu.exec(self.tag_add_btn.mapToGlobal(self.tag_add_btn.rect().bottomLeft()))
+
+    def _create_tag(self) -> None:
+        name, accepted = QInputDialog.getText(self, "Create tag", "Tag name:")
+        if not accepted or not name.strip():
+            return
+        try:
+            tag_id = self.service.create_tag(name)
+            self.service.set_movie_tag(self.movie_id, tag_id, True)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Could not create tag", str(exc))
+
+    def _tag_context_menu(self, tag: dict, button: QPushButton, position) -> None:
+        menu = QMenu(self)
+        menu.addAction("Change color…", lambda: self._change_tag_color(tag))
+        menu.addAction("Remove from this movie", lambda: self.service.set_movie_tag(self.movie_id, tag["id"], False))
+        menu.exec(button.mapToGlobal(position))
+
+    def _change_tag_color(self, tag: dict) -> None:
+        color = QColorDialog.getColor(QColor(tag["color"]), self, "Choose tag color")
+        if color.isValid():
+            self.service.set_tag_color(tag["id"], color.name())
+
+    def _more_info(self) -> None:
+        movie = self.service.by_id[self.movie_id]
+        show_more_info(self, movie["display_title"], movie.get("extra") or {},
+                       movie.get("size"), movie.get("franchise"))
 
     def _load_poster(self, m: dict) -> None:
         dpr = self.devicePixelRatioF()
