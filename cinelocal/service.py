@@ -27,6 +27,7 @@ class LibraryService(QObject):
     progress = Signal(int, int, str)    # done, total, title
     busy_changed = Signal(bool, str)    # busy?, description
     scan_finished = Signal(int, int)    # adicionados, removidos
+    scanning = Signal(bool)             # a scan started / ended
     update_finished = Signal(dict)      # update summary
     message = Signal(str)               # short notice for the status bar
     error = Signal(str)
@@ -171,6 +172,7 @@ class LibraryService(QObject):
         if self._scanning:
             return
         self._scanning = True
+        self.scanning.emit(True)
         self.busy_changed.emit(True, "Scanning the folder for movies…")
         self.run_async(lambda: sync_library(self.db, root), self._on_scan_done, self._on_scan_error)
 
@@ -180,6 +182,7 @@ class LibraryService(QObject):
             images.delete_images(movie_id)
         old_series = {i for i in self.by_id if i < 0}
         self._scanning = False
+        self.scanning.emit(False)
         self.reload()
         for series_id in old_series - set(self.by_id):   # series without episodes: delete the poster
             images.delete_images(series_id)
@@ -194,6 +197,7 @@ class LibraryService(QObject):
 
     def _on_scan_error(self, exc: Exception) -> None:
         self._scanning = False
+        self.scanning.emit(False)
         self.busy_changed.emit(False, "")
         self._report(exc)
 

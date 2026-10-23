@@ -130,6 +130,7 @@ class MainWindow(QMainWindow):
         rescan = IconButton("refresh", box=TOOL_BOX, size=TOOL_ICON)
         rescan.setToolTip("Rescan")
         rescan.clicked.connect(self.service.start_scan)
+        self.service.scanning.connect(rescan.set_spinning)   # spins while scanning (also F5 / startup)
         meta = IconButton("big_data", box=TOOL_BOX, size=TOOL_ICON)
         meta.setToolTip("Metadata and library tools")
         meta_menu = QMenu(meta)

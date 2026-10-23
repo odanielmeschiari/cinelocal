@@ -117,7 +117,7 @@ class SeriesDialog(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(12)
-        self.watch_btn = IconButton("play", object_name="", color="#ffffff")   # white over the blue square
+        self.watch_btn = IconButton("play", object_name="", color="#ffffff", text="Play")   # white over the blue square
         self.watch_btn.setStyleSheet("QPushButton { border: none; border-radius: 10px; padding: 0; }")
         self.watch_btn.setProperty("primary", True)
         self.watch_btn.clicked.connect(lambda: self.play_requested.emit(self.movie_id))
@@ -143,7 +143,7 @@ class SeriesDialog(QWidget):
         more_menu.addAction("Fix match…", self._fix_match)
         more_menu.addAction("Edit metadata…", self._edit)
         more.setMenu(more_menu)
-        for w in (self.watch_btn, self.fav_btn, self.seen_btn, more):
+        for w in (self.fav_btn, self.seen_btn, more):
             w.setFixedSize(ACTION_BOX, ACTION_BOX)
         for w in (self.watch_btn, self.fav_btn, self.seen_btn, self.list_btn, self.trailer_btn):
             actions.addWidget(w)

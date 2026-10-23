@@ -194,6 +194,10 @@ class VlcPlayerPage(QWidget):
         row = QHBoxLayout(self.controls)
         row.setContentsMargins(14, 8, 14, 8)
         row.setSpacing(10)
+        self.back_btn = self._svg_button("back10", lambda: self._jump(-10000))
+        self.back_btn.setToolTip("Back 10 seconds (Left)")
+        self.forward_btn = self._svg_button("forward10", lambda: self._jump(10000))
+        self.forward_btn.setToolTip("Forward 10 seconds (Right)")
         self.play_btn = self._svg_button("pause", self.toggle_pause)
         self.play_btn.setToolTip("Pause / play (Space)")
         self.next_btn = self._svg_button("next", self.next_requested.emit)   # shown only for series episodes
@@ -229,8 +233,8 @@ class VlcPlayerPage(QWidget):
         menu.addSeparator()
         menu.addAction("Open in another player", lambda: self.external_requested.emit())
         self.settings_btn.setMenu(menu)
-        for w in (self.play_btn, self.next_btn, self.elapsed, self.seek, self.total, self.volume, self.volume_label,
-                  self.settings_btn, self.fullscreen_btn):
+        for w in (self.back_btn, self.play_btn, self.forward_btn, self.next_btn, self.elapsed, self.seek, self.total,
+                  self.volume, self.volume_label, self.settings_btn, self.fullscreen_btn):
             row.addWidget(w, 1 if w is self.seek else 0)
         layout.addWidget(self.controls)
 
