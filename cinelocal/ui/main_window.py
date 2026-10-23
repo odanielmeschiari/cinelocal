@@ -182,12 +182,20 @@ class MainWindow(QMainWindow):
         head = QHBoxLayout()
         self.heading = QLabel("All movies")
         self.heading.setObjectName("heading")
+        self.manage_btn = QPushButton("+")
+        self.manage_btn.setFixedSize(34, 34)
+        self.manage_btn.setStyleSheet("QPushButton { padding: 0; font-size: 18pt; font-weight: 700; }")
+        self.manage_btn.setToolTip("Manage movies in this section")
+        self.manage_btn.clicked.connect(lambda: self._manage_sidebar_items(self.flt))
+        self.manage_btn.hide()
         self.count_label = QLabel("")
         self.count_label.setObjectName("muted")
         head.addWidget(self.heading)
+        head.addWidget(self.manage_btn)
         head.addSpacing(12)
         head.addWidget(self.count_label, 0, Qt.AlignBottom)
         head.addStretch(1)
+        column.addLayout(head)
 
         self.views = QStackedWidget()
         self.grid = MovieFlow()
@@ -203,7 +211,6 @@ class MainWindow(QMainWindow):
         grid_col.setContentsMargins(0, 0, 0, 0)
         grid_col.setSpacing(10)
         grid_col.addLayout(self.home_box)
-        grid_col.addLayout(head)   # "All movies" title below the home rows
         grid_col.addWidget(self.grid)
         grid_col.addStretch(1)
         self.empty = QLabel("")
@@ -229,7 +236,6 @@ class MainWindow(QMainWindow):
     def _connect(self) -> None:
         s = self.service
         self.sidebar.filter_changed.connect(self._on_filter)
-        self.sidebar.manage_requested.connect(self._manage_sidebar_items)
         self.sidebar.new_collection_requested.connect(lambda: ask_new_collection(self, s))
         self.sidebar.rename_collection_requested.connect(lambda cid: ask_rename_collection(self, s, cid))
         self.sidebar.delete_collection_requested.connect(self._delete_collection)
@@ -364,7 +370,12 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, lambda: bar.setValue(position))   # the layout only finishes later
 
         total = len(self.service.movies)
+        kind = self.flt[0]
         self.heading.setText(self._heading_text())
+        can_manage = kind in ("favorites", "watchlist", "watched", "collection", "tag")
+        self.manage_btn.setVisible(can_manage)
+        if can_manage:
+            self.manage_btn.setToolTip(f"Manage movies in {self._heading_for_filter(self.flt)}")
         self.count_label.setText(f"{len(visible)} of {total}" if len(visible) != total
                                  else f"{total} movie{'' if total == 1 else 's'}")
         self.filterbar.setVisible(bool(self.advanced))

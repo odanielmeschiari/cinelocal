@@ -3,8 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont
-from PySide6.QtWidgets import (QAbstractItemView, QHeaderView, QMenu, QPushButton,
-                               QTreeWidget, QTreeWidgetItem)
+from PySide6.QtWidgets import QAbstractItemView, QMenu, QTreeWidget, QTreeWidgetItem
 
 from ..filters import Filter
 from ..utils import star_text
@@ -16,7 +15,6 @@ _VALUE_ROLE = Qt.UserRole + 1
 
 class Sidebar(QTreeWidget):
     filter_changed = Signal(object)
-    manage_requested = Signal(object)
     new_collection_requested = Signal()
     rename_collection_requested = Signal(int)
     delete_collection_requested = Signal(int)
@@ -26,10 +24,6 @@ class Sidebar(QTreeWidget):
         super().__init__(parent)
         self.setObjectName("sidebar")
         self.setHeaderHidden(True)
-        self.setColumnCount(2)
-        self.header().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.header().setSectionResizeMode(1, QHeaderView.Fixed)
-        self.setColumnWidth(1, 34)
         self.setRootIsDecorated(False)
         self.setIndentation(0)
         self.setFocusPolicy(Qt.NoFocus)
@@ -37,7 +31,7 @@ class Sidebar(QTreeWidget):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context)
-        self.currentItemChanged.connect(self._on_current_changed)
+        self.itemClicked.connect(self._on_item_clicked)
         self._current: Filter = ("all", None)
         self._rebuilding = False
 
@@ -57,10 +51,10 @@ class Sidebar(QTreeWidget):
         if counts["continue"]:
             self._entry("Continue watching", ("continue", None), counts["continue"])
         self._entry("All movies", ("all", None), counts["all"])
-        self._entry("Favorites", ("favorites", None), counts["favorites"], manage=True)
-        self._entry("Watchlist", ("watchlist", None), counts["watchlist"], manage=True)
-        self._entry("Watched", ("watched", True), counts["watched"], manage=True)
-        self._entry("Unwatched", ("watched", False), counts["unwatched"], manage=True)
+        self._entry("Favorites", ("favorites", None), counts["favorites"])
+        self._entry("Watchlist", ("watchlist", None), counts["watchlist"])
+        self._entry("Watched", ("watched", True), counts["watched"])
+        self._entry("Unwatched", ("watched", False), counts["unwatched"])
         if counts["history"]:
             self._entry("History", ("history", None), counts["history"])
         if counts["review"]:
@@ -69,15 +63,14 @@ class Sidebar(QTreeWidget):
         self._header("COLLECTIONS")
         self._entry("New collection", _NEW_COLLECTION, None)
         for c in collections:
-            self._entry(c["name"], ("collection", c["id"]), len(membership.get(c["id"], ())),
-                        manage=True)
+            self._entry(c["name"], ("collection", c["id"]), len(membership.get(c["id"], ())))
 
         if tags:
             self._header("TAGS")
             tag_membership = tag_membership or {}
             for tag in tags:
                 self._entry(tag["name"], ("tag", tag["id"]),
-                            sum(tag["id"] in ids for ids in tag_membership.values()), manage=True)
+                            sum(tag["id"] in ids for ids in tag_membership.values()))
 
         if counts["stars"]:
             self._header("MY RATING")
@@ -107,20 +100,13 @@ class Sidebar(QTreeWidget):
         item.setForeground(0, QBrush(QColor(COLORS["muted"])))
         self.addTopLevelItem(item)
 
-    def _entry(self, label: str, data: Filter, count: int | None, manage: bool = False) -> None:
+    def _entry(self, label: str, data: Filter, count: int | None) -> None:
         text = label if count is None else f"{label} ({count})"
         item = QTreeWidgetItem([text])
         item.setData(0, Qt.UserRole, data[0])
         item.setData(0, _VALUE_ROLE, data[1])
         item.setToolTip(0, label)
         self.addTopLevelItem(item)
-        if manage:
-            button = QPushButton("+", self)
-            button.setFixedSize(24, 24)
-            button.setToolTip(f"Manage movies in {label}")
-            button.setStyleSheet("QPushButton { padding: 0; border-radius: 7px; font-weight: 700; }")
-            button.clicked.connect(lambda _checked=False, current=data: self.manage_requested.emit(current))
-            self.setItemWidget(item, 1, button)
 
     @staticmethod
     def _filter_of(item) -> Filter | None:
@@ -141,7 +127,7 @@ class Sidebar(QTreeWidget):
             self.setCurrentItem(item)
 
     # -- events --------------------------------------------------------------------------
-    def _on_current_changed(self, item, _previous) -> None:
+    def _on_item_clicked(self, item, _column) -> None:
         if self._rebuilding or item is None:
             return
         data = self._filter_of(item)
