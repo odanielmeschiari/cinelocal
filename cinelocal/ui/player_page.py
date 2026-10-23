@@ -38,13 +38,13 @@ def _use_bundled_vlc() -> None:
     if getattr(sys, "frozen", False) and lib.is_file():
         os.environ.setdefault("PYTHON_VLC_LIB_PATH", str(lib))
         os.environ.setdefault("VLC_PLUGIN_PATH", str(root / "vlc" / "plugins"))
+        if sys.platform == "win32":
+            os.add_dll_directory(str(root))   # libvlc.dll needs libvlccore.dll and its dependencies from this folder
 
 
-def unavailable_reason() -> str:
-    """Why the built-in player cannot be used ('' = it can)."""
+def load_error() -> str:
+    """Why libVLC could not be loaded ('' = it is loaded)."""
     global _vlc, _error
-    if sys.platform.startswith("linux") and QGuiApplication.platformName() != "xcb":
-        return "The built-in player needs X11 or XWayland (no X server found for this session)."
     if _vlc is None and not _error:
         try:
             _use_bundled_vlc()
@@ -53,9 +53,17 @@ def unavailable_reason() -> str:
             if instance is None:
                 raise RuntimeError("libVLC")
             _vlc = (vlc, instance)
-        except Exception:  # noqa: BLE001 - python-vlc or libVLC missing
-            _error = "libVLC not found. Install VLC (and the python-vlc package) to use the built-in player."
+        except (Exception, SystemExit) as e:  # noqa: BLE001 - python-vlc calls sys.exit() if it cannot load libVLC
+            _error = (f"libVLC could not be loaded ({type(e).__name__}: {e}). "
+                      "Install VLC (and the python-vlc package) to use the built-in player.")
     return _error
+
+
+def unavailable_reason() -> str:
+    """Why the built-in player cannot be used ('' = it can)."""
+    if sys.platform.startswith("linux") and QGuiApplication.platformName() != "xcb":
+        return "The built-in player needs X11 or XWayland (no X server found for this session)."
+    return load_error()
 
 
 def _clock(ms: int) -> str:

@@ -33,6 +33,18 @@ jobs:
         run: choco install vlc -y --no-progress
       - run: pip install -r requirements.txt "pyinstaller>=6.9"
       - run: pyinstaller --noconfirm cinelocal.spec
+      - name: Check the built-in player of the packaged app (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          test -f dist/CineLocal/_internal/libvlc.so.5 && test -d dist/CineLocal/_internal/vlc/plugins
+          dist/CineLocal/CineLocal --check-player player-check.txt || { cat player-check.txt; exit 1; }
+      - name: Check the built-in player of the packaged app (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if (-not ((Test-Path dist\CineLocal\_internal\libvlc.dll) -and (Test-Path dist\CineLocal\_internal\vlc\plugins))) { throw "libVLC is not in the build" }
+          $p = Start-Process dist\CineLocal\CineLocal.exe -ArgumentList '--check-player','player-check.txt' -Wait -PassThru
+          if (Test-Path player-check.txt) { Get-Content player-check.txt }
+          if ($p.ExitCode -ne 0) { throw "the built-in player failed to load in the packaged app" }
       - name: Linux packages (.deb and portable archive)
         if: runner.os == 'Linux'
         run: |

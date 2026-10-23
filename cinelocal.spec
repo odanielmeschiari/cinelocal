@@ -18,6 +18,8 @@ def vlc_binaries():
         root = Path(os.environ.get("VLC_DIR", "/usr/lib/x86_64-linux-gnu"))
         libs, plugins = [root / "libvlc.so.5", root / "libvlccore.so.9"], root / "vlc" / "plugins"
     if not (all(lib.is_file() for lib in libs) and plugins.is_dir()):
+        if os.environ.get("CI"):   # GitHub Actions: a release without the built-in player must not be published
+            raise SystemExit(f"VLC not found in {root}: install it (and set VLC_DIR if needed) before building")
         print("WARNING: VLC not found - building without the built-in player libraries")
         return []
     found = [(str(lib), ".") for lib in libs]
@@ -31,7 +33,7 @@ a = Analysis(
     ["main.py"],
     binaries=vlc_binaries(),
     datas=[("assets/cinelocal.svg", "assets")],
-    hiddenimports=["PySide6.QtSvg"],   # for the .svg window icon
+    hiddenimports=["PySide6.QtSvg", "vlc"],   # QtSvg: the .svg window icon; vlc: python-vlc, imported lazily
 )
 exe = EXE(
     PYZ(a.pure),

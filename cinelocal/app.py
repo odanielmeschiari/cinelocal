@@ -34,7 +34,20 @@ def _prefer_embeddable_platform() -> None:
         os.environ["QT_QPA_PLATFORM"] = "xcb;wayland"
 
 
+def _check_player() -> int:
+    """`CineLocal --check-player [file]`: smoke test of a packaged build (used by the release workflow).
+    Writes the result to `file` (the windowed Windows build has no console) and exits 0 only if libVLC loads."""
+    from .ui.player_page import load_error
+    reason = load_error()
+    args = sys.argv[sys.argv.index("--check-player") + 1:]
+    if args:
+        Path(args[0]).write_text(reason or "built-in player OK", encoding="utf-8")
+    return 1 if reason else 0
+
+
 def run() -> int:
+    if "--check-player" in sys.argv[1:]:
+        return _check_player()
     ensure_dirs()
     _prefer_embeddable_platform()
     if sys.platform == "win32":  # own taskbar icon (instead of Python's)

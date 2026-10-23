@@ -65,7 +65,7 @@ def _load():
             if instance is None:
                 raise RuntimeError("libVLC")
             _vlc = (vlc, instance)
-        except Exception:  # noqa: BLE001 - python-vlc or libVLC missing
+        except (Exception, SystemExit):  # noqa: BLE001 - python-vlc missing, or libVLC (it calls sys.exit())
             _failed = True
     return _vlc
 
