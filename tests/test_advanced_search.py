@@ -45,7 +45,9 @@ class AdvancedFilterTests(unittest.TestCase):
     def test_ranges_exclude_unknown_values(self):
         self.assertEqual(self.ids({"rating_min": 7}), [1, -3])
         self.assertEqual(self.ids({"votes_max": 1000}), [2, -3])
-        self.assertEqual(self.ids({"runtime_min": 100}), [1])
+        self.assertEqual(self.ids({"runtime_min": 100}), [1, -3])   # a series is not held to the movie runtime
+        self.assertEqual(self.ids({"runtime_max": 60}), [-3])
+        self.assertEqual(self.ids({"kind": "series", "runtime_max": 30}), [-3])
 
     def test_people_age_and_library(self):
         self.assertEqual(self.ids({"directors": ["Beto"]}), [1])

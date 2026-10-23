@@ -137,7 +137,7 @@ saved positions, with no way back), delete these folders yourself:
   how many results you will get; **Show results** applies it and a bar with **Clear search** appears
   above the grid to go back to the whole catalog. Use **Save…** to keep the current filters under a
   name and load them again from the “Saved filters” list next time.
-  - Content: movies or series, runtime.
+  - Content: movies or series, runtime (the runtime limits only apply to movies; series are not filtered by it).
   - Release and ratings: year (a range or a single year), TMDB rating and number of votes.
   - Genre (any or all of the chosen ones) and age rating.
   - People: directors and cast, picked from the ones in your library.
@@ -181,6 +181,18 @@ saved positions, with no way back), delete these folders yourself:
   right-click menu; the list lives in the sidebar.  
   ![Description](examples/description.png "Description")
   
+- **Similar movies**: the details of a movie end with a row of movies from your library that resemble it (genres,
+  director, cast, franchise and era). It works offline, from the metadata already saved.
+- **Franchises**: movies that belong to the same TMDB franchise (2 or more in your library) are put into a collection
+  named after it, automatically, after each metadata update (**Metadata → Create franchise collections** runs it on
+  demand). A movie is linked once, so taking it out of the collection by hand sticks. Movies that already have
+  metadata need a **Force update** the first time, to learn their franchise.
+- **File badges**: the details show the resolution, video codec, audio and size of the file (`1080p`, `H.264`,
+  `AC3 5.1`, `2.1 GB`). They are read from the files in the background with libVLC (no extra install).
+- **Duplicates** (**Metadata → Find duplicate files…**): lists movies and episodes that exist in more than one file,
+  with size and quality side by side, and opens the folder of each so you can delete the ones you don't want.
+- **Statistics** (**Metadata → Statistics…**): movies, series and episodes, time watched and left to watch, library
+  size, your average rating, and the most common genres, decades, directors and actors.
 - **Rescan** (`F5`): runs when the app opens; detects new movies and removes the ones that disappeared from disk.
   Files moved to another subfolder keep their metadata, collections and flags.
 - **Edit metadata**: in the details of a movie or series, **⋮ → Edit metadata…** changes the title, year, runtime, genres,
@@ -219,6 +231,11 @@ cinelocal/
   db.py                     SQLite: movies, collections, flags
   scanner.py                folder scanning and filename cleanup
   library.py                syncs disk ↔ database (new, removed, moved)
+  similar.py                similar movies from the saved metadata
+  franchises.py             which movies go into which franchise collection
+  duplicates.py             the same movie or episode in more than one file
+  mediainfo.py              resolution/codecs of a file (libVLC) and the badges
+  stats.py                  numbers for the statistics page
   tmdb.py                   TMDB HTTP client
   opensubtitles.py          OpenSubtitles HTTP client: finds and saves subtitles next to the videos
   parsing.py                parses responses and picks the best match
@@ -233,6 +250,8 @@ cinelocal/
   ui/advanced_search.py     advanced search panel (overlay)
   ui/home_dialog.py         “Edit home”: rows of the home screen
   ui/edit_dialog.py         manual editing of metadata and cover
+  ui/duplicates_dialog.py   list of duplicate files
+  ui/stats_dialog.py        statistics page
 tests/test_core.py          tests for the logic without a GUI
 ```
 

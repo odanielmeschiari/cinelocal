@@ -9,9 +9,10 @@ import traceback
 
 from PySide6.QtCore import QObject, Signal
 
-from . import images, player
+from . import images, mediainfo, player
 from .config import DEFAULT_SETTINGS, TRACK_LANGUAGES, Settings
 from .db import Database
+from .franchises import franchise_plan
 from .library import sync_library
 from .metadata_service import find_candidates, find_series_candidates, process_movie, process_series
 from .movie_fields import decorate
@@ -43,6 +44,8 @@ class LibraryService(QObject):
         self._scanning = False
         self._subtitling = False            # subtitles being downloaded in the background
         self._subtitle_stop = threading.Event()
+        self._probing = False               # technical info of the files being read in the background
+        self._probe_stop = threading.Event()
 
     # -- estado ----------------------------------------------------------------
     @property
@@ -183,6 +186,7 @@ class LibraryService(QObject):
         self.library_changed.emit()
         self.scan_finished.emit(len(added), len(removed))
         self.download_subtitles(added)
+        self.probe_files()
         if not self.updating:
             self.busy_changed.emit(False, "")
         if self.has_key and self._pending():
@@ -348,6 +352,7 @@ class LibraryService(QObject):
         self._refresh_movie(movie_id)
 
     def _on_update_done(self, summary: dict) -> None:
+        self.link_franchises()
         self.library_changed.emit()
         self.update_finished.emit(summary)
 
@@ -376,6 +381,7 @@ class LibraryService(QObject):
 
         def done(outcome):
             self._refresh_movie(movie_id)
+            self.link_franchises()
             self.library_changed.emit()
             if outcome != "matched":
                 self.message.emit("No confident match; use “Fix match”.")
@@ -578,6 +584,64 @@ class LibraryService(QObject):
     def show_in_folder(self, movie_id: int) -> None:
         player.show_in_folder(self.by_id[movie_id]["path"])
 
+    # -- franchises and file info ---------------------------------------------------------
+    def link_franchises(self) -> int:
+        """Puts the movies of each TMDB franchise (2+ in the library) into a collection named after it, creating
+        the collection if needed (an existing one with that name is reused). Movies are linked only once, so
+        removing one by hand sticks. Returns how many collections were created."""
+        plan = franchise_plan(self.movies)
+        created = 0
+        for name, ids in plan:
+            collection_id = next((c["id"] for c in self.collections if c["name"].lower() == name.lower()), None)
+            if collection_id is None:
+                collection_id = self.db.create_collection(name)
+                self.collections = self.db.all_collections()
+                created += 1
+            self.db.set_membership(collection_id, ids, True)
+            self.db.mark_franchise_linked(ids)
+            for movie_id in ids:
+                self.by_id[movie_id]["franchise_linked"] = 1
+        if plan:
+            self.membership = self.db.membership()
+            self.library_changed.emit()
+        if created:
+            self.message.emit(f"{created} franchise collection(s) created.")
+        return created
+
+    def probe_files(self) -> None:
+        """Reads resolution and codecs (libVLC) of the videos not read yet, in the background. Does nothing
+        when libVLC is missing."""
+        if self._probing:
+            return
+        todo = [(i, m["path"]) for i, m in self.by_id.items()
+                if i > 0 and m.get("tech") is None and m.get("path")]
+        if not todo:
+            return
+        self._probing = True
+
+        def job():
+            found = {}
+            for movie_id, path in todo:
+                if self._probe_stop.is_set():
+                    break
+                info = mediainfo.probe(path)
+                if info is None:   # no libVLC
+                    break
+                self.db.save_tech(movie_id, info)
+                found[movie_id] = info
+            return found
+
+        def done(found):
+            self._probing = False
+            for movie_id, info in found.items():
+                if movie_id in self.by_id:
+                    self.by_id[movie_id]["tech"] = info
+
+        def failed(_exc):
+            self._probing = False
+
+        self.run_async(job, done, failed)
+
     # -- collections ------------------------------------------------------------------
     def create_collection(self, name: str) -> int:
         name = name.strip()
@@ -618,6 +682,7 @@ class LibraryService(QObject):
     # -- encerramento ----------------------------------------------------------------------
     def shutdown(self) -> None:
         self._subtitle_stop.set()
+        self._probe_stop.set()
         if self._update_worker:
             self._update_worker.cancel()
             self._update_worker.wait(5000)

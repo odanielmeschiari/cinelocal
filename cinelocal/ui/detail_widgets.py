@@ -46,6 +46,28 @@ def cap_offset(label: QLabel) -> int:
     return max(0, metrics.ascent() - metrics.capHeight())
 
 
+class TechBadges(QWidget):
+    """Row of small labels with the file's resolution, codecs and size ('1080p', 'H.264', 'AC3 5.1', '2.1 GB')."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._row = QHBoxLayout(self)
+        self._row.setContentsMargins(0, 0, 0, 0)
+        self._row.setSpacing(6)
+        self._row.addStretch(1)
+        self.hide()
+
+    def set_badges(self, texts: list[str]) -> None:
+        while self._row.count() > 1:   # everything but the final stretch
+            self._row.takeAt(0).widget().deleteLater()
+        for text in texts:
+            label = QLabel(text)
+            label.setStyleSheet(f"color: {COLORS['accent_hover']}; border: 1px solid {COLORS['accent_dark']};"
+                                " border-radius: 5px; padding: 1px 7px; font-size: 10pt; font-weight: 700;")
+            self._row.insertWidget(self._row.count() - 1, label)
+        self.setVisible(bool(texts))
+
+
 class _StarButton(QPushButton):
     """A star that can be full, half (left half filled) or empty. Which half was clicked is kept in `left_half`."""
 

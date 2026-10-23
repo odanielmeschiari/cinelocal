@@ -92,7 +92,7 @@ def parse_details(raw: dict, fallback: dict | None = None) -> dict:
             for p in credits.get("cast", [])[:12]]
     videos = (raw.get("videos") or {}).get("results") or (fb.get("videos") or {}).get("results") or []
 
-    return {
+    fields = {
         "title": pick("title"),
         "original_title": raw.get("original_title"),
         "release_date": raw.get("release_date") or None,
@@ -109,3 +109,6 @@ def parse_details(raw: dict, fallback: dict | None = None) -> dict:
         "trailer_key": _pick_trailer(videos),
         "certification": pick("certification"),
     }
+    if "belongs_to_collection" in raw:   # only movies have it: the franchise ("The Matrix Collection"), or none
+        fields["franchise"] = (raw["belongs_to_collection"] or {}).get("name") or None
+    return fields

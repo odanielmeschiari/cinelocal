@@ -16,6 +16,7 @@ from ..utils import star_text
 from .advanced_search import AdvancedSearch
 from .dialogs import (ask_new_collection, ask_rename_collection, confirm_delete_collection,
                       populate_collections_menu)
+from .duplicates_dialog import DuplicatesDialog
 from .grid import CELL_H, MovieFlow
 from .home import HomeSection
 from .home_dialog import HomeDialog
@@ -26,6 +27,7 @@ from .player_page import VlcPlayerPage, unavailable_reason
 from .series_dialog import SeriesDialog
 from .settings_dialog import SettingsDialog
 from .sidebar import Sidebar
+from .stats_dialog import StatsDialog
 
 HOME_ROW_LIMIT = 40   # posters per row on the home screen (the section itself shows them all)
 TOOL_BOX, TOOL_ICON = 36, 20   # top-bar icon buttons: a bit smaller than the detail/player ones (44, 24)
@@ -129,13 +131,17 @@ class MainWindow(QMainWindow):
         rescan.setToolTip("Rescan")
         rescan.clicked.connect(self.service.start_scan)
         meta = IconButton("big_data", box=TOOL_BOX, size=TOOL_ICON)
-        meta.setToolTip("Metadata")
+        meta.setToolTip("Metadata and library tools")
         meta_menu = QMenu(meta)
         meta_menu.addAction("Fetch metadata for pending movies",
                             lambda: self.service.start_update("pending"))
         meta_menu.addAction("Force update of all movies", self._confirm_update_all)
         meta_menu.addSeparator()
         meta_menu.addAction("Review unmatched movies…", self.review_all)
+        meta_menu.addAction("Create franchise collections", self._link_franchises)
+        meta_menu.addSeparator()
+        meta_menu.addAction("Find duplicate files…", lambda: DuplicatesDialog(self.service, self).exec())
+        meta_menu.addAction("Statistics…", lambda: StatsDialog(self.service, self).exec())
         meta.setMenu(meta_menu)
         settings = IconButton("gear", box=TOOL_BOX, size=TOOL_ICON)
         settings.setToolTip("Settings (Ctrl+,)")
@@ -487,13 +493,20 @@ class MainWindow(QMainWindow):
     def open_movie(self, movie_id: int) -> None:
         if self._sliding:
             return
-        self._discard_detail()
+        previous, self._detail = self._detail, None   # opened from a similar movie: it leaves after the slide
         page = (SeriesDialog if movie_id < 0 else MovieDialog)(self.service, movie_id, self)
         page.back_requested.connect(self.close_movie)
         page.play_requested.connect(self.play_movie)
+        if isinstance(page, MovieDialog):
+            page.open_requested.connect(self.open_movie)
         self._detail = page
         self.stack.addWidget(page)
-        self._slide_to(page, forward=True)
+
+        def drop_previous() -> None:
+            self.stack.removeWidget(previous)
+            previous.deleteLater()
+
+        self._slide_to(page, forward=True, done=drop_previous if previous is not None else None)
 
     def close_movie(self) -> None:
         if self._sliding or self._detail is None or self.stack.currentWidget() is not self._detail:
@@ -686,6 +699,11 @@ class MainWindow(QMainWindow):
                 "(This uses the internet. New movies will already use the new language.)")
             if answer == QMessageBox.Yes:
                 self.service.start_update("all")
+
+    def _link_franchises(self) -> None:
+        if not self.service.link_franchises():
+            self.statusBar().showMessage("No new franchises found. Force an update to detect the franchise of "
+                                         "movies that already have metadata.", 10000)
 
     def _confirm_update_all(self) -> None:
         answer = QMessageBox.question(

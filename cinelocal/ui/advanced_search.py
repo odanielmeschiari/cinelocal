@@ -296,7 +296,7 @@ class AdvancedSearch(QWidget):
         minutes = dict(presets=(60, 90, 120, 150, 180), step=5, high=1000, label=lambda v: f"{v} min")
         self.runtime_min = NumberField(**minutes)
         self.runtime_max = NumberField(**minutes)
-        form.addLayout(_row("Type", self.kind, "   Runtime (series: per episode)  from",
+        form.addLayout(_row("Type", self.kind, "   Runtime  from",
                             self.runtime_min, "to", self.runtime_max, "min"))
 
         # -- release year, ratings --

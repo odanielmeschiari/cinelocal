@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS collection_movies (
 METADATA_COLUMNS = {
     "tmdb_id", "title", "original_title", "year", "release_date", "overview", "tagline",
     "runtime", "rating", "votes", "director", "trailer_key", "has_poster", "has_backdrop",
-    "status", "certification",
+    "status", "certification", "franchise",
 }
 FLAG_COLUMNS = {"watched", "favorite", "watchlist"}
 EPISODE_COLUMNS = {"ep_title", "ep_overview", "ep_air_date", "ep_runtime", "ep_rating"}
@@ -100,6 +100,9 @@ _MIGRATIONS = (
     ("episode", "INTEGER"), ("ep_title", "TEXT"), ("ep_overview", "TEXT"),
     ("ep_air_date", "TEXT"), ("ep_runtime", "INTEGER"), ("ep_rating", "REAL"),
     ("watched_at", "REAL"),   # when it was marked as watched (the history is ordered by it)
+    ("franchise", "TEXT"),    # name of the TMDB collection the movie belongs to ("The Matrix Collection")
+    ("franchise_linked", "INTEGER DEFAULT 0"),   # 1 once the movie was put in its franchise collection
+    ("tech_json", "TEXT"),    # resolution and codecs read from the file (null = not read yet, {} = unreadable)
     *_REVIEW_COLUMNS,
 )
 
@@ -116,6 +119,7 @@ def _row_to_movie(row: sqlite3.Row) -> dict:
     m["genres"] = _loads(m.pop("genres_json", None), [])
     m["cast"] = _loads(m.pop("cast_json", None), [])
     m["custom"] = _loads(m.pop("custom_json", None), [])
+    m["tech"] = _loads(m.pop("tech_json", None), None)
     m["watched"] = bool(m["watched"])
     m["favorite"] = bool(m["favorite"])
     m["watchlist"] = bool(m["watchlist"])
@@ -232,12 +236,21 @@ class Database:
             elif key == "custom":
                 sets.append("custom_json = ?")
                 values.append(json.dumps(value))
+            elif key == "franchise":   # a different franchise has to be linked again
+                sets += ["franchise = ?", "franchise_linked = CASE WHEN franchise IS ? THEN franchise_linked ELSE 0 END"]
+                values += [value, value]
             elif key in METADATA_COLUMNS:
                 sets.append(f"{key} = ?")
                 values.append(value)
         sets.append("updated_at = ?")
         values.extend([time.time(), movie_id])
         self._run(f"UPDATE {table} SET {', '.join(sets)} WHERE id = ?", values)
+
+    def save_tech(self, movie_id: int, info: dict) -> None:
+        self._run("UPDATE movies SET tech_json = ? WHERE id = ?", (json.dumps(info), movie_id))
+
+    def mark_franchise_linked(self, ids: list[int]) -> None:
+        self._many("UPDATE movies SET franchise_linked = 1 WHERE id = ?", [(i,) for i in ids])
 
     def set_status(self, movie_id: int, status: str, table: str = "movies") -> None:
         if table not in ("movies", "series"):
@@ -330,7 +343,8 @@ class Database:
                     run(f"DELETE FROM {table}")
             if metadata and not everything:
                 for table, extra in (("movies", ", ep_title = NULL, ep_overview = NULL, ep_air_date = NULL,"
-                                                " ep_runtime = NULL, ep_rating = NULL"), ("series", "")):
+                                                " ep_runtime = NULL, ep_rating = NULL, franchise = NULL,"
+                                                " franchise_linked = 0"), ("series", "")):
                     run(f"UPDATE {table} SET status = 'pending', tmdb_id = NULL, title = NULL, original_title = NULL,"
                         " year = NULL, release_date = NULL, overview = NULL, tagline = NULL, runtime = NULL,"
                         " rating = NULL, votes = NULL, genres_json = '[]', director = NULL, cast_json = '[]',"

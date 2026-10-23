@@ -32,6 +32,22 @@ def format_runtime(minutes) -> str:
     return f"{hours}h {mins:02d}min" if hours else f"{mins}min"
 
 
+def format_hours(minutes) -> str:
+    """Total time for statistics: 5400 -> '90 h 00 min'."""
+    hours, mins = divmod(int(minutes or 0), 60)
+    return f"{hours:,} h {mins:02d} min"
+
+
+def format_size(size) -> str:
+    """File size: 2254857830 -> '2.1 GB'."""
+    value = float(size or 0)
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024:
+            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} TB"
+
+
 def star_text(value) -> str:
     """The user's rating as stars; a half star is shown as ½ (4.5 -> ★★★★½)."""
     return "★" * int(value) + ("½" if value % 1 else "")

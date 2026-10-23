@@ -7,12 +7,15 @@ from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMenu, QMessageBox,
                                QScrollArea, QVBoxLayout, QWidget)
 
 from .. import images
+from ..mediainfo import badges
 from ..service import LibraryService
-from ..utils import format_runtime, format_votes
+from ..similar import similar_movies
+from ..utils import format_runtime, format_size, format_votes
 from .dialogs import populate_collections_menu
 from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP,
-                             ReviewBox, backdrop_gradient, cap_offset, side_margin)
+                             ReviewBox, TechBadges, backdrop_gradient, cap_offset, side_margin)
 from .edit_dialog import EditDialog
+from .home import HomeSection
 from .icons import IconButton
 from .match_dialog import MatchDialog
 from .theme import COLORS
@@ -24,6 +27,7 @@ BACKDROP_HEIGHT = 380
 class MovieDialog(QWidget):
     back_requested = Signal()
     play_requested = Signal(int)
+    open_requested = Signal(int)   # another movie, chosen among the similar ones
 
     def __init__(self, service: LibraryService, movie_id: int, parent=None):
         super().__init__(parent)
@@ -80,7 +84,8 @@ class MovieDialog(QWidget):
         self.banner = QLabel()
         self.banner.setObjectName("warn")
         self.banner.setWordWrap(True)
-        for w in (self.title, self.meta, self.rating, self.tagline, self.banner):
+        self.tech = TechBadges()
+        for w in (self.title, self.meta, self.tech, self.rating, self.tagline, self.banner):
             right.addWidget(w)
         left.insertSpacing(0, DETAILS_OFFSET + cap_offset(self.title))   # the poster's top lines up with the title's letters
 
@@ -94,6 +99,11 @@ class MovieDialog(QWidget):
         self.overview = self._text_block(body_layout, "OVERVIEW")
         self.director = self._text_block(body_layout, "DIRECTOR")
         self.cast = self._text_block(body_layout, "CAST")
+        self.similar = HomeSection("Similar in your library")
+        self.similar.setContentsMargins(0, SECTION_GAP, 0, 0)
+        self.similar.row.itemDelegate().progress_of = self.service.progress_of
+        self.similar.row.movie_opened.connect(self.open_requested)
+        body_layout.addWidget(self.similar)
         self.review = ReviewBox("Write your own comments about this movie…")
         self.review.rating_changed.connect(self._set_rating)
         self.review.comment_saved.connect(self._save_comment)
@@ -180,6 +190,7 @@ class MovieDialog(QWidget):
 
         parts = [str(m["display_year"] or ""), format_runtime(m["runtime"]), ", ".join(m["genres"])]
         self.meta.setText("   •   ".join(p for p in parts if p))
+        self.tech.set_badges(badges(m.get("tech")) + ([format_size(m["size"])] if m.get("size") else []))
 
         if m["rating"] and m["votes"]:
             self.rating.setText(f"Rating {m['rating']:.1f}/10   "
@@ -203,6 +214,10 @@ class MovieDialog(QWidget):
         self._set_block(self.overview, overview)
         self._set_block(self.director, m["director"] or "")
         self._set_block(self.cast, ", ".join(c["name"] for c in m["cast"][:10]))
+        similar = similar_movies(m, self.service.movies)
+        self.similar.row.movie_model.set_movies(similar)
+        self.similar.count.setText(str(len(similar)))
+        self.similar.setVisible(bool(similar))
         self._set_block(self.file_info, m["path"])
 
         self.review.set_values(m.get("user_rating") or 0, m.get("user_comment") or "")

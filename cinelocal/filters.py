@@ -78,6 +78,8 @@ def matches_advanced(movie: dict, adv: dict, membership: dict[int, set[int]],
     year = movie.get("year") or movie.get("year_guess")
     for key, value in (("year", year), ("rating", movie.get("rating")), ("votes", movie.get("votes")),
                        ("runtime", movie.get("runtime"))):
+        if key == "runtime" and movie.get("kind") == "series":
+            continue   # a series has no single runtime: that limit only applies to movies
         if not _in_range(value, adv.get(f"{key}_min"), adv.get(f"{key}_max")):
             return False
     if "certifications" in adv and movie.get("certification") not in adv["certifications"]:
