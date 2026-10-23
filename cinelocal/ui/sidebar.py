@@ -1,10 +1,9 @@
 """Sidebar: library, collections, genres and decades."""
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QPainter, QPainterPath
-from PySide6.QtWidgets import (QAbstractItemView, QMenu, QStyle, QStyledItemDelegate,
-                               QStyleOptionViewItem, QTreeWidget, QTreeWidgetItem)
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QFont
+from PySide6.QtWidgets import QAbstractItemView, QMenu, QTreeWidget, QTreeWidgetItem
 
 from ..filters import Filter
 from ..utils import star_text
@@ -12,66 +11,6 @@ from .theme import COLORS
 
 _NEW_COLLECTION = ("new_collection", None)
 _VALUE_ROLE = Qt.UserRole + 1
-_COLOR_ROLE = Qt.UserRole + 2
-_LABEL_ROLE = Qt.UserRole + 3
-_COUNT_ROLE = Qt.UserRole + 4
-
-
-class _SidebarItemDelegate(QStyledItemDelegate):
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
-        color_value = index.data(_COLOR_ROLE)
-        if not color_value:
-            return super().paint(painter, option, index)
-
-        option = QStyleOptionViewItem(option)
-        self.initStyleOption(option, index)
-        option.text = ""
-        super().paint(painter, option, index)
-
-        color = QColor(color_value)
-        selected = bool(option.state & QStyle.State_Selected)
-        text_color = QColor("#17202a" if color.lightness() > 175 else "#ffffff")
-        rect = option.rect.adjusted(10, 2, -10, -2)
-        height = min(26, rect.height())
-        pill_rect = rect.adjusted(0, (rect.height() - height) // 2, 0,
-                                  -(rect.height() - height) // 2)
-        label = str(index.data(_LABEL_ROLE) or "")
-        count = index.data(_COUNT_ROLE)
-        font = option.font
-        metrics = QFontMetrics(font)
-        pill_width = metrics.horizontalAdvance(label) + 20
-        pill_rect.setWidth(min(pill_width, rect.width()))
-
-        painter.save()
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(color)
-        radius = height / 2
-        pill_path = QPainterPath()
-        pill_path.moveTo(pill_rect.left(), pill_rect.top())
-        pill_path.lineTo(pill_rect.right() - radius, pill_rect.top())
-        pill_path.quadTo(pill_rect.right(), pill_rect.top(), pill_rect.right(), pill_rect.top() + radius)
-        pill_path.lineTo(pill_rect.right(), pill_rect.bottom() - radius)
-        pill_path.quadTo(pill_rect.right(), pill_rect.bottom(),
-                         pill_rect.right() - radius, pill_rect.bottom())
-        pill_path.lineTo(pill_rect.left(), pill_rect.bottom())
-        pill_path.closeSubpath()
-        painter.drawPath(pill_path)
-        painter.setFont(font)
-        painter.setPen(text_color)
-        painter.drawText(pill_rect.adjusted(10, 0, -10, 0), Qt.AlignVCenter | Qt.AlignLeft, label)
-        if count is not None:
-            count_color = QColor("#ffffff" if selected else "#aeb8c4")
-            count_rect = rect.adjusted(pill_rect.width() + 8, 0, 0, 0)
-            painter.setPen(count_color)
-            painter.drawText(count_rect, Qt.AlignVCenter | Qt.AlignLeft, f"({count})")
-        painter.restore()
-
-    def sizeHint(self, option: QStyleOptionViewItem, index) -> QSize:
-        size = super().sizeHint(option, index)
-        if index.data(_COLOR_ROLE):
-            size.setHeight(max(size.height(), 30))
-        return size
 
 
 class Sidebar(QTreeWidget):
@@ -90,7 +29,6 @@ class Sidebar(QTreeWidget):
         self.setFocusPolicy(Qt.NoFocus)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setItemDelegate(_SidebarItemDelegate(self))
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context)
         self.currentItemChanged.connect(self._on_current_changed)
@@ -132,7 +70,7 @@ class Sidebar(QTreeWidget):
             tag_membership = tag_membership or {}
             for tag in tags:
                 self._entry(tag["name"], ("tag", tag["id"]),
-                            sum(tag["id"] in ids for ids in tag_membership.values()), tag["color"])
+                            sum(tag["id"] in ids for ids in tag_membership.values()))
 
         if counts["stars"]:
             self._header("MY RATING")
@@ -162,16 +100,12 @@ class Sidebar(QTreeWidget):
         item.setForeground(0, QBrush(QColor(COLORS["muted"])))
         self.addTopLevelItem(item)
 
-    def _entry(self, label: str, data: Filter, count: int | None, color: str | None = None) -> None:
+    def _entry(self, label: str, data: Filter, count: int | None) -> None:
         text = label if count is None else f"{label} ({count})"
-        item = QTreeWidgetItem(["" if color else text])
+        item = QTreeWidgetItem([text])
         item.setData(0, Qt.UserRole, data[0])
         item.setData(0, _VALUE_ROLE, data[1])
         item.setToolTip(0, label)
-        item.setData(0, _LABEL_ROLE, label)
-        item.setData(0, _COUNT_ROLE, count)
-        if color:
-            item.setData(0, _COLOR_ROLE, color)
         self.addTopLevelItem(item)
 
     @staticmethod
