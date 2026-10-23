@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QPainter
+from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QPainter, QPainterPath
 from PySide6.QtWidgets import (QAbstractItemView, QMenu, QStyle, QStyledItemDelegate,
                                QStyleOptionViewItem, QTreeWidget, QTreeWidgetItem)
 
@@ -46,7 +46,17 @@ class _SidebarItemDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         painter.setBrush(color)
-        painter.drawRoundedRect(pill_rect, height / 2, height / 2)
+        radius = height / 2
+        pill_path = QPainterPath()
+        pill_path.moveTo(pill_rect.left(), pill_rect.top())
+        pill_path.lineTo(pill_rect.right() - radius, pill_rect.top())
+        pill_path.quadTo(pill_rect.right(), pill_rect.top(), pill_rect.right(), pill_rect.top() + radius)
+        pill_path.lineTo(pill_rect.right(), pill_rect.bottom() - radius)
+        pill_path.quadTo(pill_rect.right(), pill_rect.bottom(),
+                         pill_rect.right() - radius, pill_rect.bottom())
+        pill_path.lineTo(pill_rect.left(), pill_rect.bottom())
+        pill_path.closeSubpath()
+        painter.drawPath(pill_path)
         painter.setFont(font)
         painter.setPen(text_color)
         painter.drawText(pill_rect.adjusted(10, 0, -10, 0), Qt.AlignVCenter | Qt.AlignLeft, label)
@@ -154,7 +164,7 @@ class Sidebar(QTreeWidget):
 
     def _entry(self, label: str, data: Filter, count: int | None, color: str | None = None) -> None:
         text = label if count is None else f"{label} ({count})"
-        item = QTreeWidgetItem([text])
+        item = QTreeWidgetItem(["" if color else text])
         item.setData(0, Qt.UserRole, data[0])
         item.setData(0, _VALUE_ROLE, data[1])
         item.setToolTip(0, label)
