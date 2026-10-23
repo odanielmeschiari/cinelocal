@@ -122,11 +122,12 @@ def best_subtitle(results: list[dict]) -> dict | None:
 
 
 def fetch_subtitle(client: OpenSubtitlesClient, path: str, title: str, year: int | None, languages: str,
-                   season: int | None = None, episode: int | None = None) -> str | None:
+                   season: int | None = None, episode: int | None = None, force: bool = False) -> str | None:
     """Downloads the best subtitle for a video and saves it next to it ('Movie.pt-BR.srt'), where players
     find it every time the video is played. Returns the saved path, or None if there was nothing to do
-    (no such video, it already has a subtitle) or nothing was found. `languages`: comma-separated codes."""
-    if not os.path.isfile(path) or has_subtitle(path):
+    (no such video, it already has a subtitle) or nothing was found. `languages`: comma-separated codes.
+    `force`: download even if the video already has a subtitle (a language picked by hand)."""
+    if not os.path.isfile(path) or (has_subtitle(path) and not force):
         return None
     digest = movie_hash(path)
     found = best_subtitle(client.search(moviehash=digest, languages=languages)) if digest else None

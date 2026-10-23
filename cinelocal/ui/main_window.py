@@ -557,7 +557,8 @@ class MainWindow(QMainWindow):
         page.set_saved_tracks((self.service.settings.get("track_choices") or {}).get(movie["path"], {}))
         page.tracks_remembered.connect(self.service.remember_tracks)
         page.subtitle_search_requested.connect(
-            lambda path: self.service.search_subtitle(path, lambda saved: self._player is page and page.add_subtitle(saved)))
+            lambda path, language: self.service.search_subtitle(
+                path, lambda saved: self._player is page and page.add_subtitle(saved), language))
         page.external_requested.connect(lambda: self._open_external(self._playing_id))
         page.next_requested.connect(self._play_next)
         page.set_has_next(self._has_next(movie))

@@ -11,6 +11,7 @@ from PySide6.QtGui import QColor, QCursor, QGuiApplication, QKeySequence, QLinea
 from PySide6.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
                                QSizePolicy, QSlider, QStyle, QToolTip, QVBoxLayout, QWidget, QWidgetAction)
 
+from ..config import TRACK_LANGUAGES
 from ..tracks import choose_track, track_name as _track_name
 from .icons import IconButton
 
@@ -126,7 +127,7 @@ class VlcPlayerPage(QWidget):
     ended = Signal(str)               # the video reached the end
     tracks_remembered = Signal(str, dict)   # path, audio/subtitle track names picked by hand
     prefs_changed = Signal(dict)      # volume and picture adjustments, to remember for the next movies
-    subtitle_search_requested = Signal(str)   # path: look for a subtitle for this movie on OpenSubtitles
+    subtitle_search_requested = Signal(str, str)   # path, language ('' = preferred): look for a subtitle on OpenSubtitles
 
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
@@ -274,7 +275,11 @@ class VlcPlayerPage(QWidget):
         self._fill_tracks(menu, self._mp.video_get_spu_description() or [],
                           self._mp.video_get_spu(), self._pick_subtitle)
         menu.addSeparator()
-        menu.addAction("Search on OpenSubtitles", lambda: self.subtitle_search_requested.emit(self._path))
+        search = menu.addMenu("Search on OpenSubtitles")
+        search.addAction("Preferred language", lambda: self.subtitle_search_requested.emit(self._path, ""))
+        search.addSeparator()
+        for code, (name, _aliases) in TRACK_LANGUAGES.items():
+            search.addAction(name, lambda c=code: self.subtitle_search_requested.emit(self._path, c))
 
     def add_subtitle(self, path: str) -> None:
         """Loads a subtitle file that was just saved next to the movie and shows it (VLC only looks for those

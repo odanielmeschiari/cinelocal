@@ -414,6 +414,15 @@ class ManualSearchTests(unittest.TestCase):
         self.assertEqual(langs, ["pt-br,pt-pt"])   # falls back to the metadata language (pt-BR)
         self.assertEqual(self.saved, ["x.srt"])
 
+    def test_a_language_picked_by_hand_overrides_the_setting_and_the_existing_subtitle(self):
+        Path(self.tmp.name, "The.Matrix.1999.en.srt").write_text("mine")
+        calls = []
+        with mock.patch("cinelocal.service.fetch_subtitle",
+                        lambda client, path, title, year, langs, season, episode, force=False:
+                        calls.append((langs, force)) or "x.srt"):
+            self.service.search_subtitle(self.video, self.saved.append, "es")
+        self.assertEqual((calls, self.saved), ([("es", True)], ["x.srt"]))
+
     def test_nothing_found_is_reported(self):
         self.search(lambda *a: None)
         self.assertEqual((self.saved, self.messages[-1]), ([], "No subtitle found on OpenSubtitles for this movie."))
