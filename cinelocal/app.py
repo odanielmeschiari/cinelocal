@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication
 from . import APP_ID, APP_NAME
 from .config import DB_FILE, Settings, ensure_dirs
 from .db import Database
-from .selfinstall import maybe_install
+from .selfinstall import maybe_install, uninstall_dialog
 from .service import LibraryService
 from .ui.main_window import MainWindow
 from .ui.theme import apply_theme
@@ -46,6 +46,8 @@ def run() -> int:
     app.setDesktopFileName(APP_ID)
     app.setWindowIcon(_icon())
     apply_theme(app)
+    if "--uninstall" in sys.argv[1:]:   # the "Uninstall CineLocal" entry of the installed executable
+        return uninstall_dialog()
 
     settings = Settings()
     maybe_install(settings)

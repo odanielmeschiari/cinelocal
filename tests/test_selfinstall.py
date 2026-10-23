@@ -26,6 +26,8 @@ class LinuxInstallTests(unittest.TestCase):
             entry = (Path(home) / ".local/share/applications/cinelocal.desktop").read_text()
             self.assertIn(f'Exec="{dest}"', entry)
             self.assertTrue((Path(home) / ".local/share/icons/hicolor/scalable/apps/cinelocal.svg").exists())
+            uninstall_entry = (Path(home) / ".local/share/applications/cinelocal-uninstall.desktop").read_text()
+            self.assertIn(f'Exec="{dest}" --uninstall', uninstall_entry)
 
     def test_reinstall_replaces_the_executable(self):
         with tempfile.TemporaryDirectory() as home:
@@ -36,6 +38,40 @@ class LinuxInstallTests(unittest.TestCase):
                 src.write_bytes(b"v2")
                 dest = selfinstall.install(src)
             self.assertEqual(dest.read_bytes(), b"v2")
+
+    def _install_with_data(self, home):
+        src = Path(home) / "download" / "CineLocal-linux-x86_64"
+        src.parent.mkdir()
+        src.write_bytes(b"binary")
+        with mock.patch.dict(os.environ, {"HOME": home}), mock.patch("subprocess.run"):
+            dest = selfinstall.install(src)
+        dirs = [Path(home) / name for name in ("config", "data", "cache")]
+        for d in dirs:
+            d.mkdir()
+            (d / "x").write_text("data")
+        return dest, dirs
+
+    def _uninstall(self, home, dirs, purge):
+        with mock.patch.dict(os.environ, {"HOME": home}), \
+                mock.patch.multiple(selfinstall, CONFIG_DIR=dirs[0], DATA_DIR=dirs[1], CACHE_DIR=dirs[2]):
+            selfinstall.uninstall(purge)
+
+    def test_uninstall_keeps_the_data(self):
+        with tempfile.TemporaryDirectory() as home:
+            dest, dirs = self._install_with_data(home)
+            self._uninstall(home, dirs, purge=False)
+            self.assertFalse(dest.parent.exists())
+            self.assertFalse((Path(home) / ".local/share/applications/cinelocal.desktop").exists())
+            self.assertFalse((Path(home) / ".local/share/applications/cinelocal-uninstall.desktop").exists())
+            self.assertFalse((Path(home) / ".local/share/icons/hicolor/scalable/apps/cinelocal.svg").exists())
+            self.assertTrue(all(d.exists() for d in dirs))
+
+    def test_uninstall_with_purge_deletes_the_data(self):
+        with tempfile.TemporaryDirectory() as home:
+            dest, dirs = self._install_with_data(home)
+            self._uninstall(home, dirs, purge=True)
+            self.assertFalse(dest.parent.exists())
+            self.assertFalse(any(d.exists() for d in dirs))
 
 
 if __name__ == "__main__":
