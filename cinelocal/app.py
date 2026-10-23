@@ -1,15 +1,18 @@
 """Qt application startup."""
 from __future__ import annotations
 
+import faulthandler
 import os
 import sys
+import time
+import traceback
 from pathlib import Path
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from . import APP_ID, APP_NAME
-from .config import DB_FILE, Settings, ensure_dirs
+from .config import DATA_DIR, DB_FILE, Settings, ensure_dirs
 from .db import Database
 from .service import LibraryService
 from .ui.main_window import MainWindow
@@ -45,10 +48,27 @@ def _check_player() -> int:
     return 1 if reason else 0
 
 
+_crash_log = None   # kept open while the app runs
+
+
+def _enable_crash_log() -> None:
+    """Writes crashes (Python errors and native ones, e.g. inside libVLC) to <data folder>/crash.log: the windowed
+    Windows build has no console where they could be seen."""
+    global _crash_log
+    try:
+        _crash_log = open(DATA_DIR / "crash.log", "a", buffering=1, encoding="utf-8")
+        _crash_log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} start\n")
+        faulthandler.enable(_crash_log, all_threads=True)
+    except OSError:
+        return
+    sys.excepthook = lambda kind, value, tb: traceback.print_exception(kind, value, tb, file=_crash_log)
+
+
 def run() -> int:
     if "--check-player" in sys.argv[1:]:
         return _check_player()
     ensure_dirs()
+    _enable_crash_log()
     _prefer_embeddable_platform()
     if sys.platform == "win32":  # own taskbar icon (instead of Python's)
         import ctypes
