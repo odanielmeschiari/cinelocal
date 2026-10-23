@@ -193,6 +193,9 @@ saved positions, with no way back), delete these folders yourself:
   with size and quality side by side, and opens the folder of each so you can delete the ones you don't want.
 - **Statistics** (**Metadata → Statistics…**): movies, series and episodes, time watched and left to watch, library
   size, your average rating, and the most common genres, decades, directors and actors.
+
+  ![Statistics](examples/statistics.png "Statistics")
+  
 - **Rescan** (`F5`): runs when the app opens; detects new movies and removes the ones that disappeared from disk.
   Files moved to another subfolder keep their metadata, collections and flags.
 - **Edit metadata**: in the details of a movie or series, **⋮ → Edit metadata…** changes the title, year, runtime, genres,
