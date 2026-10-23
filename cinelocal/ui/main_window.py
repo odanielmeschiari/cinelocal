@@ -14,8 +14,8 @@ from .. import filters
 from ..service import LibraryService
 from ..utils import star_text
 from .advanced_search import AdvancedSearch
-from .dialogs import (ask_new_collection, ask_rename_collection, confirm_delete_collection,
-                      populate_collections_menu)
+from .dialogs import (MovieSelectionDialog, ask_new_collection, ask_rename_collection,
+                      confirm_delete_collection, populate_collections_menu)
 from .duplicates_dialog import DuplicatesDialog
 from .grid import CELL_H, MovieFlow
 from .home import HomeSection
@@ -229,6 +229,7 @@ class MainWindow(QMainWindow):
     def _connect(self) -> None:
         s = self.service
         self.sidebar.filter_changed.connect(self._on_filter)
+        self.sidebar.manage_requested.connect(self._manage_sidebar_items)
         self.sidebar.new_collection_requested.connect(lambda: ask_new_collection(self, s))
         self.sidebar.rename_collection_requested.connect(lambda cid: ask_rename_collection(self, s, cid))
         self.sidebar.delete_collection_requested.connect(self._delete_collection)
@@ -414,6 +415,53 @@ class MainWindow(QMainWindow):
     def _on_filter(self, flt) -> None:
         self.flt = flt
         self.refresh_view()
+
+    def _manage_sidebar_items(self, flt: filters.Filter) -> None:
+        kind, value = flt
+        if kind in ("favorites", "watchlist", "watched"):
+            movies = self.service.movies
+            if kind == "watched":
+                selected = {m["id"] for m in movies if m["watched"] == value}
+            else:
+                selected = {m["id"] for m in movies if m[kind]}
+        elif kind == "collection":
+            movies = [m for m in self.service.movies if m.get("kind") == "movie"]
+            selected = set(self.service.membership.get(value, ()))
+        elif kind == "tag":
+            movies = [m for m in self.service.movies if m.get("kind") == "movie"]
+            selected = {movie_id for movie_id, tag_ids in self.service.tag_membership.items()
+                        if value in tag_ids}
+        else:
+            return
+
+        selected.intersection_update(m["id"] for m in movies)
+        dialog = MovieSelectionDialog(movies, selected, f"Manage {self._heading_for_filter(flt)}", self)
+        if not dialog.exec():
+            return
+        updated = dialog.selected_ids()
+        added, removed = updated - selected, selected - updated
+        if kind in ("favorites", "watchlist"):
+            self.service.set_flag(sorted(added), kind, True)
+            self.service.set_flag(sorted(removed), kind, False)
+        elif kind == "watched":
+            self.service.set_flag(sorted(added), "watched", value)
+            self.service.set_flag(sorted(removed), "watched", not value)
+        elif kind == "collection":
+            self.service.set_in_collection(value, sorted(added), True)
+            self.service.set_in_collection(value, sorted(removed), False)
+        else:
+            self.service.set_movie_tags(sorted(added), value, True)
+            self.service.set_movie_tags(sorted(removed), value, False)
+
+    def _heading_for_filter(self, flt: filters.Filter) -> str:
+        kind, value = flt
+        if kind == "watched":
+            return "Watched" if value else "Unwatched"
+        if kind == "collection":
+            return self.service.collection_name(value)
+        if kind == "tag":
+            return next((tag["name"] for tag in self.service.tags if tag["id"] == value), "Tag")
+        return {"favorites": "Favorites", "watchlist": "Watchlist"}[kind]
 
     def _on_search(self, text: str) -> None:
         self.query = text

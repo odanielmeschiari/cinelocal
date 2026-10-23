@@ -257,8 +257,8 @@ class MovieDialog(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         tags = movie.get("tags", [])
-        self.tag_head.setVisible(bool(tags) or bool(self.service.tags))
-        self.tags_box.setVisible(bool(tags) or bool(self.service.tags))
+        self.tag_head.setVisible(True)
+        self.tags_box.setVisible(True)
         for tag in tags:
             button = QPushButton(tag["name"])
             button.clicked.connect(lambda _checked=False, tag_id=tag["id"]:

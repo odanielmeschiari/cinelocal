@@ -1,9 +1,67 @@
 """Shared dialogs and menus (collections)."""
 from __future__ import annotations
 
-from PySide6.QtWidgets import QInputDialog, QMessageBox, QMenu, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (QDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
+                               QListWidgetItem, QMessageBox, QMenu, QPushButton, QVBoxLayout, QWidget)
 
 from ..service import LibraryService
+from ..utils import normalize_text
+
+
+class MovieSelectionDialog(QDialog):
+    def __init__(self, movies: list[dict], selected_ids: set[int], title: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setMinimumSize(480, 560)
+
+        root = QVBoxLayout(self)
+        root.addWidget(QLabel("Select the movies to include:"))
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Filter movies…")
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(self._filter)
+        root.addWidget(self.search)
+
+        self.movies = QListWidget()
+        self.movies.setSpacing(3)
+        for movie in sorted(movies, key=lambda m: (normalize_text(m["display_title"]), m["id"])):
+            title_text = movie["display_title"]
+            if movie.get("display_year"):
+                title_text += f" ({movie['display_year']})"
+            if movie.get("kind") == "series":
+                title_text += " [Series]"
+            item = QListWidgetItem(title_text)
+            item.setData(Qt.UserRole, movie["id"])
+            item.setData(Qt.UserRole + 1, normalize_text(title_text))
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if movie["id"] in selected_ids else Qt.Unchecked)
+            self.movies.addItem(item)
+        root.addWidget(self.movies, 1)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel = QPushButton("Cancel")
+        save = QPushButton("Save")
+        save.setProperty("primary", True)
+        cancel.clicked.connect(self.reject)
+        save.clicked.connect(self.accept)
+        buttons.addWidget(cancel)
+        buttons.addWidget(save)
+        root.addLayout(buttons)
+
+    def selected_ids(self) -> set[int]:
+        return {
+            self.movies.item(index).data(Qt.UserRole)
+            for index in range(self.movies.count())
+            if self.movies.item(index).checkState() == Qt.Checked
+        }
+
+    def _filter(self, text: str) -> None:
+        terms = normalize_text(text).split()
+        for index in range(self.movies.count()):
+            item = self.movies.item(index)
+            item.setHidden(not all(term in item.data(Qt.UserRole + 1) for term in terms))
 
 
 def ask_new_collection(parent: QWidget, service: LibraryService) -> int | None:

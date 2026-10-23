@@ -40,6 +40,7 @@ class TagDialog(QDialog):
         self.search.textChanged.connect(self._filter)
         root.addWidget(self.search)
         self.movies = QListWidget()
+        self.movies.setSpacing(6)
         members = {movie_id for movie_id, tag_ids in service.tag_membership.items() if tag_id in tag_ids}
         for movie in sorted((m for m in service.movies if m["id"] > 0),
                             key=lambda m: (normalize_text(m["display_title"]), m["id"])):
