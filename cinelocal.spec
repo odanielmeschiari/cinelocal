@@ -1,4 +1,5 @@
-# PyInstaller recipe for a single-file build:  pyinstaller --noconfirm cinelocal.spec
+# PyInstaller recipe for a folder build (dist/CineLocal/):  pyinstaller --noconfirm cinelocal.spec
+# A folder (not a single file) starts fast: nothing is unpacked to a temp folder on every launch.
 # Install VLC first: its libraries are bundled so the built-in player works without VLC installed.
 import os
 import sys
@@ -34,9 +35,11 @@ a = Analysis(
 )
 exe = EXE(
     PYZ(a.pure),
-    a.scripts, a.binaries, a.datas, [],
-    name="CineLocal-windows-x86_64" if win else "CineLocal-linux-x86_64",
+    a.scripts, [],
+    exclude_binaries=True,
+    name="CineLocal",
     console=False,
     icon="assets/cinelocal.ico" if win else None,
     upx=False,
 )
+coll = COLLECT(exe, a.binaries, a.datas, name="CineLocal", upx=False)

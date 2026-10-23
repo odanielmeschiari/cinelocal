@@ -1,4 +1,5 @@
-# Builds the Linux and Windows executables and publishes them as a GitHub Release.
+# Builds the Windows installer (Setup.exe) and the Linux .deb, plus portable archives of both, and publishes
+# them as a GitHub Release.
 # Usage: git tag v1.12.0 && git push --tags
 name: Release
 
@@ -32,6 +33,17 @@ jobs:
         run: choco install vlc -y --no-progress
       - run: pip install -r requirements.txt "pyinstaller>=6.9"
       - run: pyinstaller --noconfirm cinelocal.spec
+      - name: Linux packages (.deb and portable archive)
+        if: runner.os == 'Linux'
+        run: |
+          bash packaging/build-deb.sh "${GITHUB_REF_NAME#v}"
+          tar -czf dist/CineLocal-linux-x86_64-portable.tar.gz -C dist CineLocal
+      - name: Windows installer (Inno Setup) and portable archive
+        if: runner.os == 'Windows'
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$($env:GITHUB_REF_NAME.TrimStart('v'))" installer\cinelocal.iss
+          Compress-Archive -Path dist\CineLocal -DestinationPath dist\CineLocal-windows-x86_64-portable.zip
       - uses: actions/upload-artifact@v6
         with:
           name: ${{ runner.os }}

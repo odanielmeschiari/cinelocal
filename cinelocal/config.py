@@ -69,7 +69,6 @@ DEFAULT_SETTINGS = {
     "saved_filters": {},      # name -> criteria of the advanced search
     "home_sections": ["continue"],   # rows of the home screen, in order: "continue", "history", "favorites",
                                      # "watchlist" or "collection:<id>"
-    "skip_install_prompt": False,  # "Don't ask again" on the install offer of the downloaded executable
 }
 
 

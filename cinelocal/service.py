@@ -486,7 +486,7 @@ class LibraryService(QObject):
             reset["resume"] = DEFAULT_SETTINGS["resume"]
         if everything or "settings" in kinds:   # the sort order and the install offer are not touched
             reset.update({k: v for k, v in DEFAULT_SETTINGS.items()
-                          if k not in ("resume", "sort_id", "skip_install_prompt")})
+                          if k not in ("resume", "sort_id")})
         self.settings.update(**copy.deepcopy(reset))
         self.reload()
         self.library_changed.emit()

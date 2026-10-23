@@ -6,32 +6,33 @@ Fast and offline: the internet is only used to download posters and metadata for
 
 ![Home screen](examples/home.png "Home Screen")
 
-## Download (no installation)
+## Download and install (no Python or VLC needed)
 
-No need to download the source zip: get just the file for your system from the [latest release](../../releases/latest):
+Get just the file for your system from the [latest release](../../releases/latest) (no need for the source zip):
 
-- **Windows 10/11**: `CineLocal-windows-x86_64.exe` — double-click it. (Windows SmartScreen may warn about an
-  unknown publisher: *More info → Run anyway*.)
-- **Linux (x86_64)**: `CineLocal-linux-x86_64` — right-click → *Properties → Permissions → Allow executing*
-  (or `chmod +x CineLocal-linux-x86_64`), then double-click it.
+- **Windows 10/11**: `CineLocal-windows-x86_64-setup.exe` — double-click it and follow the wizard (no administrator
+  rights; adds CineLocal to the Start Menu). Windows SmartScreen may warn about an unknown publisher:
+  *More info → Run anyway*.
+- **Linux Mint / Ubuntu / Debian (x86_64)**: `CineLocal-linux-x86_64.deb` — double-click it (Software Manager) or run
+  `sudo apt install ./CineLocal-linux-x86_64.deb`. It installs the few system libraries it needs.
+- **Portable, no installation** (other distros too): `CineLocal-windows-x86_64-portable.zip` or
+  `CineLocal-linux-x86_64-portable.tar.gz` — extract anywhere and run the `CineLocal` file inside the folder.
+  On Linux you may need `sudo apt install libxcb-cursor0`.
 
-On the first launch, CineLocal offers to **install itself** (copies the file to your user folder and adds it to the
-Start Menu / application menu; no administrator rights). After that, open it from the menu and delete the download.
-Running a newer download offers to update the installed copy.
-To remove it, use **Uninstall CineLocal** (application menu on Linux, *Settings → Apps* on Windows; or run the
-installed executable with `--uninstall`): it asks whether to also delete the library, posters and settings.
-
-No Python or VLC needed: the built-in player is already inside the file. If Linux complains about the Qt `xcb`
-plugin, run `sudo apt install libxcb-cursor0`.
+The built-in player is already included. The app is a folder (not a single file) on purpose: a single file would have
+to unpack itself to a temporary folder on every launch, which makes it slow to open.
 
 ### Publishing a release (maintainers)
 
-1. `git tag v<version> && git push --tags` — GitHub Actions builds both executables with PyInstaller
-   (`cinelocal.spec`, with VLC bundled) and attaches them to a new release.
+1. `git tag v<version> && git push --tags` — GitHub Actions builds the app with PyInstaller (`cinelocal.spec`, with
+   VLC bundled) and attaches to a new release the Windows installer (`installer/cinelocal.iss`, Inno Setup), the
+   Linux `.deb` (`packaging/build-deb.sh`) and the two portable archives.
 2. To build locally instead: install VLC (set `VLC_DIR` if it is not in the default place), then
-   `pip install pyinstaller && pyinstaller --noconfirm cinelocal.spec` (output in `dist/`).
+   `pip install pyinstaller && pyinstaller --noconfirm cinelocal.spec` (the app folder is `dist/CineLocal/`).
+   Then `packaging/build-deb.sh <version>` (Linux) or `iscc /DAppVersion=<version> installer\cinelocal.iss`
+   (Windows, with Inno Setup installed).
 
-## Installation (Linux Mint / Ubuntu / Debian)
+## Installation from source (Linux Mint / Ubuntu / Debian)
 
 ```bash
 unzip cinelocal.zip && cd cinelocal
@@ -43,7 +44,7 @@ The script installs any missing system libraries (it asks for the administrator 
 creates a virtual environment with PySide6 and adds **CineLocal** to the application menu.
 To remove it: `./uninstall.sh` (`--purge` also deletes the data).
 
-## Installation (Windows 10/11)
+## Installation from source (Windows 10/11, needs Python)
 
 1. Install **Python 3.10 to 3.12** from [python.org/downloads/windows](https://www.python.org/downloads/windows/),
    checking **"Add python.exe to PATH"** in the installer.
@@ -61,16 +62,15 @@ To remove it: `uninstall.bat` (`--purge` also deletes the data).
 
 Your movies are **never deleted**: the uninstaller only removes the app and, if you ask, CineLocal's data.
 
-### Downloaded executable
+### Installed from the Windows installer / `.deb`
 
-If you accepted the install offer, use **Uninstall CineLocal** (it asks whether to also delete the data), or run
-`uninstall.bat` / `uninstall.sh` (see below; they remove the same files).
-If you declined it, the executable runs from wherever you saved it, so just delete the file
-(`CineLocal-windows-x86_64.exe` or `CineLocal-linux-x86_64`). To also remove the data (library, posters, API key and
-saved positions, with no way back), delete these folders yourself:
-
-- Linux: `rm -rf ~/.config/cinelocal ~/.local/share/cinelocal ~/.cache/cinelocal`
-- Windows: `%APPDATA%\cinelocal` and `%LOCALAPPDATA%\cinelocal` (paste each one in the File Explorer address bar)
+- **Windows**: *Settings → Apps → CineLocal → Uninstall*. At the end it asks whether to also delete the library,
+  posters and settings.
+- **Linux**: `sudo apt remove cinelocal` (or the Software Manager). Your data stays in your home folder; to delete it
+  too (library, posters, API key and saved positions, with no way back):
+  `rm -rf ~/.config/cinelocal ~/.local/share/cinelocal ~/.cache/cinelocal`
+- **Portable version**: just delete the folder. To also remove the data, delete the same data folders: on Windows
+  `%APPDATA%\cinelocal` and `%LOCALAPPDATA%\cinelocal` (paste each one in the File Explorer address bar).
 
 ### Linux
 
