@@ -80,7 +80,7 @@ class MovieDelegate(QStyledItemDelegate):
             return self._cache[key]
         pixmap = None
         if movie["has_poster"]:
-            loaded = QPixmap(str(images.thumb_file(movie["id"])))
+            loaded = QPixmap(str(images.thumb_file(movie.get("poster_id", movie["id"]))))
             if not loaded.isNull():
                 tw, th = int(POSTER_W * dpr), int(POSTER_H * dpr)
                 scaled = loaded.scaled(tw, th, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
@@ -147,7 +147,17 @@ class MovieDelegate(QStyledItemDelegate):
         painter.setFont(self._badge_font)
         painter.drawText(rect, Qt.AlignCenter, text)
 
+    @staticmethod
+    def _disc(painter, rect, icon):
+        """Icon on a small dark disc (readable over any cover)."""
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 185))
+        painter.drawEllipse(rect)
+        draw_icon(painter, icon, COLORS["accent_hover"], rect.adjusted(5, 5, -5, -5))
+
     def _paint_badges(self, painter, poster, movie):
+        if movie.get("group") is not None:   # a collection standing in for its movies: cover and title only
+            return
         x = poster.left() + 8
         if movie["rating"] and movie["votes"]:
             self._pill(painter, QRect(x, poster.bottom() - 28, 42, 20),
@@ -160,15 +170,14 @@ class MovieDelegate(QStyledItemDelegate):
         if movie["status"] in ("ambiguous", "not_found"):
             self._pill(painter, QRect(poster.right() - 70, poster.bottom() - (52 if rated else 28), 62, 20),
                        "Review", QColor(COLORS["warn"]), "#1b1200")
-        if movie["favorite"]:   # heart on a small dark disc (readable over any cover)
-            disc = QRectF(poster.right() - 34, poster.top() + 8, 26, 26)
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(0, 0, 0, 185))
-            painter.drawEllipse(disc)
-            draw_icon(painter, "favorite_on", COLORS["accent_hover"], disc.adjusted(5, 5, -5, -5))
+        corner = poster.right() - 34   # top right: the watchlist marker stays in the corner, the heart moves aside
+        if movie["watchlist"]:
+            self._disc(painter, QRectF(corner, poster.top() + 8, 26, 26), "watchlist_on")
+            corner -= 30
+        if movie["favorite"]:
+            self._disc(painter, QRectF(corner, poster.top() + 8, 26, 26), "favorite_on")
         if movie["watched"]:
-            self._pill(painter, QRect(poster.left() + 8, poster.top() + 8, 58, 20),
-                       "Watched", QColor(0, 0, 0, 185))
+            self._disc(painter, QRectF(poster.left() + 8, poster.top() + 8, 26, 26), "watched_on")
         fraction = self.progress_of(movie) if self.progress_of else 0
         if fraction > 0:   # mini-tracker: how much of the movie has been watched
             track = QRectF(poster.left() + 8, poster.bottom() - 6, POSTER_W - 16, 4)

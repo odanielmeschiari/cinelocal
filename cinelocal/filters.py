@@ -209,6 +209,50 @@ def sort_movies(movies: list[dict], sort_id: str) -> list[dict]:
     return present + missing
 
 
+GROUP_ID_BASE = 10 ** 9   # a grouped collection gets the (negative) id -(GROUP_ID_BASE + collection id)
+
+
+def group_of(movie_id: int) -> int | None:
+    """Collection id behind the id of a grouped poster, or None for a real movie/series."""
+    return -movie_id - GROUP_ID_BASE if movie_id <= -GROUP_ID_BASE else None
+
+
+def automatic_collections(movies: list[dict], collections: list[dict]) -> list[int]:
+    """Ids of the collections named after a TMDB franchise of the library (the ones made by `link_franchises`)."""
+    franchises = {m["franchise"].lower() for m in movies if m.get("franchise")}
+    return [c["id"] for c in collections if c["name"].lower() in franchises]
+
+
+def group_collections(movies: list[dict], membership: dict[int, set[int]], group_ids: list[int], name_of) -> list[dict]:
+    """Replaces the movies of the collections in `group_ids` by one stand-in per collection, placed where its first
+    movie was. The stand-in takes the cover of the collection's earliest movie and the collection's name."""
+    owner = {}
+    for collection_id in reversed(group_ids):   # a movie in two grouped collections goes to the first one listed
+        for movie_id in membership.get(collection_id, ()):
+            owner[movie_id] = collection_id
+    slots: list = []
+    members: dict[int, list[dict]] = {}
+    for m in movies:
+        collection_id = owner.get(m["id"])
+        if collection_id is None:
+            slots.append(m)
+        else:
+            if collection_id not in members:
+                slots.append(collection_id)
+            members.setdefault(collection_id, []).append(m)
+    result = []
+    for slot in slots:
+        if isinstance(slot, dict):
+            result.append(slot)
+            continue
+        group = members[slot]
+        cover = min(group, key=lambda m: (m.get("year") or m.get("year_guess") or 9999, m["sort_title"]))
+        result.append({**cover, "id": -(GROUP_ID_BASE + slot), "poster_id": cover["id"], "group": slot,
+                       "display_title": name_of(slot), "display_year": None, "status": "matched",
+                       "genres": [f"{len(group)} movies"]})
+    return result
+
+
 def sidebar_counts(movies: list[dict], progress=None, history=None) -> dict:
     genres: Counter = Counter()
     decades: Counter = Counter()

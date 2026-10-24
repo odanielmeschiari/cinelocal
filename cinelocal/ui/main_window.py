@@ -250,7 +250,7 @@ class MainWindow(QMainWindow):
         self.search.textChanged.connect(self._on_search)
         self.advanced_btn.clicked.connect(self._open_advanced)
         self.sort_combo.currentIndexChanged.connect(self._on_sort)
-        self.grid.movie_opened.connect(self.open_movie)
+        self.grid.movie_opened.connect(self._open_from_grid)
         self.grid.context_requested.connect(self._context_menu)
         self.grid.itemDelegate().progress_of = s.progress_of
         self.grid.selectionModel().currentChanged.connect(self._reveal_current)
@@ -381,7 +381,14 @@ class MainWindow(QMainWindow):
             visible.sort(key=lambda m: -self.service.last_played(m))
         elif self.flt[0] == "history":   # most recently watched first
             visible.sort(key=lambda m: -self.service.history_stamp(m))
-        self.grid.movie_model.set_movies(visible)
+        shown = visible
+        if self.flt == ("all", None) and not self.query and not self.advanced:   # only in "All movies"
+            group_ids = list(self.service.settings.get("grouped_collections") or [])
+            if self.service.settings.get("group_auto_collections"):
+                group_ids += filters.automatic_collections(self.service.movies, self.service.collections)
+            shown = filters.group_collections(visible, self.service.membership, group_ids,
+                                              self.service.collection_name)
+        self.grid.movie_model.set_movies(shown)
         bar.setValue(position)
         QTimer.singleShot(0, lambda: bar.setValue(position))   # the layout only finishes later
 
@@ -571,6 +578,13 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(400, lambda: self._offer_review(pending_review))
 
     # ---------------------------------------------------------------------- actions --
+    def _open_from_grid(self, movie_id: int) -> None:
+        collection_id = filters.group_of(movie_id)
+        if collection_id is None:
+            self.open_movie(movie_id)
+        else:   # a grouped collection: enter it
+            self._open_filter(("collection", collection_id))
+
     def open_movie(self, movie_id: int) -> None:
         if self._sliding:
             return
@@ -753,7 +767,8 @@ class MainWindow(QMainWindow):
 
     def open_settings(self, focus_key: bool = False, intro: str = "") -> None:
         s = self.service.settings
-        old = {k: s.get(k) for k in ("library_path", "tmdb_api_key", "language")}
+        old = {k: s.get(k) for k in ("library_path", "tmdb_api_key", "language", "grouped_collections",
+                                                        "group_auto_collections")}
         had_key = self.service.has_key
         dialog = SettingsDialog(self.service, self, intro=intro, focus_key=focus_key)
         dialog.edit_home_requested.connect(self._edit_home)
@@ -766,6 +781,8 @@ class MainWindow(QMainWindow):
         if not dialog.saved:
             return
         s.update(**dialog.values())
+        if any(old[k] != s.get(k) for k in ("grouped_collections", "group_auto_collections")):
+            self.refresh_view()
         self._update_infobar()
         if not s.get("library_path"):
             self.stack.setCurrentIndex(0)
@@ -835,9 +852,12 @@ class MainWindow(QMainWindow):
             self.service.delete_tag(tag_id)
 
     def _open_tag(self, tag_id: int) -> None:
+        self._open_filter(("tag", tag_id))
+
+    def _open_filter(self, flt: filters.Filter) -> None:
         if self._detail is not None:
             self.close_movie()
-        self.flt = ("tag", tag_id)
+        self.flt = flt
         self.advanced = {}
         self.advanced_btn.setChecked(False)
         self.query = ""

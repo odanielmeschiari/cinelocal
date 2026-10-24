@@ -69,6 +69,8 @@ DEFAULT_SETTINGS = {
     "saved_filters": {},      # name -> criteria of the advanced search
     "home_sections": ["continue"],   # rows of the home screen, in order: "continue", "history", "favorites",
                                      # "watchlist" or "collection:<id>"
+    "grouped_collections": [],       # ids of the collections shown as a single poster in "All movies"
+    "group_auto_collections": False,   # also group the automatic (franchise) collections there
 }
 
 

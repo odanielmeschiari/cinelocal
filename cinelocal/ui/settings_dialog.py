@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import os
 
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
-                               QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+                               QListWidget, QListWidgetItem, QPushButton, QVBoxLayout, QWidget)
 
 from ..config import LANGUAGES, TRACK_LANGUAGES
 from ..service import LibraryService
+from .advanced_search import check_icon
 from .restore_dialog import RestoreDialog
 
 _HELP = ('Free: create an account at <a href="https://www.themoviedb.org/signup">themoviedb.org</a>, '
@@ -18,6 +19,54 @@ _HELP_SUBTITLES = ('With a key, the subtitle of each new movie is downloaded aut
                    '(or the metadata language), and saved next to the video. Free: create an account at '
                    '<a href="https://www.opensubtitles.com/en/consumers">opensubtitles.com</a> and register an API '
                    'consumer. There is a daily download limit; what is left is downloaded on the next scan.')
+
+
+class GroupCollectionsDialog(QDialog):
+    """Pick the collections that “All movies” shows as a single poster."""
+
+    def __init__(self, collections: list[dict], grouped: list[int], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Group collections")
+        self.setModal(True)
+        self.setMinimumSize(420, 400)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(26, 24, 26, 22)
+        root.setSpacing(10)
+        note = QLabel("In “All movies”, the checked collections show up as one poster (the cover of their first "
+                      "movie, named after the collection) that opens the collection. Click a collection to check "
+                      "or uncheck it.")
+        note.setObjectName("muted")
+        note.setWordWrap(True)
+        root.addWidget(note)
+        self.list = QListWidget()
+        for c in collections:
+            item = QListWidgetItem()
+            item.setText(c["name"])
+            item.setData(Qt.UserRole, c["id"])
+            item.setSizeHint(QSize(0, 36))
+            self._mark(item, c["id"] in grouped)
+            self.list.addItem(item)
+        self.list.itemClicked.connect(lambda item: self._mark(item, not item.data(Qt.UserRole + 1)))
+        root.addWidget(self.list, 1)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(self.reject)
+        ok = QPushButton("OK")
+        ok.setProperty("primary", True)
+        ok.clicked.connect(self.accept)
+        buttons.addWidget(cancel)
+        buttons.addWidget(ok)
+        root.addLayout(buttons)
+
+    @staticmethod
+    def _mark(item: QListWidgetItem, on: bool) -> None:
+        item.setData(Qt.UserRole + 1, on)
+        item.setIcon(check_icon(on))
+
+    def ids(self) -> list[int]:
+        items = (self.list.item(i) for i in range(self.list.count()))
+        return [item.data(Qt.UserRole) for item in items if item.data(Qt.UserRole + 1)]
 
 
 class SettingsDialog(QDialog):
@@ -31,6 +80,7 @@ class SettingsDialog(QDialog):
         self.saved = False
         self.restored = False
         s = service.settings
+        self.grouped = list(s.get("grouped_collections") or [])
         self.setWindowTitle("Settings")
         self.setModal(True)
         self.setMinimumWidth(620)
@@ -95,6 +145,10 @@ class SettingsDialog(QDialog):
         self.subtitle_language.setCurrentIndex(max(0, self.subtitle_language.findData(s.get("subtitle_language"))))
         form.addRow("Subtitle language", self.subtitle_language)
 
+        self.group_auto = QCheckBox("Group automatic collections (franchises) in “All movies”")
+        self.group_auto.setChecked(bool(s.get("group_auto_collections")))
+        form.addRow("Collections", self.group_auto)
+
         self.opensubtitles_key = QLineEdit(s.get("opensubtitles_api_key"))
         self.opensubtitles_key.setEchoMode(QLineEdit.Password)
         self.opensubtitles_key.setPlaceholderText("Optional: OpenSubtitles API key")
@@ -118,6 +172,10 @@ class SettingsDialog(QDialog):
         edit_home.setToolTip("Choose which rows are shown above the movies, and their order")
         edit_home.clicked.connect(self.edit_home_requested)
         buttons.addWidget(edit_home)
+        group = QPushButton("Group collections…")
+        group.setToolTip("Choose collections that “All movies” shows as a single poster")
+        group.clicked.connect(self._group_collections)
+        buttons.addWidget(group)
         restore = QPushButton("Restore app…")
         restore.clicked.connect(self._restore)
         buttons.addWidget(restore)
@@ -156,6 +214,11 @@ class SettingsDialog(QDialog):
     def _save(self) -> None:
         self.saved = True
         self.accept()
+
+    def _group_collections(self) -> None:
+        dialog = GroupCollectionsDialog(self.service.collections, self.grouped, self)
+        if dialog.exec():
+            self.grouped = dialog.ids()
 
     def _restore(self) -> None:
         dialog = RestoreDialog(self)
@@ -207,4 +270,6 @@ class SettingsDialog(QDialog):
             "audio_language": self.audio_language.currentData(),
             "subtitle_language": self.subtitle_language.currentData(),
             "opensubtitles_api_key": self.opensubtitles_key.text().strip(),
+            "grouped_collections": self.grouped,
+            "group_auto_collections": self.group_auto.isChecked(),
         }
