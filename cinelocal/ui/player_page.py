@@ -7,7 +7,8 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QRect, Qt, QTimer, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QCursor, QGuiApplication, QKeySequence, QLinearGradient, QPainter, QShortcut
+from PySide6.QtGui import (QColor, QCursor, QGuiApplication, QKeySequence, QLinearGradient, QPainter, QPalette,
+                           QShortcut)
 from PySide6.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
                                QSizePolicy, QSlider, QStyle, QToolTip, QVBoxLayout, QWidget, QWidgetAction)
 
@@ -72,6 +73,12 @@ def _clock(ms: int) -> str:
     hours, rest = divmod(max(0, ms) // 1000, 3600)
     minutes, seconds = divmod(rest, 60)
     return f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
+
+
+def _white_highlight(slider: QSlider) -> None:   # filled part of the player bars: white instead of the accent blue
+    palette = slider.palette()
+    palette.setColor(QPalette.Highlight, QColor("white"))
+    slider.setPalette(palette)
 
 
 class _SeekSlider(QSlider):
@@ -216,11 +223,13 @@ class VlcPlayerPage(QWidget):
         self.elapsed, self.total = QLabel("0:00"), QLabel("0:00")
         self.seek = _SeekSlider(Qt.Horizontal)
         self.seek.setRange(0, 1000)
+        _white_highlight(self.seek)
         self.seek.sliderPressed.connect(lambda: setattr(self, "_dragging", True))
         self.seek.sliderMoved.connect(lambda v: self._mp.set_position(v / 1000))
         self.seek.sliderReleased.connect(self._seek_released)
         self.volume = QSlider(Qt.Horizontal)
         self.volume.setRange(0, 100)
+        _white_highlight(self.volume)
         self.volume.setValue(100)
         self.volume.setFixedWidth(90)
         self.volume.setToolTip("Volume")
