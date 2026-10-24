@@ -107,10 +107,12 @@ class MovieDelegate(QStyledItemDelegate):
         top = option.rect.top() + 10
         poster = QRect(left, top, POSTER_W, POSTER_H)
 
+        pixmap = self._poster(movie, dpr)
+        if movie.get("group") is not None:
+            self._paint_stack(painter, poster, pixmap, movie)
         path = QPainterPath()
         path.addRoundedRect(QRectF(poster), 10, 10)
         painter.setClipPath(path)
-        pixmap = self._poster(movie, dpr)
         if pixmap is not None:
             painter.drawPixmap(poster.topLeft(), pixmap)
         else:
@@ -128,6 +130,23 @@ class MovieDelegate(QStyledItemDelegate):
 
         self._paint_texts(painter, poster, movie, hover or selected)
         painter.restore()
+
+    def _paint_stack(self, painter, poster, pixmap, movie):
+        """Two covers peeking out behind the poster (up and to the right): a pile, so a collection stands out."""
+        for step, shade in ((2, 170), (1, 120)):
+            rect = poster.translated(5 * step, -5 * step)
+            path = QPainterPath()
+            path.addRoundedRect(QRectF(rect), 10, 10)
+            painter.setClipPath(path)
+            if pixmap is not None:
+                painter.drawPixmap(rect.topLeft(), pixmap)
+            else:
+                self._paint_placeholder(painter, rect, movie)
+            painter.fillRect(rect, QColor(0, 0, 0, shade))
+            painter.setClipping(False)
+            painter.setPen(QPen(QColor(0, 0, 0, 200), 1))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRoundedRect(QRectF(rect), 10, 10)
 
     def _paint_placeholder(self, painter, rect, movie):
         gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
@@ -156,7 +175,8 @@ class MovieDelegate(QStyledItemDelegate):
         draw_icon(painter, icon, COLORS["accent_hover"], rect.adjusted(5, 5, -5, -5))
 
     def _paint_badges(self, painter, poster, movie):
-        if movie.get("group") is not None:   # a collection standing in for its movies: cover and title only
+        if movie.get("group") is not None:   # a collection standing in for its movies: only its own marker
+            self._disc(painter, QRectF(poster.right() - 34, poster.top() + 8, 26, 26), "collections")
             return
         x = poster.left() + 8
         if movie["rating"] and movie["votes"]:
