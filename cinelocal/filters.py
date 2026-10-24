@@ -226,7 +226,8 @@ def automatic_collections(movies: list[dict], collections: list[dict]) -> list[i
 def group_collections(movies: list[dict], membership: dict[int, set[int]], group_ids: list[int], name_of,
                       cover_of=None) -> list[dict]:
     """Replaces the movies of the collections in `group_ids` by one stand-in per collection, placed where its first
-    movie was. The stand-in takes the cover of the collection's earliest movie and the collection's name, unless
+    movie was. The stand-in takes the cover of the collection's earliest movie and the collection's name
+    (`stack_movies`: the next two movies, whose covers are piled behind it), unless
     `cover_of(collection id)` gives (image path, modification time): then that image is the cover."""
     owner = {}
     for collection_id in reversed(group_ids):   # a movie in two grouped collections goes to the first one listed
@@ -248,13 +249,14 @@ def group_collections(movies: list[dict], membership: dict[int, set[int]], group
             result.append(slot)
             continue
         group = members[slot]
-        cover = min(group, key=lambda m: (m.get("year") or m.get("year_guess") or 9999, m["sort_title"]))
+        group.sort(key=lambda m: (m.get("year") or m.get("year_guess") or 9999, m["sort_title"]))
+        cover = group[0]
         stand_in = {**cover, "id": -(GROUP_ID_BASE + slot), "poster_id": cover["id"], "group": slot,
                     "display_title": name_of(slot), "display_year": None, "status": "matched",
-                    "genres": [f"{len(group)} movies"]}
+                    "genres": [f"{len(group)} movies"], "stack_movies": group[1:3]}
         custom = cover_of(slot) if cover_of else None
         if custom:
-            stand_in.update(cover_file=custom[0], updated_at=custom[1], has_poster=True)
+            stand_in.update(cover_file=custom[0], updated_at=custom[1], has_poster=True, stack_movies=[])
         result.append(stand_in)
     return result
 

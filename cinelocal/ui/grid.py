@@ -17,6 +17,7 @@ from .theme import COLORS
 POSTER_W, POSTER_H = 180, 270
 CELL_W, CELL_H = 204, 346
 MAX_CACHED_POSTERS = 900
+STACK_STEP = 10   # how far (px) each cover of a collection's pile peeks out to the right of the one in front
 
 
 class MovieModel(QAbstractListModel):
@@ -108,41 +109,49 @@ class MovieDelegate(QStyledItemDelegate):
         poster = QRect(left, top, POSTER_W, POSTER_H)
 
         pixmap = self._poster(movie, dpr)
-        if movie.get("group") is not None and not movie.get("cover_file"):   # own poster: no pile
-            self._paint_stack(painter, poster, pixmap, movie)
+        cover = poster   # a collection's pile fits in the poster's box: the cover in front shrinks to make room
+        piled = movie.get("stack_movies") or []
+        if piled:
+            width = POSTER_W - STACK_STEP * len(piled)
+            height = round(POSTER_H * width / POSTER_W)
+            cover = QRect(poster.left(), poster.top() + POSTER_H - height, width, height)
+            self._paint_stack(painter, cover, piled, dpr)
         path = QPainterPath()
-        path.addRoundedRect(QRectF(poster), 10, 10)
+        path.addRoundedRect(QRectF(cover), 10, 10)
         painter.setClipPath(path)
-        if pixmap is not None:
-            painter.drawPixmap(poster.topLeft(), pixmap)
+        if pixmap is None:
+            self._paint_placeholder(painter, cover, movie)
+        elif piled:
+            painter.drawPixmap(cover, pixmap)
         else:
-            self._paint_placeholder(painter, poster, movie)
+            painter.drawPixmap(cover.topLeft(), pixmap)
         painter.setClipping(False)
 
-        self._paint_badges(painter, poster, movie)
+        self._paint_badges(painter, cover, movie)
 
         if selected or hover:
             pen = QPen(QColor(COLORS["accent"] if selected else COLORS["accent_hover"]),
                        3 if selected else 2)
             painter.setPen(pen)
             painter.setBrush(Qt.NoBrush)
-            painter.drawRoundedRect(QRectF(poster).adjusted(1, 1, -1, -1), 10, 10)
+            painter.drawRoundedRect(QRectF(cover).adjusted(1, 1, -1, -1), 10, 10)
 
         self._paint_texts(painter, poster, movie, hover or selected)
         painter.restore()
 
-    def _paint_stack(self, painter, poster, pixmap, movie):
-        """Two covers peeking out behind the poster (up and to the right): a pile, so a collection stands out."""
-        for step, shade in ((2, 170), (1, 120)):
-            rect = poster.translated(5 * step, -5 * step)
+    def _paint_stack(self, painter, front, piled, dpr):
+        """The covers of the next movies of a collection, piled behind the one in front (up and to the right)."""
+        for depth in range(len(piled), 0, -1):   # the farthest first
+            rect = front.translated(STACK_STEP * depth, -round(STACK_STEP * depth * POSTER_H / POSTER_W))
             path = QPainterPath()
             path.addRoundedRect(QRectF(rect), 10, 10)
             painter.setClipPath(path)
+            pixmap = self._poster(piled[depth - 1], dpr)
             if pixmap is not None:
-                painter.drawPixmap(rect.topLeft(), pixmap)
+                painter.drawPixmap(rect, pixmap)
             else:
-                self._paint_placeholder(painter, rect, movie)
-            painter.fillRect(rect, QColor(0, 0, 0, shade))
+                self._paint_placeholder(painter, rect, piled[depth - 1])
+            painter.fillRect(rect, QColor(0, 0, 0, 45 + 45 * depth))
             painter.setClipping(False)
             painter.setPen(QPen(QColor(0, 0, 0, 200), 1))
             painter.setBrush(Qt.NoBrush)

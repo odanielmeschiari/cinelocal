@@ -17,6 +17,7 @@ class GroupCollectionsTests(unittest.TestCase):
         result = group_collections(movies, {7: {1, 3}}, [7], lambda cid: "Star Wars")
         self.assertEqual([m["display_title"] for m in result], ["Star Wars", "Alien"])
         self.assertEqual(result[0]["poster_id"], 1)
+        self.assertEqual([m["id"] for m in result[0]["stack_movies"]], [3])
         self.assertEqual(result[0]["genres"], ["2 movies"])
         self.assertEqual(group_of(result[0]["id"]), 7)
         self.assertIsNone(group_of(5))
@@ -28,6 +29,7 @@ class GroupCollectionsTests(unittest.TestCase):
         result = group_collections(movies, {7: {1, 2}}, [7], str, lambda cid: ("/x/7.jpg", 5.0))
         self.assertEqual((result[0]["cover_file"], result[0]["updated_at"], result[0]["has_poster"]),
                          ("/x/7.jpg", 5.0, True))
+        self.assertEqual(result[0]["stack_movies"], [])
         self.assertNotIn("cover_file", group_collections(movies, {7: {1, 2}}, [7], str, lambda cid: None)[0])
 
     def test_automatic_collections(self):
