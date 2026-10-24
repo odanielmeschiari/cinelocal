@@ -71,6 +71,7 @@ DEFAULT_SETTINGS = {
                                      # "watchlist" or "collection:<id>"
     "grouped_collections": [],       # ids of the collections shown as a single poster in "All movies"
     "group_auto_collections": False,   # also group the automatic (franchise) collections there
+    "collection_covers": {},         # str(collection id) -> "cover" (own poster); anything else = stack of covers
 }
 
 

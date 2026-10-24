@@ -8,11 +8,13 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage
 
-from .config import CACHE_DIR
+from .config import CACHE_DIR, DATA_DIR
 from .tmdb import TMDBClient
 
 THUMB_WIDTH = 300
+COVER_WIDTH = 400
 _ROOT = CACHE_DIR / "images"
+_COVERS = DATA_DIR / "collection_covers"   # chosen by the user: not part of the cache
 
 
 def _file(kind: str, movie_id: int) -> Path:
@@ -29,6 +31,38 @@ def thumb_file(movie_id: int) -> Path:
 
 def backdrop_file(movie_id: int) -> Path:
     return _file("backdrops", movie_id)
+
+
+def collection_cover_file(collection_id: int) -> Path:
+    return _COVERS / f"{collection_id}.jpg"
+
+
+def collection_cover(collection_id: int) -> tuple[str, float] | None:
+    """(path, modification time) of the poster the user chose for a collection, if there is one."""
+    path = collection_cover_file(collection_id)
+    return (str(path), path.stat().st_mtime) if path.is_file() else None
+
+
+def store_collection_cover(collection_id: int, source: str) -> bool:
+    """Copies an image chosen by the user as the poster of a collection. False if it is not an image."""
+    image = QImage(source)
+    if image.isNull():
+        return False
+    if image.width() > COVER_WIDTH:
+        image = image.scaledToWidth(COVER_WIDTH, Qt.SmoothTransformation)
+    dest = collection_cover_file(collection_id)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.stem + ".tmp.jpg")
+    image.save(str(tmp), "JPEG", 90)
+    os.replace(tmp, dest)
+    return True
+
+
+def delete_collection_cover(collection_id: int) -> None:
+    try:
+        collection_cover_file(collection_id).unlink()
+    except OSError:
+        pass
 
 
 def _write_atomic(path: Path, data: bytes) -> None:

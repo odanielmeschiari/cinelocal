@@ -4,9 +4,11 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QCursor, QImage
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
                                QListWidget, QListWidgetItem, QPushButton, QVBoxLayout, QWidget)
 
+from .. import images
 from ..config import LANGUAGES, TRACK_LANGUAGES
 from ..service import LibraryService
 from .advanced_search import check_icon
@@ -22,19 +24,22 @@ _HELP_SUBTITLES = ('With a key, the subtitle of each new movie is downloaded aut
 
 
 class GroupCollectionsDialog(QDialog):
-    """Pick the collections that “All movies” shows as a single poster."""
+    """Pick the collections that “All movies” shows as a single poster, and how each one looks there:
+    a stack of covers (default) or a poster chosen by the user."""
 
-    def __init__(self, collections: list[dict], grouped: list[int], parent=None):
+    def __init__(self, collections: list[dict], grouped: list[int], styles: dict, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Group collections")
         self.setModal(True)
-        self.setMinimumSize(420, 400)
+        self.setMinimumSize(460, 480)
+        self.styles = dict(styles)   # str(collection id) -> "cover"
+        self.new_covers: dict[int, str] = {}   # collection id -> image file picked in this dialog
         root = QVBoxLayout(self)
         root.setContentsMargins(26, 24, 26, 22)
         root.setSpacing(10)
-        note = QLabel("In “All movies”, the checked collections show up as one poster (the cover of their first "
-                      "movie, named after the collection) that opens the collection. Click a collection to check "
-                      "or uncheck it.")
+        note = QLabel("In “All movies”, the checked collections show up as one poster named after the collection, "
+                      "which opens it. Click the box to check or uncheck; select a collection to choose how it "
+                      "looks.")
         note.setObjectName("muted")
         note.setWordWrap(True)
         root.addWidget(note)
@@ -46,8 +51,22 @@ class GroupCollectionsDialog(QDialog):
             item.setSizeHint(QSize(0, 36))
             self._mark(item, c["id"] in grouped)
             self.list.addItem(item)
-        self.list.itemClicked.connect(lambda item: self._mark(item, not item.data(Qt.UserRole + 1)))
+        self.list.itemClicked.connect(self._clicked)
+        self.list.currentItemChanged.connect(self._load_look)
         root.addWidget(self.list, 1)
+
+        look = QHBoxLayout()
+        self.look = QComboBox()
+        self.look.addItem("Stack of covers", "stack")
+        self.look.addItem("Own poster", "cover")
+        self.look.activated.connect(self._look_chosen)
+        self.pick = QPushButton("Choose poster…")
+        self.pick.clicked.connect(self._pick_poster)
+        look.addWidget(QLabel("Look"))
+        look.addWidget(self.look, 1)
+        look.addWidget(self.pick)
+        root.addLayout(look)
+
         buttons = QHBoxLayout()
         buttons.addStretch(1)
         cancel = QPushButton("Cancel")
@@ -58,11 +77,47 @@ class GroupCollectionsDialog(QDialog):
         buttons.addWidget(cancel)
         buttons.addWidget(ok)
         root.addLayout(buttons)
+        self.list.setCurrentRow(0)
+        self._load_look()
 
     @staticmethod
     def _mark(item: QListWidgetItem, on: bool) -> None:
         item.setData(Qt.UserRole + 1, on)
         item.setIcon(check_icon(on))
+
+    def _clicked(self, item: QListWidgetItem) -> None:
+        if self.list.viewport().mapFromGlobal(QCursor.pos()).x() < 40:   # only the box toggles
+            self._mark(item, not item.data(Qt.UserRole + 1))
+
+    def _current_id(self) -> int | None:
+        item = self.list.currentItem()
+        return item.data(Qt.UserRole) if item else None
+
+    def _load_look(self, *_args) -> None:
+        collection_id = self._current_id()
+        self.look.setEnabled(collection_id is not None)
+        self.look.setCurrentIndex(1 if self.styles.get(str(collection_id)) == "cover" else 0)
+        self.pick.setEnabled(self.look.currentData() == "cover")
+
+    def _look_chosen(self) -> None:
+        collection_id = self._current_id()
+        if self.look.currentData() == "cover":
+            if collection_id in self.new_covers or images.collection_cover(collection_id) or self._pick_poster():
+                self.styles[str(collection_id)] = "cover"
+        else:
+            self.styles.pop(str(collection_id), None)
+        self._load_look()
+
+    def _pick_poster(self) -> bool:
+        collection_id = self._current_id()
+        path, _ = QFileDialog.getOpenFileName(self, "Choose poster", os.path.expanduser("~"),
+                                              "Images (*.jpg *.jpeg *.png *.webp *.bmp)")
+        if not path or QImage(path).isNull():
+            return False
+        self.new_covers[collection_id] = path
+        self.styles[str(collection_id)] = "cover"
+        self._load_look()
+        return True
 
     def ids(self) -> list[int]:
         items = (self.list.item(i) for i in range(self.list.count()))
@@ -81,6 +136,8 @@ class SettingsDialog(QDialog):
         self.restored = False
         s = service.settings
         self.grouped = list(s.get("grouped_collections") or [])
+        self.cover_styles = dict(s.get("collection_covers") or {})
+        self.new_covers: dict[int, str] = {}   # posters picked for collections, copied when the settings are saved
         self.setWindowTitle("Settings")
         self.setModal(True)
         self.setMinimumWidth(620)
@@ -212,13 +269,18 @@ class SettingsDialog(QDialog):
         return box
 
     def _save(self) -> None:
+        for collection_id, source in self.new_covers.items():
+            if self.cover_styles.get(str(collection_id)) == "cover":
+                images.store_collection_cover(collection_id, source)
         self.saved = True
         self.accept()
 
     def _group_collections(self) -> None:
-        dialog = GroupCollectionsDialog(self.service.collections, self.grouped, self)
+        dialog = GroupCollectionsDialog(self.service.collections, self.grouped, self.cover_styles, self)
         if dialog.exec():
             self.grouped = dialog.ids()
+            self.cover_styles = dialog.styles
+            self.new_covers.update(dialog.new_covers)
 
     def _restore(self) -> None:
         dialog = RestoreDialog(self)
@@ -272,4 +334,5 @@ class SettingsDialog(QDialog):
             "opensubtitles_api_key": self.opensubtitles_key.text().strip(),
             "grouped_collections": self.grouped,
             "group_auto_collections": self.group_auto.isChecked(),
+            "collection_covers": self.cover_styles,
         }

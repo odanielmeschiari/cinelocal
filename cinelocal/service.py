@@ -673,6 +673,7 @@ class LibraryService(QObject):
 
     def delete_collection(self, collection_id: int) -> None:
         self.db.delete_collection(collection_id)
+        images.delete_collection_cover(collection_id)
         self._reload_collections()
 
     def collection_name(self, collection_id: int) -> str:

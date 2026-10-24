@@ -80,7 +80,7 @@ class MovieDelegate(QStyledItemDelegate):
             return self._cache[key]
         pixmap = None
         if movie["has_poster"]:
-            loaded = QPixmap(str(images.thumb_file(movie.get("poster_id", movie["id"]))))
+            loaded = QPixmap(movie.get("cover_file") or str(images.thumb_file(movie.get("poster_id", movie["id"]))))
             if not loaded.isNull():
                 tw, th = int(POSTER_W * dpr), int(POSTER_H * dpr)
                 scaled = loaded.scaled(tw, th, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
@@ -108,7 +108,7 @@ class MovieDelegate(QStyledItemDelegate):
         poster = QRect(left, top, POSTER_W, POSTER_H)
 
         pixmap = self._poster(movie, dpr)
-        if movie.get("group") is not None:
+        if movie.get("group") is not None and not movie.get("cover_file"):   # own poster: no pile
             self._paint_stack(painter, poster, pixmap, movie)
         path = QPainterPath()
         path.addRoundedRect(QRectF(poster), 10, 10)

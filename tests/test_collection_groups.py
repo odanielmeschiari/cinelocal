@@ -23,6 +23,13 @@ class GroupCollectionsTests(unittest.TestCase):
         self.assertIsNone(group_of(-3))   # a series
         self.assertEqual(result[0]["id"], -(GROUP_ID_BASE + 7))
 
+    def test_own_cover(self):
+        movies = [movie(1, "A", 2000), movie(2, "B", 2001)]
+        result = group_collections(movies, {7: {1, 2}}, [7], str, lambda cid: ("/x/7.jpg", 5.0))
+        self.assertEqual((result[0]["cover_file"], result[0]["updated_at"], result[0]["has_poster"]),
+                         ("/x/7.jpg", 5.0, True))
+        self.assertNotIn("cover_file", group_collections(movies, {7: {1, 2}}, [7], str, lambda cid: None)[0])
+
     def test_automatic_collections(self):
         movies = [{**movie(1, "A", 2000), "franchise": "Star Wars Collection"}, movie(2, "B", 2001)]
         collections = [{"id": 1, "name": "star wars collection"}, {"id": 2, "name": "Mine"}]

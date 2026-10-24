@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLab
                                QInputDialog, QLineEdit, QMainWindow, QMenu, QMessageBox, QProgressBar,
                                QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
-from .. import filters
+from .. import filters, images
 from ..service import LibraryService
 from ..utils import star_text
 from .advanced_search import AdvancedSearch
@@ -386,8 +386,10 @@ class MainWindow(QMainWindow):
             group_ids = list(self.service.settings.get("grouped_collections") or [])
             if self.service.settings.get("group_auto_collections"):
                 group_ids += filters.automatic_collections(self.service.movies, self.service.collections)
-            shown = filters.group_collections(visible, self.service.membership, group_ids,
-                                              self.service.collection_name)
+            styles = self.service.settings.get("collection_covers") or {}
+            shown = filters.group_collections(
+                visible, self.service.membership, group_ids, self.service.collection_name,
+                lambda cid: images.collection_cover(cid) if styles.get(str(cid)) == "cover" else None)
         self.grid.movie_model.set_movies(shown)
         bar.setValue(position)
         QTimer.singleShot(0, lambda: bar.setValue(position))   # the layout only finishes later
@@ -767,8 +769,7 @@ class MainWindow(QMainWindow):
 
     def open_settings(self, focus_key: bool = False, intro: str = "") -> None:
         s = self.service.settings
-        old = {k: s.get(k) for k in ("library_path", "tmdb_api_key", "language", "grouped_collections",
-                                                        "group_auto_collections")}
+        old = {k: s.get(k) for k in ("library_path", "tmdb_api_key", "language")}
         had_key = self.service.has_key
         dialog = SettingsDialog(self.service, self, intro=intro, focus_key=focus_key)
         dialog.edit_home_requested.connect(self._edit_home)
@@ -781,8 +782,7 @@ class MainWindow(QMainWindow):
         if not dialog.saved:
             return
         s.update(**dialog.values())
-        if any(old[k] != s.get(k) for k in ("grouped_collections", "group_auto_collections")):
-            self.refresh_view()
+        self.refresh_view()   # grouped collections and their covers may have changed
         self._update_infobar()
         if not s.get("library_path"):
             self.stack.setCurrentIndex(0)

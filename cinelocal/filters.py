@@ -223,9 +223,11 @@ def automatic_collections(movies: list[dict], collections: list[dict]) -> list[i
     return [c["id"] for c in collections if c["name"].lower() in franchises]
 
 
-def group_collections(movies: list[dict], membership: dict[int, set[int]], group_ids: list[int], name_of) -> list[dict]:
+def group_collections(movies: list[dict], membership: dict[int, set[int]], group_ids: list[int], name_of,
+                      cover_of=None) -> list[dict]:
     """Replaces the movies of the collections in `group_ids` by one stand-in per collection, placed where its first
-    movie was. The stand-in takes the cover of the collection's earliest movie and the collection's name."""
+    movie was. The stand-in takes the cover of the collection's earliest movie and the collection's name, unless
+    `cover_of(collection id)` gives (image path, modification time): then that image is the cover."""
     owner = {}
     for collection_id in reversed(group_ids):   # a movie in two grouped collections goes to the first one listed
         for movie_id in membership.get(collection_id, ()):
@@ -247,9 +249,13 @@ def group_collections(movies: list[dict], membership: dict[int, set[int]], group
             continue
         group = members[slot]
         cover = min(group, key=lambda m: (m.get("year") or m.get("year_guess") or 9999, m["sort_title"]))
-        result.append({**cover, "id": -(GROUP_ID_BASE + slot), "poster_id": cover["id"], "group": slot,
-                       "display_title": name_of(slot), "display_year": None, "status": "matched",
-                       "genres": [f"{len(group)} movies"]})
+        stand_in = {**cover, "id": -(GROUP_ID_BASE + slot), "poster_id": cover["id"], "group": slot,
+                    "display_title": name_of(slot), "display_year": None, "status": "matched",
+                    "genres": [f"{len(group)} movies"]}
+        custom = cover_of(slot) if cover_of else None
+        if custom:
+            stand_in.update(cover_file=custom[0], updated_at=custom[1], has_poster=True)
+        result.append(stand_in)
     return result
 
 
