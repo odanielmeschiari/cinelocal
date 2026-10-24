@@ -20,7 +20,6 @@ from .home import HomeSection
 from .icons import IconButton
 from .match_dialog import MatchDialog
 from .theme import COLORS
-from .widgets import rounded_pixmap
 
 BACKDROP_HEIGHT = 380
 
@@ -130,9 +129,9 @@ class MovieDialog(QWidget):
 
         actions = self._actions = QHBoxLayout()   # under the poster and details, from the poster's left edge
         actions.setSpacing(12)
-        self.watch_btn = IconButton("play", object_name="", color="#ffffff", text="Play")   # white over the blue square
+        self.watch_btn = IconButton("play", object_name="", color="#141414", text="Play")   # dark over the white square
         self.watch_btn.setToolTip("Watch")
-        self.watch_btn.setStyleSheet("QPushButton { border: none; border-radius: 10px; padding: 0; }")
+        self.watch_btn.setStyleSheet("QPushButton { border: none; padding: 0; }")
         self.watch_btn.setProperty("primary", True)
         self.watch_btn.clicked.connect(self._watch)
         self.fav_btn = IconButton("favorite", "favorite_on", checked_color="text")   # the filled heart is enough
@@ -322,7 +321,7 @@ class MovieDialog(QWidget):
         if pixmap.isNull():
             self.poster.setPixmap(QPixmap())
             self.poster.setStyleSheet(
-                f"background:{COLORS['surface2']}; border-radius:12px; color:{COLORS['muted']};")
+                f"background:{COLORS['surface2']}; color:{COLORS['muted']};")
             self.poster.setText("No poster")
             return
         self.poster.setStyleSheet("")
@@ -331,7 +330,7 @@ class MovieDialog(QWidget):
         x, y = (scaled.width() - int(POSTER_SIZE[0] * dpr)) // 2, (scaled.height() - int(POSTER_SIZE[1] * dpr)) // 2
         cropped = scaled.copy(x, y, int(POSTER_SIZE[0] * dpr), int(POSTER_SIZE[1] * dpr))
         cropped.setDevicePixelRatio(dpr)
-        self.poster.setPixmap(rounded_pixmap(cropped, 12))
+        self.poster.setPixmap(cropped)
 
     def _load_backdrop(self, m: dict) -> None:
         pixmap = QPixmap(str(images.backdrop_file(m["id"]))) if m["has_backdrop"] else QPixmap()

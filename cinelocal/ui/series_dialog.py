@@ -15,7 +15,6 @@ from .edit_dialog import EditDialog
 from .icons import IconButton
 from .match_dialog import MatchDialog
 from .theme import COLORS
-from .widgets import rounded_pixmap
 
 BACKDROP_HEIGHT = 340
 EP_BOX, EP_ICON = 36, 20   # episode row buttons: side of the button and of the icon (px)
@@ -117,8 +116,8 @@ class SeriesDialog(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(12)
-        self.watch_btn = IconButton("play", object_name="", color="#ffffff", text="Play")   # white over the blue square
-        self.watch_btn.setStyleSheet("QPushButton { border: none; border-radius: 10px; padding: 0; }")
+        self.watch_btn = IconButton("play", object_name="", color="#141414", text="Play")   # dark over the white square
+        self.watch_btn.setStyleSheet("QPushButton { border: none; padding: 0; }")
         self.watch_btn.setProperty("primary", True)
         self.watch_btn.clicked.connect(lambda: self.play_requested.emit(self.movie_id))
         self.fav_btn = IconButton("favorite", "favorite_on", checked_color="text")   # the filled heart is enough
@@ -280,7 +279,7 @@ class SeriesDialog(QWidget):
         row = QFrame()
         row.setObjectName("episode")
         row.setStyleSheet(f"QFrame#episode {{ background: {COLORS['surface']};"
-                          f" border: 1px solid {COLORS['border']}; border-radius: 10px; }}"
+                          f" border: 1px solid {COLORS['border']}; }}"
                           f" QFrame#episode QLabel {{ font-size: 10pt; }}")   # compact, unlike the details above
         layout = QHBoxLayout(row)
         layout.setContentsMargins(14, 10, 14, 10)
@@ -326,7 +325,7 @@ class SeriesDialog(QWidget):
         if pixmap.isNull():
             self.poster.setPixmap(QPixmap())
             self.poster.setStyleSheet(
-                f"background:{COLORS['surface2']}; border-radius:12px; color:{COLORS['muted']};")
+                f"background:{COLORS['surface2']}; color:{COLORS['muted']};")
             self.poster.setText("No poster")
             return
         self.poster.setStyleSheet("")
@@ -334,7 +333,7 @@ class SeriesDialog(QWidget):
         scaled = pixmap.scaled(w, h, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
         cropped = scaled.copy((scaled.width() - w) // 2, (scaled.height() - h) // 2, w, h)
         cropped.setDevicePixelRatio(dpr)
-        self.poster.setPixmap(rounded_pixmap(cropped, 12))
+        self.poster.setPixmap(cropped)
 
     def _on_movie_changed(self, movie_id: int) -> None:
         if movie_id == self.movie_id:

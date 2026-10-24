@@ -80,7 +80,7 @@ class NumberField(QWidget):
             button.setArrowType(kind)
             button.setAutoRepeat(True)
             button.setFixedSize(22, 15)
-            button.setStyleSheet("QToolButton { padding: 0; border-radius: 4px; }")
+            button.setStyleSheet("QToolButton { padding: 0; }")
             button.clicked.connect(lambda _c=False, d=direction: self._step_by(d))
             arrows.addWidget(button)
         menu = QMenu(self)
@@ -93,7 +93,7 @@ class NumberField(QWidget):
         drop.setPopupMode(QToolButton.InstantPopup)
         drop.setFixedSize(26, 31)
         drop.setToolTip("Preset values")
-        drop.setStyleSheet("QToolButton { padding: 0; border-radius: 6px; }")
+        drop.setStyleSheet("QToolButton { padding: 0; }")
 
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)

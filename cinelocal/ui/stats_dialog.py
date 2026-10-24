@@ -12,7 +12,7 @@ from .theme import COLORS
 
 def _card(value: str, caption: str) -> QFrame:
     card = QFrame()
-    card.setStyleSheet(f"QFrame {{ background: {COLORS['surface2']}; border-radius: 12px; }}")
+    card.setStyleSheet(f"QFrame {{ background: {COLORS['surface2']}; }}")
     layout = QVBoxLayout(card)
     layout.setContentsMargins(16, 12, 16, 12)
     layout.setSpacing(2)

@@ -117,7 +117,7 @@ class MovieDelegate(QStyledItemDelegate):
             cover = QRect(poster.left(), poster.top() + POSTER_H - height, width, height)
             self._paint_stack(painter, cover, piled, dpr)
         path = QPainterPath()
-        path.addRoundedRect(QRectF(cover), 10, 10)
+        path.addRect(QRectF(cover))
         painter.setClipPath(path)
         if pixmap is None:
             self._paint_placeholder(painter, cover, movie)
@@ -134,7 +134,7 @@ class MovieDelegate(QStyledItemDelegate):
                        3 if selected else 2)
             painter.setPen(pen)
             painter.setBrush(Qt.NoBrush)
-            painter.drawRoundedRect(QRectF(cover).adjusted(1, 1, -1, -1), 10, 10)
+            painter.drawRect(QRectF(cover).adjusted(1, 1, -1, -1))
 
         self._paint_texts(painter, poster, movie, hover or selected)
         painter.restore()
@@ -144,7 +144,7 @@ class MovieDelegate(QStyledItemDelegate):
         for depth in range(len(piled), 0, -1):   # the farthest first
             rect = front.translated(STACK_STEP * depth, -round(STACK_STEP * depth * POSTER_H / POSTER_W))
             path = QPainterPath()
-            path.addRoundedRect(QRectF(rect), 10, 10)
+            path.addRect(QRectF(rect))
             painter.setClipPath(path)
             pixmap = self._poster(piled[depth - 1], dpr)
             if pixmap is not None:
@@ -155,7 +155,7 @@ class MovieDelegate(QStyledItemDelegate):
             painter.setClipping(False)
             painter.setPen(QPen(QColor(0, 0, 0, 200), 1))
             painter.setBrush(Qt.NoBrush)
-            painter.drawRoundedRect(QRectF(rect), 10, 10)
+            painter.drawRect(QRectF(rect))
 
     def _paint_placeholder(self, painter, rect, movie):
         gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
@@ -195,7 +195,7 @@ class MovieDelegate(QStyledItemDelegate):
         rated = bool(movie.get("user_rating"))
         if rated:   # the user's own stars, in the bottom right corner
             self._pill(painter, QRect(poster.right() - 54, poster.bottom() - 28, 46, 20),
-                       f"★ {movie['user_rating']:g}", QColor(COLORS["accent"]))
+                       f"★ {movie['user_rating']:g}", QColor(COLORS["accent"]), COLORS["bg"])
         if movie["status"] in ("ambiguous", "not_found"):
             self._pill(painter, QRect(poster.right() - 70, poster.bottom() - (52 if rated else 28), 62, 20),
                        "Review", QColor(COLORS["warn"]), "#1b1200")
