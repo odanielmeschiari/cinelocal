@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from string import Template
 
-from PySide6.QtGui import QColor, QFont, QPalette
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QColor, QFont, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import QApplication
+
+from ..config import CACHE_DIR
 
 COLORS = {
     "bg": "#141414",
@@ -31,10 +34,11 @@ QLineEdit, QComboBox, QTextEdit, QSpinBox, QDoubleSpinBox {
     padding: 8px 12px; selection-background-color: $accent;
 }
 QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: $accent; }
+QComboBox { combobox-popup: 0; }
 QComboBox::drop-down { border: none; width: 26px; }
 QComboBox QAbstractItemView {
     background: $surface2; border: 1px solid $border; outline: 0;
-    selection-background-color: $accent_dark; padding: 4px;
+    selection-background-color: $accent_dark; selection-color: $text; padding: 4px;
 }
 
 QPushButton, QToolButton {
@@ -89,8 +93,8 @@ QProgressBar { background: $surface2; border: none; border-radius: 4px; max-heig
 QProgressBar::chunk { background: $accent; border-radius: 4px; }
 QStatusBar { background: $surface; border-top: 1px solid $border; }
 QStatusBar::item { border: none; }
-QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid $border; background: $surface; }
-QCheckBox::indicator:checked { background: $accent; border-color: $accent; }
+QCheckBox::indicator, QListWidget::indicator { width: 16px; height: 16px; border: 1px solid $muted; background: $surface; }
+QCheckBox::indicator:checked, QListWidget::indicator:checked { image: url($check); border-color: $accent; }
 
 QWidget#scrim { background: rgba(0, 0, 0, 170); }
 QFrame#overlayPanel { background: $surface; border: 1px solid $border; }
@@ -108,8 +112,24 @@ a { color: $accent_hover; }
 """)
 
 
+def _check_mark() -> str:
+    """Path of the check mark drawn inside the checked boxes (QSS only takes images from files)."""
+    path = CACHE_DIR / "check.png"
+    pixmap = QPixmap(32, 32)
+    pixmap.setDevicePixelRatio(2)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(QPen(QColor(COLORS["accent"]), 2, Qt.SolidLine, Qt.SquareCap, Qt.MiterJoin))
+    painter.drawPolyline([QPointF(3.5, 8.2), QPointF(6.6, 11.3), QPointF(12.2, 4.4)])
+    painter.end()
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    pixmap.save(str(path), "PNG")
+    return path.as_posix()
+
+
 def stylesheet() -> str:
-    return _QSS.safe_substitute(COLORS)
+    return _QSS.safe_substitute(COLORS, check=_check_mark())
 
 
 def apply_theme(app: QApplication) -> None:

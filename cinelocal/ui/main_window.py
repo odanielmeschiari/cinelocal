@@ -128,6 +128,7 @@ class MainWindow(QMainWindow):
         for sort_id, label, *_ in filters.SORT_OPTIONS:
             self.sort_combo.addItem(label, sort_id)
         self.sort_combo.setCurrentIndex(max(0, self.sort_combo.findData(self.sort_id)))
+        self.sort_combo.setMaxVisibleItems(self.sort_combo.count())   # no scrolling in the list
         rescan = IconButton("refresh", box=TOOL_BOX, size=TOOL_ICON)
         rescan.setToolTip("Rescan")
         rescan.clicked.connect(self.service.start_scan)
@@ -454,12 +455,13 @@ class MainWindow(QMainWindow):
 
     def _manage_sidebar_items(self, flt: filters.Filter) -> None:
         kind, value = flt
+        column = "favorite" if kind == "favorites" else kind   # the movie field is singular
         if kind in ("favorites", "watchlist", "watched"):
             movies = self.service.movies
             if kind == "watched":
                 selected = {m["id"] for m in movies if m["watched"] == value}
             else:
-                selected = {m["id"] for m in movies if m[kind]}
+                selected = {m["id"] for m in movies if m[column]}
         elif kind == "collection":
             movies = [m for m in self.service.movies if m.get("kind") == "movie"]
             selected = set(self.service.membership.get(value, ()))
@@ -477,8 +479,8 @@ class MainWindow(QMainWindow):
         updated = dialog.selected_ids()
         added, removed = updated - selected, selected - updated
         if kind in ("favorites", "watchlist"):
-            self.service.set_flag(sorted(added), kind, True)
-            self.service.set_flag(sorted(removed), kind, False)
+            self.service.set_flag(sorted(added), column, True)
+            self.service.set_flag(sorted(removed), column, False)
         elif kind == "watched":
             self.service.set_flag(sorted(added), "watched", value)
             self.service.set_flag(sorted(removed), "watched", not value)

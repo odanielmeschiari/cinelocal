@@ -19,7 +19,7 @@ _icons: dict[bool, QIcon] = {}
 
 
 def check_icon(checked: bool) -> QIcon:
-    """Empty box, or the same box with just a blue check mark (drawn, so it needs no image files)."""
+    """Empty box, or the same box with just a check mark (drawn, so it needs no image files)."""
     if checked not in _icons:
         size, ratio = 16, 2
         pixmap = QPixmap(size * ratio, size * ratio)
@@ -28,7 +28,7 @@ def check_icon(checked: bool) -> QIcon:
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(QPen(QColor(COLORS["muted"]), 1.2))
-        painter.drawRoundedRect(1, 1, size - 2, size - 2, 4, 4)
+        painter.drawRect(1, 1, size - 2, size - 2)
         if checked:
             painter.setPen(QPen(QColor(COLORS["accent_hover"]), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
             painter.drawPolyline([QPointF(3.8, 8.4), QPointF(6.9, 11.5), QPointF(12.4, 4.6)])
@@ -38,7 +38,7 @@ def check_icon(checked: bool) -> QIcon:
 
 
 class Check(QCheckBox):
-    """Check box drawn as a blue check mark (the whole row, icon included, is clickable)."""
+    """Check box drawn as a check mark (the whole row, icon included, is clickable)."""
 
     def __init__(self, text: str, parent=None):
         super().__init__(text, parent)
