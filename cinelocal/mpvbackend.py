@@ -34,6 +34,7 @@ PROFILES = {
     "auto": (len(TIERS) - 1, None),
     "high": (len(TIERS) - 1, len(TIERS) - 1),   # starts on the best scaler and steps back if frames are dropped
 }
+DIAG_ENV = "CINELOCAL_PLAYER_LOG"   # path of a text file: when set, one line of measurements is appended per sample
 ADAPT_EVERY = 2.0      # seconds between two samples of the frame counters
 CLIMB_AFTER = 15.0     # seconds without late/dropped frames before trying the next tier
 DROP_LIMIT = 3         # late or dropped frames within one sample that mean "this tier is too heavy"
@@ -329,6 +330,27 @@ class _Player:
         except (KeyError, TypeError, ZeroDivisionError):
             return False
 
+    def _log_diagnostics(self, late) -> None:
+        """Opt-in (environment variable CINELOCAL_PLAYER_LOG=<file>): appends what libmpv is really doing, to measure
+        a tier on a given machine. Does nothing, and costs nothing, when the variable is not set."""
+        path = os.environ.get(DIAG_ENV)
+        if not path:
+            return
+        video, window = self._get("video_params", {}) or {}, self._get("osd_dimensions", {}) or {}
+        fields = (("mpv", self._get("mpv_version", "?")), ("vo", self._get("current_vo", "?")),
+                  ("hwdec", self._get("hwdec_current", "?")), ("tier", f"{self._tier}:{TIERS[self._tier][0]}"),
+                  ("video", f"{video.get('dw', '?')}x{video.get('dh', '?')}"),
+                  ("window", f"{window.get('w', '?')}x{window.get('h', '?')}"),
+                  ("late_in_sample", "?" if late is None else late),
+                  ("dropped", self._get("frame_drop_count", 0)), ("vo_delayed", self._get("vo_delayed_frame_count", 0)),
+                  ("decoder_dropped", self._get("decoder_frame_drop_count", 0)))
+        line = time.strftime("%H:%M:%S ") + " ".join(f"{k}={str(v).replace(' ', '-')}" for k, v in fields)
+        try:
+            with open(path, "a", encoding="utf-8") as log:
+                log.write(line + "\n")
+        except OSError:
+            pass   # a log that cannot be written must never disturb playback
+
     def _adapt(self) -> None:
         """Called by get_state() (the page polls it 4x per second): climbs or drops one tier by what was measured."""
         now = time.monotonic()
@@ -340,6 +362,7 @@ class _Player:
             return
         total = self._get("frame_drop_count", 0) + self._get("vo_delayed_frame_count", 0)
         late, self._counted = (None if self._counted is None else total - self._counted), total
+        self._log_diagnostics(late)
         if late is None or not self._upscaling():
             self._clean_since = now
         elif late >= DROP_LIMIT:

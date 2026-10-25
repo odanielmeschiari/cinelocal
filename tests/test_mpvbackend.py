@@ -301,6 +301,37 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(mb._profile, "auto")
 
 
+class DiagnosticsLogTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.log = Path(self.tmp.name) / "player.log"
+
+    def sample(self, env):
+        with mock.patch.dict(mb.os.environ, env, clear=False):
+            p = make_player(mpv_version="mpv 0.37.0", current_vo="gpu", hwdec_current="vaapi")
+            p._counted = 0
+            p._adapt()
+        return p
+
+    def test_nothing_is_written_when_the_variable_is_not_set(self):
+        with mock.patch.dict(mb.os.environ):
+            mb.os.environ.pop(mb.DIAG_ENV, None)
+            make_player()._log_diagnostics(0)
+        self.assertFalse(self.log.exists())
+
+    def test_one_line_with_the_renderer_decoder_and_counters(self):
+        self.sample({mb.DIAG_ENV: str(self.log)})
+        line = self.log.read_text(encoding="utf-8").strip()
+        for part in ("mpv=mpv-0.37.0", "vo=gpu", "hwdec=vaapi", "tier=1:spline36", "video=1280x720",
+                     "window=1920x1080", "late_in_sample=0", "dropped=0"):
+            self.assertIn(part, line)
+
+    def test_an_unwritable_log_does_not_disturb_playback(self):
+        p = self.sample({mb.DIAG_ENV: str(Path(self.tmp.name) / "missing-folder" / "player.log")})
+        self.assertEqual(p.get_state(), mb.State.Playing)
+
+
 class WindowsDllLookupTests(unittest.TestCase):
     """_use_bundled_mpv() with a pretend Windows: where it looks for the DLL and what it changes."""
 
