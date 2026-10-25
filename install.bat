@@ -27,6 +27,9 @@ if not exist "%PREFIX%\venv\Scripts\python.exe" %PY% -m venv "%PREFIX%\venv" || 
 "%PREFIX%\venv\Scripts\python.exe" -m pip install --upgrade pip >nul
 "%PREFIX%\venv\Scripts\python.exe" -m pip install -r "%PREFIX%\requirements.txt" || goto fail
 
+echo ==^> Downloading libmpv for GPU upscaling (optional, about 30 MB)
+"%PREFIX%\venv\Scripts\python.exe" "%SRC%packaging\fetch_libmpv.py" "%PREFIX%\libmpv" || echo WARNING: libmpv could not be installed. The built-in player will use VLC, without GPU upscaling.
+
 echo ==^> Creating the Start Menu shortcut
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%LNK%'); $s.TargetPath='%PREFIX%\venv\Scripts\pythonw.exe'; $s.Arguments='\"%PREFIX%\main.py\"'; $s.WorkingDirectory='%PREFIX%'; $s.IconLocation='%PREFIX%\assets\cinelocal.ico'; $s.Description='CineLocal'; $s.Save()" || goto fail
 

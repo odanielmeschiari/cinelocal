@@ -175,11 +175,12 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   to open it in the other one. The built-in player remembers where you stopped and resumes from there, even after closing the app.
   In the player, the **⚙** gear gathers **Audio** and **Subtitles** (tracks that come in the file) and **Picture**
   (brightness, contrast, color and sharpness). In fullscreen, the controls and the pointer disappear after a few seconds without moving the mouse.
-  **Upscaling** (Settings, on by default): if libmpv is installed (`libmpv2`/`libmpv1` on Linux, `install.sh` tries to install it;
-  on Windows put `mpv-2.dll` in a folder on your `PATH`, or set `MPV_DIR` when building the packaged app to bundle it) the built-in player uses it instead of VLC and
+  **Upscaling** (Settings, on by default): if libmpv is available, the built-in player uses it instead of VLC and
   enlarges videos smaller than the window on the GPU. It starts on a light scaler and climbs to better ones while
   playback stays smooth, and steps back if frames are dropped, so each machine settles on what it can afford.
-  Without libmpv, or with the option **Off**, the player is VLC exactly as before.
+  libmpv is installed for you: `install.sh` installs `libmpv2` (or `libmpv1`) with apt, `install.bat` downloads the
+  LGPL build (about 30 MB, SHA-256 checked) with `packaging/fetch_libmpv.py`, and the Windows release bundles it.
+  Settings shows whether libmpv was found. Without it, or with the option **Off**, the player is VLC exactly as before.
 
   ![Player](examples/player.png "Player")
   

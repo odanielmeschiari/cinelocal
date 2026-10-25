@@ -35,6 +35,7 @@ MIN_UPSCALE = 1.05     # the picture must be at least 5% larger than the video f
 _learned = {"start": START_TIER, "ceiling": len(TIERS) - 1}   # shared by every movie of this session
 _engine = None
 _failed = False
+_reason = ""      # why libmpv could not be used (shown in Settings)
 
 
 class State:
@@ -74,12 +75,18 @@ def _options(extra: dict | None = None) -> dict:
 
 
 def _use_bundled_mpv() -> None:
-    """In the packaged Windows build, lets python-mpv find the mpv-2.dll that cinelocal.spec bundled."""
-    root = Path(getattr(sys, "_MEIPASS", ""))
-    if getattr(sys, "frozen", False) and sys.platform == "win32" and (
-            (root / "mpv-2.dll").is_file() or (root / "libmpv-2.dll").is_file()):
-        os.add_dll_directory(str(root))
-        os.environ["PATH"] = str(root) + os.pathsep + os.environ.get("PATH", "")
+    """Windows: lets python-mpv find the DLL, either bundled by cinelocal.spec in the packaged build, or downloaded
+    by install.bat / packaging/fetch_libmpv.py into the `libmpv` folder next to the app."""
+    if sys.platform != "win32":
+        return
+    roots = [Path(__file__).resolve().parent.parent / "libmpv"]
+    if getattr(sys, "frozen", False):
+        roots.insert(0, Path(getattr(sys, "_MEIPASS", "")))
+    for root in roots:
+        if (root / "libmpv-2.dll").is_file() or (root / "mpv-2.dll").is_file():
+            os.add_dll_directory(str(root))
+            os.environ["PATH"] = str(root) + os.pathsep + os.environ.get("PATH", "")
+            return
 
 
 def _new_core(**opts):
@@ -342,12 +349,18 @@ class _Engine:
 
 def load():
     """(engine, engine) in the shape of the page's (vlc module, Instance), or None if libmpv cannot be used here."""
-    global _engine, _failed
+    global _engine, _failed, _reason
     if _engine is None and not _failed:
         try:
             _use_bundled_mpv()
             _new_core(**_options({"vo": "null", "ao": "null"})).terminate()   # the real options, no window
             _engine = _Engine()
-        except (Exception, SystemExit):  # noqa: BLE001 - python-mpv or libmpv missing, or an option this libmpv lacks
-            _failed = True
+        except (Exception, SystemExit) as e:  # noqa: BLE001 - python-mpv or libmpv missing, or an option this libmpv lacks
+            _failed, _reason = True, f"{type(e).__name__}: {e}".splitlines()[0][:120]
     return (_engine, _engine) if _engine else None
+
+
+def unavailable_reason() -> str:
+    """'' if libmpv can be used here, otherwise why not (the first call loads it)."""
+    load()
+    return "" if _engine else _reason

@@ -237,6 +237,50 @@ class AdaptiveUpscalingTests(unittest.TestCase):
         self.assertEqual(p._m.sent, before)
 
 
+class WindowsDllLookupTests(unittest.TestCase):
+    """_use_bundled_mpv() with a pretend Windows: where it looks for the DLL and what it changes."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.app = Path(self.tmp.name) / "app"
+        (self.app / "cinelocal").mkdir(parents=True)
+        self.added = []
+        for patcher in (mock.patch.object(mb.sys, "platform", "win32"),
+                        mock.patch.object(mb.os, "add_dll_directory", self.added.append, create=True),
+                        mock.patch.object(mb, "__file__", str(self.app / "cinelocal" / "mpvbackend.py")),
+                        mock.patch.dict(mb.os.environ, {"PATH": "/usr/bin"})):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_dll_downloaded_next_to_the_app(self):
+        (self.app / "libmpv").mkdir()
+        (self.app / "libmpv" / "libmpv-2.dll").write_bytes(b"x")
+        mb._use_bundled_mpv()
+        self.assertEqual(self.added, [str(self.app / "libmpv")])
+        self.assertTrue(mb.os.environ["PATH"].startswith(str(self.app / "libmpv")))
+
+    def test_dll_bundled_in_the_packaged_build(self):
+        bundle = Path(self.tmp.name) / "_internal"
+        bundle.mkdir()
+        (bundle / "libmpv-2.dll").write_bytes(b"x")
+        with mock.patch.object(mb.sys, "frozen", True, create=True), \
+                mock.patch.object(mb.sys, "_MEIPASS", str(bundle), create=True):
+            mb._use_bundled_mpv()
+        self.assertEqual(self.added, [str(bundle)])
+
+    def test_no_dll_changes_nothing(self):
+        mb._use_bundled_mpv()
+        self.assertEqual((self.added, mb.os.environ["PATH"]), ([], "/usr/bin"))
+
+    def test_other_platforms_are_left_alone(self):
+        (self.app / "libmpv").mkdir()
+        (self.app / "libmpv" / "libmpv-2.dll").write_bytes(b"x")
+        with mock.patch.object(mb.sys, "platform", "linux"):
+            mb._use_bundled_mpv()
+        self.assertEqual(self.added, [])
+
+
 class LoadTests(unittest.TestCase):
     def setUp(self):
         saved = mb._engine, mb._failed
@@ -248,6 +292,14 @@ class LoadTests(unittest.TestCase):
             self.assertIsNone(mb.load())
         self.assertTrue(mb._failed)
         self.assertIsNone(mb.load())                        # remembered: does not try again
+
+    def test_unavailable_reason_says_why(self):
+        with mock.patch.object(mb, "_new_core", side_effect=OSError("Cannot find libmpv in the usual places.\nmore")):
+            self.assertEqual(mb.unavailable_reason(), "OSError: Cannot find libmpv in the usual places.")
+        mb._engine, mb._failed = None, False
+        with mock.patch.object(mb, "_new_core", return_value=FakeCore()) as new_core:
+            new_core.return_value.terminate = lambda: None
+            self.assertEqual(mb.unavailable_reason(), "")
 
     def test_returns_none_when_libmpv_rejects_the_options(self):
         with mock.patch.object(mb, "_new_core", side_effect=TypeError("unknown option")):

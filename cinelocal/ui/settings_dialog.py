@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import os
+import sys
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QCursor, QImage
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
                                QListWidget, QListWidgetItem, QPushButton, QVBoxLayout, QWidget)
 
-from .. import images
+from .. import images, mpvbackend
 from ..config import LANGUAGES, TRACK_LANGUAGES
 from ..service import LibraryService
 from .advanced_search import check_icon
@@ -201,6 +202,12 @@ class SettingsDialog(QDialog):
         self.upscaling.setToolTip("Upscales videos smaller than the window on the GPU, adapting to your hardware. "
                                   "Applies to the next movie you open.")
         form.addRow("Upscaling", self.upscaling)
+        self.upscaling_status = QLabel("")
+        self.upscaling_status.setObjectName("muted")
+        self.upscaling_status.setWordWrap(True)
+        form.addRow("", self.upscaling_status)
+        self.upscaling.currentIndexChanged.connect(self._update_upscaling_status)
+        self._update_upscaling_status()
 
         self.audio_language = self._track_combo(s.get("audio_language"), "File default")
         form.addRow("Audio language", self.audio_language)
@@ -257,6 +264,22 @@ class SettingsDialog(QDialog):
 
         if focus_key:
             self.key_edit.setFocus()
+
+    def _update_upscaling_status(self) -> None:
+        """Says whether the built-in player can use libmpv here, and how to get it when it cannot."""
+        reason = mpvbackend.unavailable_reason()
+        if not reason:
+            text = ("libmpv found: the built-in player will use it and enlarge small videos on the GPU."
+                    if self.upscaling.currentData() == "auto" else "libmpv found, but upscaling is off.")
+        else:
+            if sys.platform == "win32":
+                hint = ("This build does not include it." if getattr(sys, "frozen", False)
+                        else "Run install.bat again to download it.")
+            else:
+                hint = "Install it (Debian/Ubuntu: sudo apt install libmpv2) and restart CineLocal."
+            text = f"libmpv not found: the built-in player uses VLC, without upscaling. {hint}"
+        self.upscaling_status.setText(text)
+        self.upscaling_status.setToolTip(reason)
 
     @staticmethod
     def _track_combo(current: str, default_label: str) -> QComboBox:
