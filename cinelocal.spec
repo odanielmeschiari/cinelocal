@@ -2,6 +2,7 @@
 # A folder (not a single file) starts fast: nothing is unpacked to a temp folder on every launch.
 # Install VLC first: its libraries are bundled so the built-in player works without VLC installed.
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -31,11 +32,14 @@ def vlc_binaries():
 
 
 def mpv_binaries():
-    """Optional, Windows only: mpv-2.dll from $MPV_DIR gives the built-in player GPU upscaling. Without it the build
-    still works and the player uses VLC. On Linux the system libmpv is used (the .deb recommends it)."""
+    """Optional, Windows only: mpv-2.dll from $MPV_DIR gives the built-in player GPU upscaling. Without it a local
+    build still works and the player uses VLC (the release workflow refuses to build without it). On Linux the system libmpv is used (the .deb recommends it)."""
     root = os.environ.get("MPV_DIR")
     dlls = [Path(root) / name for name in ("mpv-2.dll", "libmpv-2.dll")] if win and root else []
-    return [(str(dll), ".") for dll in dlls if dll.is_file()]
+    found = [(str(dll), ".") for dll in dlls if dll.is_file()]
+    if win and not found and os.environ.get("CI"):   # GitHub Actions: the release must carry its own libmpv
+        raise SystemExit(f"libmpv-2.dll not found in MPV_DIR={root!r}: run packaging/fetch_libmpv.py first")
+    return found
 
 
 a = Analysis(
@@ -54,3 +58,4 @@ exe = EXE(
     upx=False,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="CineLocal", upx=False)
+shutil.copy2("THIRD_PARTY_NOTICES.md", Path(DISTPATH) / "CineLocal" / "THIRD_PARTY_NOTICES.md")   # next to the executable

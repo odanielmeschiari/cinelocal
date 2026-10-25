@@ -31,6 +31,13 @@ to unpack itself to a temporary folder on every launch, which makes it slow to o
    `pip install pyinstaller && pyinstaller --noconfirm cinelocal.spec` (the app folder is `dist/CineLocal/`).
    Then `packaging/build-deb.sh <version>` (Linux) or `iscc /DAppVersion=<version> installer\cinelocal.iss`
    (Windows, with Inno Setup installed).
+3. **Windows libmpv.** The release bundles the libmpv build pinned in `packaging/libmpv-windows.lock.json` (tag, file
+   name and SHA-256), so every release carries the same DLL, and the workflow fails if it cannot be fetched. To build
+   locally: `python packaging/fetch_libmpv.py libmpv`, then set `MPV_DIR` to that folder before running PyInstaller. The
+   build repository only keeps recent releases: when the pinned one disappears, run
+   `python packaging/fetch_libmpv.py --print-lock`, review the printed file and commit it as the new lock (or mirror the
+   file in your own release and change `repo`). `--latest` installs the newest release without the pin.
+4. `THIRD_PARTY_NOTICES.md` lists the bundled libraries and their licenses; the build copies it next to the executable.
 
 ## Installation from source (Linux Mint / Ubuntu / Debian)
 
@@ -179,7 +186,7 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   enlarges videos smaller than the window on the GPU. It starts on a light scaler and climbs to better ones while
   playback stays smooth, and steps back if frames are dropped, so each machine settles on what it can afford.
   libmpv is installed for you: `install.sh` installs `libmpv2` (or `libmpv1`) with apt, `install.bat` downloads the
-  LGPL build (about 30 MB, SHA-256 checked) with `packaging/fetch_libmpv.py`, and the Windows release bundles it.
+  pinned LGPL build (about 30 MB, SHA-256 checked) with `packaging/fetch_libmpv.py`, and the Windows release bundles it.
   Settings shows whether libmpv was found. Without it, or with the option **Off**, the player is VLC exactly as before.
   The **Upscaling** option has three quality profiles: **Balanced** (the behaviour described above, the default),
   **Economy** (stays on the light spline36 scaler) and **High quality** (starts on the best scaler and steps back

@@ -1,11 +1,14 @@
 """Tests for packaging/fetch_libmpv.py (no network). Run with: python3 -m unittest discover -s tests"""
 import hashlib
 import importlib.util
+import io
+import json
 import os
 import stat
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
@@ -74,7 +77,7 @@ class InstallTests(unittest.TestCase):
         with mock.patch.object(fl, "latest_tag", return_value="2026-10-25-x"), \
                 mock.patch.object(fl, "fetch_text", fake_text), mock.patch.object(fl, "download", fake_download), \
                 mock.patch.object(fl, "extract_dll", fake_extract), mock.patch.object(fl, "say"):
-            fl.install(self.dest)
+            fl.install(self.dest, latest=True)
 
     def test_good_download_is_installed_without_leftovers(self):
         self.run_install(f"{self.good_sum}  {ASSET}\n")
@@ -100,7 +103,95 @@ class InstallTests(unittest.TestCase):
         self.assertFalse(self.dest.exists())
 
 
+class PinnedInstallTests(unittest.TestCase):
+    """The default: the build pinned in packaging/libmpv-windows.lock.json."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dest = Path(self.tmp.name) / "libmpv"
+        self.payload = b"pinned archive"
+        self.lock = {"repo": "https://example.invalid/releases", "tag": "t1", "asset": ASSET,
+                     "sha256": hashlib.sha256(self.payload).hexdigest()}
+        self.urls = []
+
+    def run_install(self, lock=None, payload=None, error=None):
+        def fake_download(url, dest):
+            self.urls.append(url)
+            if error:
+                raise error
+            dest.write_bytes(self.payload if payload is None else payload)
+
+        def fake_extract(archive, workdir):
+            path = workdir / "libmpv-2.dll"
+            path.write_bytes(b"MZ-fake-dll")
+            return path
+
+        with mock.patch.object(fl, "load_lock", return_value=lock or self.lock), \
+                mock.patch.object(fl, "download", fake_download), mock.patch.object(fl, "extract_dll", fake_extract), \
+                mock.patch.object(fl, "say"):
+            fl.install(self.dest)
+
+    def test_the_lock_file_of_the_repository_is_valid(self):
+        lock = fl.load_lock()
+        self.assertRegex(lock["asset"], fl.ASSET.pattern)
+        self.assertIn(lock["tag"].split("-")[-1], lock["asset"])      # the tag's commit is the asset's commit
+        self.assertRegex(lock["sha256"], r"^[0-9a-f]{64}$")
+
+    def test_installs_exactly_the_pinned_file_without_asking_for_the_latest(self):
+        with mock.patch.object(fl, "latest_tag", side_effect=AssertionError("must not look for the latest")):
+            self.run_install()
+        self.assertEqual(self.urls, [f"https://example.invalid/releases/download/t1/{ASSET}"])
+        self.assertEqual(sorted(p.name for p in self.dest.iterdir()), ["libmpv-2.dll"])
+
+    def test_a_different_file_is_refused(self):
+        with self.assertRaisesRegex(RuntimeError, "SHA-256"):
+            self.run_install(payload=b"something else")
+        self.assertFalse(self.dest.exists())
+
+    def test_a_release_that_was_removed_says_how_to_update_the_pin(self):
+        gone = urllib.error.HTTPError("u", 404, "Not Found", {}, io.BytesIO())
+        with self.assertRaisesRegex(RuntimeError, "--print-lock"):
+            self.run_install(error=gone)
+        self.assertFalse(self.dest.exists())
+
+    def test_an_invalid_lock_file_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "lock.json"
+            bad.write_text(json.dumps({"repo": "r", "tag": "t", "asset": "a", "sha256": "not-a-hash"}))
+            with self.assertRaisesRegex(RuntimeError, "not a valid lock"):
+                fl.load_lock(bad)
+
+    def print_lock(self, published_sha256):
+        newest = {"repo": "https://example.invalid/releases", "tag": "t2", "asset": ASSET, "sha256": published_sha256}
+
+        def fake_download(url, dest):
+            dest.write_bytes(self.payload)
+
+        out = io.StringIO()
+        with mock.patch.object(fl, "resolve_latest", return_value=dict(newest)), \
+                mock.patch.object(fl, "download", fake_download), mock.patch.object(fl, "say"), \
+                mock.patch("sys.stdout", out), mock.patch("sys.stderr", io.StringIO()):
+            return fl.main(["--print-lock"]), out.getvalue()
+
+    def test_print_lock_prints_the_hash_it_computed_from_the_download(self):
+        code, text = self.print_lock(self.lock["sha256"])
+        self.assertEqual(code, 0)
+        printed = json.loads(text)
+        self.assertEqual((printed["tag"], printed["sha256"]), ("t2", self.lock["sha256"]))
+
+    def test_print_lock_refuses_a_download_that_differs_from_the_published_hash(self):
+        code, text = self.print_lock("0" * 64)
+        self.assertEqual((code, text), (1, ""))
+
+
 class MainTests(unittest.TestCase):
+    def test_default_is_the_pinned_build_and_latest_is_opt_in(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(fl, "install") as install:
+            fl.main([tmp])
+            fl.main([tmp, "--latest"])
+        self.assertEqual([c.kwargs for c in install.call_args_list], [{"latest": False}, {"latest": True}])
+
     def test_already_installed_does_not_touch_the_network(self):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / fl.DLL).write_bytes(b"x")

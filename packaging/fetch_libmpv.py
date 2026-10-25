@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
 """Downloads libmpv (libmpv-2.dll, Windows x86-64) into a folder, for the built-in player's GPU upscaling.
 
-Usage: python packaging/fetch_libmpv.py DEST_DIR [--force]
+Usage: python packaging/fetch_libmpv.py DEST_DIR [--force] [--latest]
+       python packaging/fetch_libmpv.py --print-lock
 
 Used by install.bat (DEST_DIR = <app folder>\\libmpv) and by the release workflow (the DLL is then bundled by
-cinelocal.spec). Standard library only. It takes the newest "mpv-dev-lgpl-x86_64" build published by
-github.com/zhongfly/mpv-winbuild (the LGPL flavour, which is the one to redistribute) and checks its SHA-256 against the
-sha256.txt of the same release before unpacking anything. The .7z uses the BCJ2 filter, so it is unpacked with 7-Zip
+cinelocal.spec). Standard library only. By default it installs the build pinned in packaging/libmpv-windows.lock.json
+(tag, file name and SHA-256 of the "mpv-dev-lgpl-x86_64" build of github.com/zhongfly/mpv-winbuild: the LGPL flavour,
+which is the one to redistribute), so every build uses the same DLL. The download is checked against that SHA-256 before
+anything is unpacked. That repository only keeps recent releases: when the pinned one is gone, run `--print-lock` (it
+resolves the newest release, downloads it, and prints a new lock file), review it and commit it, or mirror the file in
+your own release and point "repo" there. `--latest` skips the pin and takes the newest release, checked against the
+sha256.txt published with it (less reproducible). The .7z uses the BCJ2 filter, so it is unpacked with 7-Zip
 (7z, or 7zr.exe downloaded from 7-zip.org if nothing else works) or with bsdtar (the tar.exe of Windows 10/11).
-Exit code 0 = the DLL is in DEST_DIR; 1 = it could not be installed (callers treat that as non-fatal: the player then
-uses VLC).
+Exit code 0 = the DLL is in DEST_DIR; 1 = it could not be installed (the release workflow treats that as fatal; install.bat
+does not: the player then uses VLC).
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -25,6 +31,7 @@ import urllib.request
 from pathlib import Path
 
 RELEASES = "https://github.com/zhongfly/mpv-winbuild/releases"
+LOCK_FILE = Path(__file__).resolve().with_name("libmpv-windows.lock.json")
 DLL = "libmpv-2.dll"
 ASSET = re.compile(r"mpv-dev-lgpl-x86_64-\d{8}-git-[0-9a-f]+\.7z")   # not "-v3-" (that one needs AVX2)
 SEVEN_ZR = "https://www.7-zip.org/a/7zr.exe"
@@ -161,7 +168,17 @@ def probe(dest: Path) -> None:
         raise RuntimeError("the downloaded libmpv does not load here: " + (result.stderr.strip().splitlines() or ["?"])[-1])
 
 
-def install(dest: Path) -> None:
+def load_lock(path: Path = LOCK_FILE) -> dict:
+    """The pinned build: {"repo", "tag", "asset", "sha256"}."""
+    lock = json.loads(path.read_text(encoding="utf-8"))
+    if not all(isinstance(lock.get(k), str) and lock[k] for k in ("repo", "tag", "asset", "sha256")) \
+            or not re.fullmatch(r"[0-9a-f]{64}", lock["sha256"]):
+        raise RuntimeError(f"{path.name} is not a valid lock file (needs repo, tag, asset and a 64-digit sha256)")
+    return lock
+
+
+def resolve_latest() -> dict:
+    """The newest release, with the SHA-256 its own sha256.txt publishes."""
     tag = latest_tag()
     asset = find_asset(fetch_text(f"{RELEASES}/expanded_assets/{tag}"))
     if not asset:
@@ -169,14 +186,32 @@ def install(dest: Path) -> None:
     expected = parse_checksums(fetch_text(f"{RELEASES}/download/{tag}/sha256.txt")).get(asset)
     if not expected:
         raise RuntimeError(f"release {tag} has no checksum for {asset}; not installing an unverified download")
+    return {"repo": RELEASES, "tag": tag, "asset": asset, "sha256": expected}
+
+
+def fetch_verified(build: dict, workdir: Path) -> Path:
+    """Downloads the build into workdir and returns the archive, only if it matches the SHA-256."""
+    say(f"==> Downloading {build['asset']}")
+    archive = workdir / build["asset"]
+    try:
+        download(f"{build['repo']}/download/{build['tag']}/{build['asset']}", archive)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise RuntimeError(f"release {build['tag']} is no longer published at {build['repo']}; update "
+                               "packaging/libmpv-windows.lock.json (run this script with --print-lock)") from e
+        raise
+    if sha256_of(archive) != build["sha256"]:
+        raise RuntimeError("the download does not match its expected SHA-256; not installing it")
+    return archive
+
+
+def install(dest: Path, latest: bool = False) -> None:
+    build = resolve_latest() if latest else load_lock()
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
-        say(f"==> Downloading {asset}")
-        download(f"{RELEASES}/download/{tag}/{asset}", work / asset)
-        if sha256_of(work / asset) != expected:
-            raise RuntimeError("the download does not match its published SHA-256; not installing it")
+        archive = fetch_verified(build, work)
         say("==> Unpacking libmpv")
-        dll = extract_dll(work / asset, work)
+        dll = extract_dll(archive, work)
         if dll is None:
             raise RuntimeError("could not unpack the .7z (install 7-Zip, or use Windows 10/11 with tar.exe)")
         dest.mkdir(parents=True, exist_ok=True)
@@ -187,8 +222,25 @@ def install(dest: Path) -> None:
     say(f"==> libmpv installed in {dest}")
 
 
+def print_lock() -> None:
+    """Resolves the newest release and prints the lock file for it, with a SHA-256 computed here from the download
+    (it must also match the one the release publishes)."""
+    build = resolve_latest()
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = fetch_verified(build, Path(tmp))
+        build["sha256"] = sha256_of(archive)
+    print(json.dumps(build, indent=2))
+
+
 def main(argv: list[str]) -> int:
-    force = "--force" in argv
+    force, latest = "--force" in argv, "--latest" in argv
+    if "--print-lock" in argv:
+        try:
+            print_lock()
+        except (OSError, urllib.error.URLError, RuntimeError) as e:
+            print(f"could not resolve the newest libmpv release: {e}", file=sys.stderr)
+            return 1
+        return 0
     args = [a for a in argv if not a.startswith("--")]
     if len(args) != 1:
         print(__doc__, file=sys.stderr)
@@ -198,8 +250,8 @@ def main(argv: list[str]) -> int:
         say(f"libmpv is already in {dest} (use --force to download it again)")
         return 0
     try:
-        install(dest)
-    except (OSError, urllib.error.URLError, subprocess.SubprocessError, RuntimeError) as e:
+        install(dest, latest=latest)
+    except (OSError, urllib.error.URLError, subprocess.SubprocessError, RuntimeError, ValueError) as e:
         print(f"libmpv could not be installed: {e}", file=sys.stderr)
         return 1
     return 0

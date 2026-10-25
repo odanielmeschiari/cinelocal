@@ -32,9 +32,12 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install vlc -y --no-progress
       - run: pip install -r requirements.txt "pyinstaller>=6.9"
-      - name: libmpv (bundled into the Windows executable; without it the player uses VLC, so this must not stop a release)
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - name: libmpv (the build pinned in packaging/libmpv-windows.lock.json, bundled into the Windows executable)
         if: runner.os == 'Windows'
-        continue-on-error: true
         run: python packaging/fetch_libmpv.py libmpv
       - run: pyinstaller --noconfirm cinelocal.spec
         env:
@@ -47,7 +50,8 @@ jobs:
       - name: Check the built-in player of the packaged app (Windows)
         if: runner.os == 'Windows'
         run: |
-          if (-not (Test-Path dist\CineLocal\_internal\libmpv-2.dll)) { Write-Host "::warning::libmpv is not in the Windows build; the built-in player will use VLC, without GPU upscaling" }
+          if (-not (Test-Path dist\CineLocal\_internal\libmpv-2.dll)) { throw "libmpv is not in the Windows build" }
+          if (-not (Test-Path dist\CineLocal\THIRD_PARTY_NOTICES.md)) { throw "THIRD_PARTY_NOTICES.md is not in the build" }
           if (-not ((Test-Path dist\CineLocal\_internal\libvlc.dll) -and (Test-Path dist\CineLocal\_internal\plugins))) { throw "libVLC is not in the build" }
           $p = Start-Process dist\CineLocal\CineLocal.exe -ArgumentList '--check-player','player-check.txt' -Wait -PassThru
           if (Test-Path player-check.txt) { Get-Content player-check.txt }
