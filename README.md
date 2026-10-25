@@ -37,7 +37,14 @@ to unpack itself to a temporary folder on every launch, which makes it slow to o
    build repository only keeps recent releases: when the pinned one disappears, run
    `python packaging/fetch_libmpv.py --print-lock`, review the printed file and commit it as the new lock (or mirror the
    file in your own release and change `repo`). `--latest` installs the newest release without the pin.
-4. `THIRD_PARTY_NOTICES.md` lists the bundled libraries and their licenses; the build copies it next to the executable.
+4. **Linux libmpv.** By default the Linux builds use the libmpv of the system, as before. Set the repository variable
+   `BUNDLE_LINUX_LIBMPV` to `true` (Settings > Secrets and variables > Actions > Variables) and the release installs
+   libmpv on the build machine, bundles it (and the libraries it needs) into the app, and fails if the packaged app
+   cannot load that copy. Locally: install `libmpv2` (or `libmpv1`), then `BUNDLE_LINUX_LIBMPV=1 pyinstaller --noconfirm
+   cinelocal.spec`, and check with `dist/CineLocal/CineLocal --check-player check.txt --bundled-libmpv`.
+   **Licensing:** Debian and Ubuntu distribute their libmpv binaries under the GPL-3.0-or-later, so publishing a build that
+   carries them has to follow that license (see `THIRD_PARTY_NOTICES.md`). That is why it is off until you decide.
+5. `THIRD_PARTY_NOTICES.md` lists the bundled libraries and their licenses; the build copies it next to the executable.
 
 ## Installation from source (Linux Mint / Ubuntu / Debian)
 

@@ -332,6 +332,76 @@ class DiagnosticsLogTests(unittest.TestCase):
         self.assertEqual(p.get_state(), mb.State.Playing)
 
 
+class LinuxBundledLibmpvTests(unittest.TestCase):
+    """_use_bundled_mpv() on Linux: python-mpv asks ctypes.util.find_library('mpv'); a packaged app answers with its copy."""
+
+    def setUp(self):
+        import ctypes.util
+        self.util = ctypes.util
+        self.addCleanup(setattr, ctypes.util, "find_library", ctypes.util.find_library)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.env = mock.patch.dict(mb.os.environ)
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        mb.os.environ.pop("CINELOCAL_LIBMPV", None)
+        self.platform = mock.patch.object(mb.sys, "platform", "linux")
+        self.platform.start()
+        self.addCleanup(self.platform.stop)
+
+    def frozen(self):
+        for patcher in (mock.patch.object(mb.sys, "frozen", True, create=True),
+                        mock.patch.object(mb.sys, "_MEIPASS", str(self.root), create=True)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_a_packaged_app_answers_with_its_own_libmpv(self):
+        (self.root / "libmpv.so.2").write_bytes(b"x")
+        self.frozen()
+        mb._use_bundled_mpv()
+        self.assertEqual(self.util.find_library("mpv"), str(self.root / "libmpv.so.2"))
+
+    def test_other_libraries_still_use_the_system_lookup(self):
+        (self.root / "libmpv.so.2").write_bytes(b"x")
+        self.frozen()
+        with mock.patch.object(self.util, "find_library", lambda name: f"system:{name}"):
+            mb._use_bundled_mpv()
+            self.assertEqual(self.util.find_library("vlc"), "system:vlc")
+
+    def test_newer_soname_wins_and_the_older_one_is_used_when_it_is_alone(self):
+        (self.root / "libmpv.so.1").write_bytes(b"x")
+        self.frozen()
+        mb._use_bundled_mpv()
+        self.assertEqual(self.util.find_library("mpv"), str(self.root / "libmpv.so.1"))
+        (self.root / "libmpv.so.2").write_bytes(b"x")
+        mb._use_bundled_mpv()
+        self.assertEqual(self.util.find_library("mpv"), str(self.root / "libmpv.so.2"))
+
+    def test_not_wrapped_twice(self):
+        (self.root / "libmpv.so.2").write_bytes(b"x")
+        self.frozen()
+        mb._use_bundled_mpv()
+        first = self.util.find_library._system
+        mb._use_bundled_mpv()
+        self.assertIs(self.util.find_library._system, first)
+
+    def test_a_source_run_or_a_packaged_app_without_libmpv_changes_nothing(self):
+        before = self.util.find_library
+        mb._use_bundled_mpv()                       # not frozen
+        self.frozen()
+        mb._use_bundled_mpv()                       # frozen, but the folder has no libmpv
+        self.assertIs(self.util.find_library, before)
+
+    def test_the_environment_variable_points_to_another_copy(self):
+        custom = self.root / "custom" / "libmpv.so.2"
+        custom.parent.mkdir()
+        custom.write_bytes(b"x")
+        mb.os.environ["CINELOCAL_LIBMPV"] = str(custom)
+        mb._use_bundled_mpv()
+        self.assertEqual(self.util.find_library("mpv"), str(custom))
+
+
 class WindowsDllLookupTests(unittest.TestCase):
     """_use_bundled_mpv() with a pretend Windows: where it looks for the DLL and what it changes."""
 

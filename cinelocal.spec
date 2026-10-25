@@ -32,14 +32,27 @@ def vlc_binaries():
 
 
 def mpv_binaries():
-    """Optional, Windows only: mpv-2.dll from $MPV_DIR gives the built-in player GPU upscaling. Without it a local
-    build still works and the player uses VLC (the release workflow refuses to build without it). On Linux the system libmpv is used (the .deb recommends it)."""
+    """libmpv gives the built-in player GPU upscaling.
+    Windows (optional): mpv-2.dll / libmpv-2.dll from $MPV_DIR (packaging/fetch_libmpv.py puts the pinned build there).
+    Without it a local build still works and the player uses VLC (the release workflow refuses to build without it).
+    Linux: with BUNDLE_LINUX_LIBMPV=1 the build must carry libmpv.so.2 (or .so.1) found in $MPV_DIR (default: the library
+    folder), and fails if it is missing; PyInstaller then bundles the libraries libmpv needs. Without the variable the
+    spec adds nothing, but PyInstaller itself bundles libmpv when it is installed on the build machine (python-mpv looks
+    it up with find_library). Ubuntu's libmpv binaries are GPL-3.0-or-later: see THIRD_PARTY_NOTICES.md before publishing."""
     root = os.environ.get("MPV_DIR")
-    dlls = [Path(root) / name for name in ("mpv-2.dll", "libmpv-2.dll")] if win and root else []
-    found = [(str(dll), ".") for dll in dlls if dll.is_file()]
-    if win and not found and os.environ.get("CI"):   # GitHub Actions: the release must carry its own libmpv
-        raise SystemExit(f"libmpv-2.dll not found in MPV_DIR={root!r}: run packaging/fetch_libmpv.py first")
-    return found
+    if win:
+        dlls = [Path(root) / name for name in ("mpv-2.dll", "libmpv-2.dll")] if root else []
+        found = [(str(dll), ".") for dll in dlls if dll.is_file()]
+        if not found and os.environ.get("CI"):   # GitHub Actions: the release must carry its own libmpv
+            raise SystemExit(f"libmpv-2.dll not found in MPV_DIR={root!r}: run packaging/fetch_libmpv.py first")
+        return found
+    if os.environ.get("BUNDLE_LINUX_LIBMPV") != "1":
+        return []
+    folder = Path(root or "/usr/lib/x86_64-linux-gnu")
+    for name in ("libmpv.so.2", "libmpv.so.1"):
+        if (folder / name).is_file():
+            return [(str(folder / name), ".")]
+    raise SystemExit(f"BUNDLE_LINUX_LIBMPV=1 but libmpv.so.2 / libmpv.so.1 not found in {folder}: install libmpv2 (libmpv1)")
 
 
 a = Analysis(

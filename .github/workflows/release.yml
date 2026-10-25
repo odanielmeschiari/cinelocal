@@ -1,6 +1,10 @@
 # Builds the Windows installer (Setup.exe) and the Linux .deb, plus portable archives of both, and publishes
 # them as a GitHub Release.
 # Usage: git tag v1.12.0 && git push --tags
+#
+# Linux builds carry their own libmpv only when the repository variable BUNDLE_LINUX_LIBMPV is "true" (Settings >
+# Secrets and variables > Actions > Variables). It is off by default because the libmpv of Ubuntu is distributed under
+# the GPL-3.0-or-later (see THIRD_PARTY_NOTICES.md): turn it on once you have decided how CineLocal is licensed.
 name: Release
 
 on:
@@ -17,6 +21,8 @@ jobs:
       matrix:
         os: [ubuntu-22.04, windows-latest]   # the oldest Ubuntu keeps the binary working on older distros
     runs-on: ${{ matrix.os }}
+    env:
+      BUNDLE_LINUX_LIBMPV: ${{ vars.BUNDLE_LINUX_LIBMPV == 'true' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -28,6 +34,9 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0
           libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
           libxcb-shape0 libxcb-xinerama0 vlc
+      - name: libmpv (bundled into the Linux binary when BUNDLE_LINUX_LIBMPV is on)
+        if: runner.os == 'Linux' && env.BUNDLE_LINUX_LIBMPV == '1'
+        run: sudo apt-get install -y libmpv2 || sudo apt-get install -y libmpv1
       - name: VLC (bundled into the Windows executable)
         if: runner.os == 'Windows'
         run: choco install vlc -y --no-progress
@@ -46,7 +55,9 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           test -f dist/CineLocal/_internal/libvlc.so.5 && test -d dist/CineLocal/_internal/vlc/plugins
-          dist/CineLocal/CineLocal --check-player player-check.txt || { cat player-check.txt; exit 1; }
+          flags=""; if [ "$BUNDLE_LINUX_LIBMPV" = "1" ]; then flags="--bundled-libmpv"; fi
+          dist/CineLocal/CineLocal --check-player player-check.txt $flags || { cat player-check.txt; exit 1; }
+          cat player-check.txt
       - name: Check the built-in player of the packaged app (Windows)
         if: runner.os == 'Windows'
         run: |

@@ -28,7 +28,11 @@ StartupWMClass=CineLocal
 DESKTOP
 
 # The Qt libraries and libVLC are bundled; these are the system libraries Qt's xcb platform plugin loads.
-cat > "$PKG/DEBIAN/control" <<CONTROL
+# libmpv is bundled too when the PyInstaller folder carries it; otherwise the system one is only recommended.
+RECOMMENDS="Recommends: libmpv2 | libmpv1"
+if compgen -G "$ROOT/dist/CineLocal/_internal/libmpv.so*" >/dev/null; then RECOMMENDS=""; fi
+{
+cat <<CONTROL
 Package: cinelocal
 Version: $VERSION
 Architecture: amd64
@@ -37,10 +41,11 @@ Priority: optional
 Maintainer: odanielmeschiari <odanielmeschiari@users.noreply.github.com>
 Homepage: https://github.com/odanielmeschiari/cinelocal
 Depends: libc6, libegl1, libgl1, libxkbcommon-x11-0, libxcb-cursor0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-render-util0, libxcb-shape0, libxcb-xinerama0
-Recommends: libmpv2 | libmpv1
 Description: Local movie and series browser and player
  Browse and play the movies and series in your local folders, with posters
  and metadata. Includes a built-in player (libVLC is bundled).
 CONTROL
+if [ -n "$RECOMMENDS" ]; then echo "$RECOMMENDS"; fi
+} > "$PKG/DEBIAN/control"
 
 dpkg-deb --root-owner-group --build "$PKG" "$ROOT/dist/CineLocal-linux-x86_64.deb"

@@ -89,9 +89,33 @@ def _options(extra: dict | None = None) -> dict:
     return opts
 
 
+def _use_bundled_libmpv_linux() -> None:
+    """Linux: python-mpv finds libmpv with ctypes.util.find_library, which only knows the system's library cache and
+    never the folder of a packaged app. When the app carries its own libmpv (PyInstaller folder), or CINELOCAL_LIBMPV
+    points to one, that lookup is answered with it; every other lookup keeps the system's behaviour."""
+    candidates = [os.environ.get("CINELOCAL_LIBMPV", "")]
+    if getattr(sys, "frozen", False):
+        root = Path(getattr(sys, "_MEIPASS", ""))
+        candidates += [str(root / name) for name in ("libmpv.so.2", "libmpv.so.1", "libmpv.so")]
+    path = next((c for c in candidates if c and os.path.isfile(c)), None)
+    if path is None:
+        return
+    import ctypes.util
+    system = getattr(ctypes.util.find_library, "_system", ctypes.util.find_library)   # not wrapped twice
+
+    def find_library(name):
+        return path if name == "mpv" else system(name)
+
+    find_library._system = system
+    ctypes.util.find_library = find_library
+
+
 def _use_bundled_mpv() -> None:
     """Windows: lets python-mpv find the DLL, either bundled by cinelocal.spec in the packaged build, or downloaded
-    by install.bat / packaging/fetch_libmpv.py into the `libmpv` folder next to the app."""
+    by install.bat / packaging/fetch_libmpv.py into the `libmpv` folder next to the app. Linux: see above."""
+    if sys.platform.startswith("linux"):
+        _use_bundled_libmpv_linux()
+        return
     if sys.platform != "win32":
         return
     roots = [Path(__file__).resolve().parent.parent / "libmpv"]
@@ -401,6 +425,13 @@ def load():
         except (Exception, SystemExit) as e:  # noqa: BLE001 - python-mpv or libmpv missing, or an option this libmpv lacks
             _failed, _reason = True, f"{type(e).__name__}: {e}".splitlines()[0][:120]
     return (_engine, _engine) if _engine else None
+
+
+def library_path() -> str:
+    """File of the libmpv that was loaded ('' if libmpv cannot be used here)."""
+    if load() is None:
+        return ""
+    return str(getattr(getattr(sys.modules.get("mpv"), "backend", None), "_name", ""))
 
 
 def unavailable_reason() -> str:
