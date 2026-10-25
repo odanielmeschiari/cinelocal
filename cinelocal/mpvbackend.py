@@ -27,12 +27,20 @@ TIERS = (
     ("ewa_lanczossharp", "ewa_lanczossharp", "mitchell", True),
 )
 START_TIER = 1
+# Quality profiles of Settings > Upscaling: (highest tier allowed, tier to start on or None = what this session learned).
+# "auto" (shown as Balanced) is the behaviour the player always had: start light, climb while playback is smooth.
+PROFILES = {
+    "economy": (1, None),               # never leaves spline36: the lightest good scaler
+    "auto": (len(TIERS) - 1, None),
+    "high": (len(TIERS) - 1, len(TIERS) - 1),   # starts on the best scaler and steps back if frames are dropped
+}
 ADAPT_EVERY = 2.0      # seconds between two samples of the frame counters
 CLIMB_AFTER = 15.0     # seconds without late/dropped frames before trying the next tier
 DROP_LIMIT = 3         # late or dropped frames within one sample that mean "this tier is too heavy"
 MIN_UPSCALE = 1.05     # the picture must be at least 5% larger than the video for the tier to matter
 
 _learned = {"start": START_TIER, "ceiling": len(TIERS) - 1}   # shared by every movie of this session
+_profile = "auto"
 _engine = None
 _failed = False
 _reason = ""      # why libmpv could not be used (shown in Settings)
@@ -58,6 +66,12 @@ class _Media:
 
     def add_option(self, option: str) -> None:
         self.options.append(option)
+
+
+def set_profile(name: str) -> None:
+    """Chooses the quality profile for the players created from now on (unknown names mean \"auto\")."""
+    global _profile
+    _profile = name if name in PROFILES else "auto"
 
 
 def _options(extra: dict | None = None) -> dict:
@@ -98,18 +112,23 @@ def _new_core(**opts):
 class _Player:
     """Plays one movie in a native window (the same one the page gives to VLC)."""
 
-    def __init__(self, extra: dict | None = None):
+    def __init__(self, extra: dict | None = None, profile: str = "auto"):
         self._extra = extra
+        self._max_tier, self._forced = PROFILES.get(profile, PROFILES["auto"])
         self._m = None                 # the mpv core, created at the first play() (it needs the window id)
         self._wid = None
         self._media = None
         self._loaded = False
         self._released = False
         self._props: dict[str, object] = {}   # volume, picture, speed...: kept to survive reopening the file
-        self._tier = min(_learned["start"], _learned["ceiling"])
+        self._tier = min(self._ceiling(), _learned["start"] if self._forced is None else self._forced)
         self._sample_at = 0.0
         self._counted = None           # late+dropped frames at the last sample (None = start over)
         self._clean_since = time.monotonic()
+
+    def _ceiling(self) -> int:
+        """Heaviest tier allowed: by the profile, and by what this GPU proved it can afford in this session."""
+        return min(self._max_tier, _learned["ceiling"])
 
     # -- low level: errors from a core that is closing or has nothing loaded are not the player's business --------
     def _get(self, name: str, default=None):
@@ -299,7 +318,8 @@ class _Player:
         scale, cscale, dscale, sigmoid = TIERS[self._tier]
         for name, value in (("scale", scale), ("cscale", cscale), ("dscale", dscale), ("sigmoid-upscaling", sigmoid)):
             self._set(name, value)
-        _learned["start"] = self._tier
+        if self._forced is None:   # a profile that starts on a fixed tier must not change where the others start
+            _learned["start"] = self._tier
 
     def _upscaling(self) -> bool:
         """Is the video being enlarged right now? (otherwise the tier changes nothing and drops mean other things)"""
@@ -328,7 +348,7 @@ class _Player:
                 self._tier -= 1
                 _learned["ceiling"] = self._tier   # that GPU cannot afford the heavier tier: do not try it again
                 self._apply_tier()
-        elif now - self._clean_since >= CLIMB_AFTER and self._tier < _learned["ceiling"]:
+        elif now - self._clean_since >= CLIMB_AFTER and self._tier < self._ceiling():
             self._clean_since = now
             self._tier += 1
             self._apply_tier()
@@ -341,7 +361,7 @@ class _Engine:
     MediaSlaveType = MediaSlaveType
 
     def media_player_new(self) -> _Player:
-        return _Player()
+        return _Player(profile=_profile)
 
     def media_new(self, path: str) -> _Media:
         return _Media(path)

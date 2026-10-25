@@ -181,6 +181,9 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   libmpv is installed for you: `install.sh` installs `libmpv2` (or `libmpv1`) with apt, `install.bat` downloads the
   LGPL build (about 30 MB, SHA-256 checked) with `packaging/fetch_libmpv.py`, and the Windows release bundles it.
   Settings shows whether libmpv was found. Without it, or with the option **Off**, the player is VLC exactly as before.
+  The **Upscaling** option has three quality profiles: **Balanced** (the behaviour described above, the default),
+  **Economy** (stays on the light spline36 scaler) and **High quality** (starts on the best scaler and steps back
+  if frames are dropped). The choice applies to the next movie you open.
 
   ![Player](examples/player.png "Player")
   

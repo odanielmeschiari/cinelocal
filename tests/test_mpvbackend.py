@@ -237,6 +237,70 @@ class AdaptiveUpscalingTests(unittest.TestCase):
         self.assertEqual(p._m.sent, before)
 
 
+class ProfileTests(unittest.TestCase):
+    """Settings > Upscaling: Economy, Balanced (\"auto\") and High quality limit or pre-set the tier."""
+
+    def setUp(self):
+        self.now = 1000.0
+        patcher = mock.patch.object(mb.time, "monotonic", lambda: self.now)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(setattr, mb, "_profile", mb._profile)
+
+    def player(self, profile):
+        mb._learned.update(start=mb.START_TIER, ceiling=len(mb.TIERS) - 1)
+        p = mb._Player(profile=profile)
+        p._m, p._loaded = FakeCore(), True
+        return p
+
+    def clean_seconds(self, p, seconds):
+        for _ in range(int(seconds / mb.ADAPT_EVERY) + 1):
+            self.now += mb.ADAPT_EVERY
+            p.get_state()
+
+    def test_economy_never_leaves_the_light_scaler(self):
+        p = self.player("economy")
+        self.clean_seconds(p, mb.CLIMB_AFTER * 6)
+        self.assertEqual(p._tier, 1)
+        self.assertEqual(mb.TIERS[p._tier][0], "spline36")
+
+    def test_balanced_is_the_original_behaviour(self):
+        p = self.player("auto")
+        self.assertEqual(p._tier, mb.START_TIER)
+        self.clean_seconds(p, mb.CLIMB_AFTER * 6)
+        self.assertEqual(p._tier, len(mb.TIERS) - 1)
+
+    def test_high_starts_on_the_best_tier_without_changing_where_others_start(self):
+        p = self.player("high")
+        p._apply_tier()
+        self.assertEqual(p._tier, len(mb.TIERS) - 1)
+        self.assertEqual(p._m.sets()["scale"], mb.TIERS[-1][0])
+        self.assertEqual(mb._learned["start"], mb.START_TIER)
+
+    def test_high_still_steps_back_and_remembers_the_ceiling(self):
+        p = self.player("high")
+        self.now += mb.ADAPT_EVERY
+        p.get_state()                                   # baseline sample
+        self.now += mb.ADAPT_EVERY
+        p._m.frame_drop_count += mb.DROP_LIMIT
+        p.get_state()
+        self.assertEqual(p._tier, len(mb.TIERS) - 2)
+        self.assertEqual(mb._learned["ceiling"], len(mb.TIERS) - 2)
+
+    def test_what_the_gpu_learned_limits_any_profile(self):
+        mb._learned.update(start=0, ceiling=0)
+        p = mb._Player(profile="high")
+        self.assertEqual(p._tier, 0)
+
+    def test_set_profile_reaches_the_players_and_ignores_unknown_names(self):
+        mb.set_profile("economy")
+        self.assertEqual(mb._Engine().media_player_new()._max_tier, 1)
+        mb.set_profile("whatever")
+        self.assertEqual(mb._profile, "auto")
+        mb.set_profile("off")                           # handled by the page (it does not use libmpv at all)
+        self.assertEqual(mb._profile, "auto")
+
+
 class WindowsDllLookupTests(unittest.TestCase):
     """_use_bundled_mpv() with a pretend Windows: where it looks for the DLL and what it changes."""
 

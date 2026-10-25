@@ -196,11 +196,15 @@ class SettingsDialog(QDialog):
         form.addRow("Default player", self.default_player)
 
         self.upscaling = QComboBox()
-        self.upscaling.addItem("Automatic (needs libmpv)", "auto")
+        self.upscaling.addItem("Balanced (needs libmpv)", "auto")
+        self.upscaling.addItem("Economy (needs libmpv)", "economy")
+        self.upscaling.addItem("High quality (needs libmpv)", "high")
         self.upscaling.addItem("Off (always VLC)", "off")
         self.upscaling.setCurrentIndex(max(0, self.upscaling.findData(s.get("upscaling"))))
         self.upscaling.setToolTip("Upscales videos smaller than the window on the GPU, adapting to your hardware. "
-                                  "Applies to the next movie you open.")
+                                  "Balanced starts light and climbs while playback is smooth; Economy stays on a "
+                                  "light scaler; High quality starts on the best one and steps back if frames are "
+                                  "dropped. Applies to the next movie you open.")
         form.addRow("Upscaling", self.upscaling)
         self.upscaling_status = QLabel("")
         self.upscaling_status.setObjectName("muted")
@@ -270,7 +274,7 @@ class SettingsDialog(QDialog):
         reason = mpvbackend.unavailable_reason()
         if not reason:
             text = ("libmpv found: the built-in player will use it and enlarge small videos on the GPU."
-                    if self.upscaling.currentData() == "auto" else "libmpv found, but upscaling is off.")
+                    if self.upscaling.currentData() != "off" else "libmpv found, but upscaling is off.")
         else:
             if sys.platform == "win32":
                 hint = ("This build does not include it." if getattr(sys, "frozen", False)

@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLab
                                QInputDialog, QLineEdit, QMainWindow, QMenu, QMessageBox, QProgressBar,
                                QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
-from .. import filters, images
+from .. import filters, images, mpvbackend
 from ..service import LibraryService
 from ..utils import star_text
 from .advanced_search import AdvancedSearch
@@ -644,6 +644,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(reason + " Using the system player.", 10000)
             return self._play(movie_id)
         self._playing_id = movie_id
+        mpvbackend.set_profile(self.service.settings.get("upscaling"))
         page = VlcPlayerPage(self._movie_title(movie), self,
                              upscaling=self.service.settings.get("upscaling") != "off")
         page.back_requested.connect(self.close_player)
