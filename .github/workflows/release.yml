@@ -1,12 +1,6 @@
 # Builds the Windows installer (Setup.exe) and the Linux .deb, plus portable archives of both, and publishes
 # them as a GitHub Release.
 # Usage: git tag v1.12.0 && git push --tags
-#
-# Linux builds carry their own libmpv only when the repository variable BUNDLE_LINUX_LIBMPV is "true" (Settings >
-# Secrets and variables > Actions > Variables). It is off by default because the libmpv of Ubuntu is distributed under
-# the GPL-3.0-or-later (see THIRD_PARTY_NOTICES.md): turn it on once you have decided how CineLocal is licensed.
-# The same variable adds the AppImage, which is built on Ubuntu 24.04 (libmpv 0.37) and so needs a distribution at least
-# as recent (glibc 2.39).
 name: Release
 
 on:
@@ -23,8 +17,6 @@ jobs:
       matrix:
         os: [ubuntu-22.04, windows-latest]   # the oldest Ubuntu keeps the binary working on older distros
     runs-on: ${{ matrix.os }}
-    env:
-      BUNDLE_LINUX_LIBMPV: ${{ vars.BUNDLE_LINUX_LIBMPV == 'true' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -36,35 +28,19 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0
           libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
           libxcb-shape0 libxcb-xinerama0 vlc
-      - name: libmpv (bundled into the Linux binary when BUNDLE_LINUX_LIBMPV is on)
-        if: runner.os == 'Linux' && env.BUNDLE_LINUX_LIBMPV == '1'
-        run: sudo apt-get install -y libmpv2 || sudo apt-get install -y libmpv1
       - name: VLC (bundled into the Windows executable)
         if: runner.os == 'Windows'
         run: choco install vlc -y --no-progress
       - run: pip install -r requirements.txt "pyinstaller>=6.9"
-      - name: Unit tests
-        run: python -m unittest discover -s tests
-        env:
-          QT_QPA_PLATFORM: offscreen
-      - name: libmpv (the build pinned in packaging/libmpv-windows.lock.json, bundled into the Windows executable)
-        if: runner.os == 'Windows'
-        run: python packaging/fetch_libmpv.py libmpv
       - run: pyinstaller --noconfirm cinelocal.spec
-        env:
-          MPV_DIR: ${{ github.workspace }}/libmpv
       - name: Check the built-in player of the packaged app (Linux)
         if: runner.os == 'Linux'
         run: |
           test -f dist/CineLocal/_internal/libvlc.so.5 && test -d dist/CineLocal/_internal/vlc/plugins
-          flags=""; if [ "$BUNDLE_LINUX_LIBMPV" = "1" ]; then flags="--bundled-libmpv"; fi
-          dist/CineLocal/CineLocal --check-player player-check.txt $flags || { cat player-check.txt; exit 1; }
-          cat player-check.txt
+          dist/CineLocal/CineLocal --check-player player-check.txt || { cat player-check.txt; exit 1; }
       - name: Check the built-in player of the packaged app (Windows)
         if: runner.os == 'Windows'
         run: |
-          if (-not (Test-Path dist\CineLocal\_internal\libmpv-2.dll)) { throw "libmpv is not in the Windows build" }
-          if (-not (Test-Path dist\CineLocal\THIRD_PARTY_NOTICES.md)) { throw "THIRD_PARTY_NOTICES.md is not in the build" }
           if (-not ((Test-Path dist\CineLocal\_internal\libvlc.dll) -and (Test-Path dist\CineLocal\_internal\plugins))) { throw "libVLC is not in the build" }
           $p = Start-Process dist\CineLocal\CineLocal.exe -ArgumentList '--check-player','player-check.txt' -Wait -PassThru
           if (Test-Path player-check.txt) { Get-Content player-check.txt }
@@ -85,43 +61,8 @@ jobs:
           name: ${{ runner.os }}
           path: dist/CineLocal-*
 
-  appimage:
-    if: ${{ vars.BUNDLE_LINUX_LIBMPV == 'true' }}
-    runs-on: ubuntu-24.04
-    env:
-      BUNDLE_LINUX_LIBMPV: "1"
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: System libraries (bundled into the AppImage)
-        run: >
-          sudo apt-get update -qq && sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0
-          libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
-          libxcb-shape0 libxcb-xinerama0 vlc libmpv2
-      - run: pip install -r requirements.txt "pyinstaller>=6.9"
-      - name: Unit tests
-        run: python -m unittest discover -s tests
-        env:
-          QT_QPA_PLATFORM: offscreen
-      - run: pyinstaller --noconfirm cinelocal.spec
-      - name: Check the built-in player of the packaged app
-        run: dist/CineLocal/CineLocal --check-player player-check.txt --bundled-libmpv || { cat player-check.txt; exit 1; }
-      - name: AppImage
-        run: bash packaging/build-appimage.sh
-      - name: Check the AppImage (libmpv must come from inside it)
-        run: |
-          APPIMAGE_EXTRACT_AND_RUN=1 dist/CineLocal-linux-x86_64.AppImage --check-player appimage-check.txt --bundled-libmpv || { cat appimage-check.txt; exit 1; }
-          cat appimage-check.txt
-      - uses: actions/upload-artifact@v6
-        with:
-          name: AppImage
-          path: dist/CineLocal-*.AppImage
-
   publish:
-    needs: [build, appimage]
-    if: ${{ !cancelled() && needs.build.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.appimage.result) }}
+    needs: build
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/download-artifact@v7

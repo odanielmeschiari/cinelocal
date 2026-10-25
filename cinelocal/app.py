@@ -38,27 +38,14 @@ def _prefer_embeddable_platform() -> None:
 
 
 def _check_player() -> int:
-    """`CineLocal --check-player [file] [--bundled-libmpv]`: smoke test of a packaged build (used by the release
-    workflow). Writes the result to `file` (the windowed Windows build has no console): the first line says whether
-    libVLC loads, the second which libmpv was loaded. Exits 0 only if libVLC loads and, with --bundled-libmpv, if the
-    libmpv that loaded is the copy inside the app folder (not one of the system)."""
-    from . import mpvbackend
+    """`CineLocal --check-player [file]`: smoke test of a packaged build (used by the release workflow).
+    Writes the result to `file` (the windowed Windows build has no console) and exits 0 only if libVLC loads."""
     from .ui.player_page import load_error
     reason = load_error()
     args = sys.argv[sys.argv.index("--check-player") + 1:]
-    failed = bool(reason)
-    lines = [reason or "built-in player OK"]
-    mpv_reason, mpv_path = mpvbackend.unavailable_reason(), mpvbackend.library_path()
-    lines.append(f"libmpv: {mpv_path}" if not mpv_reason else f"libmpv: not loaded ({mpv_reason})")
-    if "--bundled-libmpv" in args:
-        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)).resolve()
-        if mpv_reason or base not in Path(mpv_path).resolve().parents:
-            lines.append(f"libmpv must be the copy bundled in {base}")
-            failed = True
-    files = [a for a in args if not a.startswith("--")]
-    if files:
-        Path(files[0]).write_text("\n".join(lines), encoding="utf-8")
-    return 1 if failed else 0
+    if args:
+        Path(args[0]).write_text(reason or "built-in player OK", encoding="utf-8")
+    return 1 if reason else 0
 
 
 _crash_log = None   # kept open while the app runs

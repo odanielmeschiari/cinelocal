@@ -31,39 +31,6 @@ to unpack itself to a temporary folder on every launch, which makes it slow to o
    `pip install pyinstaller && pyinstaller --noconfirm cinelocal.spec` (the app folder is `dist/CineLocal/`).
    Then `packaging/build-deb.sh <version>` (Linux) or `iscc /DAppVersion=<version> installer\cinelocal.iss`
    (Windows, with Inno Setup installed).
-3. **Windows libmpv.** The release bundles the libmpv build pinned in `packaging/libmpv-windows.lock.json` (tag, file
-   name and SHA-256), so every release carries the same DLL, and the workflow fails if it cannot be fetched. To build
-   locally: `python packaging/fetch_libmpv.py libmpv`, then set `MPV_DIR` to that folder before running PyInstaller. The
-   build repository only keeps recent releases: when the pinned one disappears, run
-   `python packaging/fetch_libmpv.py --print-lock`, review the printed file and commit it as the new lock (or mirror the
-   file in your own release and change `repo`). `--latest` installs the newest release without the pin.
-4. **Linux libmpv.** By default the Linux builds use the libmpv of the system, as before. Set the repository variable
-   `BUNDLE_LINUX_LIBMPV` to `true` (Settings > Secrets and variables > Actions > Variables) and the release installs
-   libmpv on the build machine, bundles it (and the libraries it needs) into the app, and fails if the packaged app
-   cannot load that copy. Locally: install `libmpv2` (or `libmpv1`), then `BUNDLE_LINUX_LIBMPV=1 pyinstaller --noconfirm
-   cinelocal.spec`, and check with `dist/CineLocal/CineLocal --check-player check.txt --bundled-libmpv`.
-   **Licensing:** Debian and Ubuntu distribute their libmpv binaries under the GPL-3.0-or-later, so publishing a build that
-   carries them has to follow that license (see `THIRD_PARTY_NOTICES.md`). That is why it is off until you decide.
-5. **AppImage (Linux).** With `BUNDLE_LINUX_LIBMPV` on, the release also attaches `CineLocal-linux-x86_64.AppImage`. To
-   build it locally (on Ubuntu 24.04, or any distribution with libmpv 0.37 and the same libraries): install `vlc`,
-   `libmpv2` and the Qt libraries listed in the workflow, then `BUNDLE_LINUX_LIBMPV=1 pyinstaller --noconfirm cinelocal.spec`
-   and `bash packaging/build-appimage.sh` (it downloads appimagetool 1.9.1 and checks its pinned SHA-256). The script
-   refuses to pack a folder that has no libmpv.
-6. `THIRD_PARTY_NOTICES.md` lists the bundled libraries and their licenses; the build copies it next to the executable.
-
-### Using the AppImage (Linux)
-
-```bash
-chmod +x CineLocal-linux-x86_64.AppImage
-./CineLocal-linux-x86_64.AppImage
-```
-
-It carries Qt, libVLC and libmpv, so VLC, mpv and FFmpeg do not need to be installed. What it cannot carry, and takes from
-your system: the graphics driver (Mesa or the proprietary one) and the video-acceleration drivers (VA-API / VDPAU), the
-X11 / Wayland libraries of the desktop, and FUSE to mount itself (what your distribution needs is described at
-https://github.com/AppImage/AppImageKit/wiki/FUSE). Without FUSE run it with `APPIMAGE_EXTRACT_AND_RUN=1 ./CineLocal-linux-x86_64.AppImage`. It was built on Ubuntu 24.04, so it needs
-a distribution with glibc 2.39 or newer; older ones (Ubuntu 22.04, Linux Mint 21) should use the `.deb` or the portable
-archive.
 
 ## Installation from source (Linux Mint / Ubuntu / Debian)
 
@@ -208,24 +175,6 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   to open it in the other one. The built-in player remembers where you stopped and resumes from there, even after closing the app.
   In the player, the **⚙** gear gathers **Audio** and **Subtitles** (tracks that come in the file) and **Picture**
   (brightness, contrast, color and sharpness). In fullscreen, the controls and the pointer disappear after a few seconds without moving the mouse.
-  **Upscaling** (Settings, on by default): if libmpv is available, the built-in player uses it instead of VLC and
-  enlarges videos smaller than the window on the GPU. It starts on a light scaler and climbs to better ones while
-  playback stays smooth, and steps back if frames are dropped, so each machine settles on what it can afford.
-  libmpv is installed for you: `install.sh` installs `libmpv2` (or `libmpv1`) with apt, `install.bat` downloads the
-  pinned LGPL build (about 30 MB, SHA-256 checked) with `packaging/fetch_libmpv.py`, and the Windows release bundles it.
-  Settings shows whether libmpv was found. Without it, or with the option **Off**, the player is VLC exactly as before.
-  The **Upscaling** option has three quality profiles: **Balanced** (the behaviour described above, the default),
-  **Economy** (stays on the light spline36 scaler) and **High quality** (starts on the best scaler and steps back
-  if frames are dropped). The choice applies to the next movie you open.
-  **Image enhancement** (Settings, off by default) works on every video, enlarged or not, and also needs libmpv:
-  **Light** smooths the color bands that compression leaves in gradients (mpv's *deband*, which adds a little fine
-  grain to break the bands), and **Strong** adds a gentle sharpening. Moving the sharpness slider of the player replaces
-  the sharpening of Strong. If playback starts dropping frames the enhancement turns itself off for the rest of the
-  session, before the player lowers the upscaling quality. With upscaling set to **Off** (VLC) it does nothing.
-  To measure a profile on your machine, start CineLocal with the environment variable `CINELOCAL_PLAYER_LOG` set to a
-  text file (for example `CINELOCAL_PLAYER_LOG=/tmp/player.log cinelocal`): while a movie plays, one line is added every
-  2 seconds with the video output and hardware decoder libmpv chose, the scaler and enhancement in use, the video and window sizes and the
-  late and dropped frames. Nothing is written when the variable is not set.
 
   ![Player](examples/player.png "Player")
   
@@ -307,7 +256,6 @@ cinelocal/
   service.py                in-memory state + operations used by the interface
   filters.py                filters, advanced search, sorting and counts
   player.py                 opens the movie in the external player
-  mpvbackend.py             optional libmpv engine of the built-in player (adaptive GPU upscaling)
   ui/                       theme (QSS), grid, sidebar, windows and dialogs
   ui/player_page.py         built-in player (libVLC)
   ui/advanced_search.py     advanced search panel (overlay)

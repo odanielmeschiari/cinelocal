@@ -64,9 +64,6 @@ DEFAULT_SETTINGS = {
     "subtitle_queue": [],     # video paths waiting for that download (new files, or the daily limit was hit)
     "default_player": "",     # "builtin", "external" or "" (= external only if a command is set)
     "player_prefs": {},       # volume and picture settings remembered between movies
-    "upscaling": "auto",      # built-in player with libmpv (GPU upscaling) if installed: "auto" (balanced),
-                              # "economy" or "high"; "off" = always VLC
-    "enhancement": "off",     # "light" (deband) or "strong" (deband + gentle sharpening), done by libmpv's GPU renderer
     "resume": {},             # file path -> position (ms) where it stopped
     "sort_id": "title_asc",
     "saved_filters": {},      # name -> criteria of the advanced search
