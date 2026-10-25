@@ -165,8 +165,9 @@ class SettingsTests(unittest.TestCase):
 
     def test_subtitle_uri_becomes_a_path(self):
         p = make_player()
-        p.add_slave(mb.MediaSlaveType.subtitle, Path("/m/My Movie.srt").as_uri(), True)
-        self.assertIn(("sub-add", "/m/My Movie.srt", "select"), p._m.sent)
+        subtitle = Path(tempfile.gettempdir()) / "My Movie.srt"   # absolute on both systems (a URI needs a drive on Windows)
+        p.add_slave(mb.MediaSlaveType.subtitle, subtitle.as_uri(), True)
+        self.assertIn(("sub-add", str(subtitle), "select"), p._m.sent)
 
 
 class AdaptiveUpscalingTests(unittest.TestCase):
@@ -501,7 +502,7 @@ class WindowsDllLookupTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.app = Path(self.tmp.name) / "app"
+        self.app = Path(self.tmp.name).resolve() / "app"   # resolved: the code does too (Windows temp has 8.3 short names)
         (self.app / "cinelocal").mkdir(parents=True)
         self.added = []
         for patcher in (mock.patch.object(mb.sys, "platform", "win32"),

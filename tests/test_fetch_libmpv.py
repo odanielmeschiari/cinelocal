@@ -76,7 +76,8 @@ class InstallTests(unittest.TestCase):
 
         with mock.patch.object(fl, "latest_tag", return_value="2026-10-25-x"), \
                 mock.patch.object(fl, "fetch_text", fake_text), mock.patch.object(fl, "download", fake_download), \
-                mock.patch.object(fl, "extract_dll", fake_extract), mock.patch.object(fl, "say"):
+                mock.patch.object(fl, "extract_dll", fake_extract), mock.patch.object(fl, "say"), \
+                mock.patch.object(fl, "probe"):   # on Windows install() would load the fake DLL for real
             fl.install(self.dest, latest=True)
 
     def test_good_download_is_installed_without_leftovers(self):
@@ -129,7 +130,7 @@ class PinnedInstallTests(unittest.TestCase):
 
         with mock.patch.object(fl, "load_lock", return_value=lock or self.lock), \
                 mock.patch.object(fl, "download", fake_download), mock.patch.object(fl, "extract_dll", fake_extract), \
-                mock.patch.object(fl, "say"):
+                mock.patch.object(fl, "say"), mock.patch.object(fl, "probe"):   # (see InstallTests)
             fl.install(self.dest)
 
     def test_the_lock_file_of_the_repository_is_valid(self):
