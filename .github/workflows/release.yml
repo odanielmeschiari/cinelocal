@@ -5,6 +5,8 @@
 # Linux builds carry their own libmpv only when the repository variable BUNDLE_LINUX_LIBMPV is "true" (Settings >
 # Secrets and variables > Actions > Variables). It is off by default because the libmpv of Ubuntu is distributed under
 # the GPL-3.0-or-later (see THIRD_PARTY_NOTICES.md): turn it on once you have decided how CineLocal is licensed.
+# The same variable adds the AppImage, which is built on Ubuntu 24.04 (libmpv 0.37) and so needs a distribution at least
+# as recent (glibc 2.39).
 name: Release
 
 on:
@@ -83,8 +85,43 @@ jobs:
           name: ${{ runner.os }}
           path: dist/CineLocal-*
 
+  appimage:
+    if: ${{ vars.BUNDLE_LINUX_LIBMPV == 'true' }}
+    runs-on: ubuntu-24.04
+    env:
+      BUNDLE_LINUX_LIBMPV: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: System libraries (bundled into the AppImage)
+        run: >
+          sudo apt-get update -qq && sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0
+          libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0
+          libxcb-shape0 libxcb-xinerama0 vlc libmpv2
+      - run: pip install -r requirements.txt "pyinstaller>=6.9"
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - run: pyinstaller --noconfirm cinelocal.spec
+      - name: Check the built-in player of the packaged app
+        run: dist/CineLocal/CineLocal --check-player player-check.txt --bundled-libmpv || { cat player-check.txt; exit 1; }
+      - name: AppImage
+        run: bash packaging/build-appimage.sh
+      - name: Check the AppImage (libmpv must come from inside it)
+        run: |
+          APPIMAGE_EXTRACT_AND_RUN=1 dist/CineLocal-linux-x86_64.AppImage --check-player appimage-check.txt --bundled-libmpv || { cat appimage-check.txt; exit 1; }
+          cat appimage-check.txt
+      - uses: actions/upload-artifact@v6
+        with:
+          name: AppImage
+          path: dist/CineLocal-*.AppImage
+
   publish:
-    needs: build
+    needs: [build, appimage]
+    if: ${{ !cancelled() && needs.build.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.appimage.result) }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/download-artifact@v7

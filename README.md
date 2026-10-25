@@ -44,7 +44,26 @@ to unpack itself to a temporary folder on every launch, which makes it slow to o
    cinelocal.spec`, and check with `dist/CineLocal/CineLocal --check-player check.txt --bundled-libmpv`.
    **Licensing:** Debian and Ubuntu distribute their libmpv binaries under the GPL-3.0-or-later, so publishing a build that
    carries them has to follow that license (see `THIRD_PARTY_NOTICES.md`). That is why it is off until you decide.
-5. `THIRD_PARTY_NOTICES.md` lists the bundled libraries and their licenses; the build copies it next to the executable.
+5. **AppImage (Linux).** With `BUNDLE_LINUX_LIBMPV` on, the release also attaches `CineLocal-linux-x86_64.AppImage`. To
+   build it locally (on Ubuntu 24.04, or any distribution with libmpv 0.37 and the same libraries): install `vlc`,
+   `libmpv2` and the Qt libraries listed in the workflow, then `BUNDLE_LINUX_LIBMPV=1 pyinstaller --noconfirm cinelocal.spec`
+   and `bash packaging/build-appimage.sh` (it downloads appimagetool 1.9.1 and checks its pinned SHA-256). The script
+   refuses to pack a folder that has no libmpv.
+6. `THIRD_PARTY_NOTICES.md` lists the bundled libraries and their licenses; the build copies it next to the executable.
+
+### Using the AppImage (Linux)
+
+```bash
+chmod +x CineLocal-linux-x86_64.AppImage
+./CineLocal-linux-x86_64.AppImage
+```
+
+It carries Qt, libVLC and libmpv, so VLC, mpv and FFmpeg do not need to be installed. What it cannot carry, and takes from
+your system: the graphics driver (Mesa or the proprietary one) and the video-acceleration drivers (VA-API / VDPAU), the
+X11 / Wayland libraries of the desktop, and FUSE to mount itself (what your distribution needs is described at
+https://github.com/AppImage/AppImageKit/wiki/FUSE). Without FUSE run it with `APPIMAGE_EXTRACT_AND_RUN=1 ./CineLocal-linux-x86_64.AppImage`. It was built on Ubuntu 24.04, so it needs
+a distribution with glibc 2.39 or newer; older ones (Ubuntu 22.04, Linux Mint 21) should use the `.deb` or the portable
+archive.
 
 ## Installation from source (Linux Mint / Ubuntu / Debian)
 
