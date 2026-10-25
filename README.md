@@ -217,9 +217,14 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   The **Upscaling** option has three quality profiles: **Balanced** (the behaviour described above, the default),
   **Economy** (stays on the light spline36 scaler) and **High quality** (starts on the best scaler and steps back
   if frames are dropped). The choice applies to the next movie you open.
+  **Image enhancement** (Settings, off by default) works on every video, enlarged or not, and also needs libmpv:
+  **Light** smooths the color bands that compression leaves in gradients (mpv's *deband*, which adds a little fine
+  grain to break the bands), and **Strong** adds a gentle sharpening. Moving the sharpness slider of the player replaces
+  the sharpening of Strong. If playback starts dropping frames the enhancement turns itself off for the rest of the
+  session, before the player lowers the upscaling quality. With upscaling set to **Off** (VLC) it does nothing.
   To measure a profile on your machine, start CineLocal with the environment variable `CINELOCAL_PLAYER_LOG` set to a
   text file (for example `CINELOCAL_PLAYER_LOG=/tmp/player.log cinelocal`): while a movie plays, one line is added every
-  2 seconds with the video output and hardware decoder libmpv chose, the scaler in use, the video and window sizes and the
+  2 seconds with the video output and hardware decoder libmpv chose, the scaler and enhancement in use, the video and window sizes and the
   late and dropped frames. Nothing is written when the variable is not set.
 
   ![Player](examples/player.png "Player")

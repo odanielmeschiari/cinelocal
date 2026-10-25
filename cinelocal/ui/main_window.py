@@ -645,6 +645,7 @@ class MainWindow(QMainWindow):
             return self._play(movie_id)
         self._playing_id = movie_id
         mpvbackend.set_profile(self.service.settings.get("upscaling"))
+        mpvbackend.set_enhancement(self.service.settings.get("enhancement"))
         page = VlcPlayerPage(self._movie_title(movie), self,
                              upscaling=self.service.settings.get("upscaling") != "off")
         page.back_requested.connect(self.close_player)

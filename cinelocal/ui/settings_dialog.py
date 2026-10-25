@@ -213,6 +213,17 @@ class SettingsDialog(QDialog):
         self.upscaling.currentIndexChanged.connect(self._update_upscaling_status)
         self._update_upscaling_status()
 
+        self.enhancement = QComboBox()
+        self.enhancement.addItem("Off", "off")
+        self.enhancement.addItem("Light (smooths color bands)", "light")
+        self.enhancement.addItem("Strong (bands and gentle sharpening)", "strong")
+        self.enhancement.setCurrentIndex(max(0, self.enhancement.findData(s.get("enhancement"))))
+        self.enhancement.setToolTip("Cleans up the picture on the GPU, on every video. Needs libmpv (see Upscaling above). "
+                                    "If playback starts dropping frames, it turns itself off for the rest of the session. "
+                                    "The sharpness slider of the player, once moved, replaces the sharpening of Strong. "
+                                    "Applies to the next movie you open.")
+        form.addRow("Image enhancement", self.enhancement)
+
         self.audio_language = self._track_combo(s.get("audio_language"), "File default")
         form.addRow("Audio language", self.audio_language)
         self.subtitle_language = self._track_combo(s.get("subtitle_language"), "File default")
@@ -365,6 +376,7 @@ class SettingsDialog(QDialog):
             "player_command": self.player_edit.text().strip(),
             "default_player": self.default_player.currentData(),
             "upscaling": self.upscaling.currentData(),
+            "enhancement": self.enhancement.currentData(),
             "audio_language": self.audio_language.currentData(),
             "subtitle_language": self.subtitle_language.currentData(),
             "opensubtitles_api_key": self.opensubtitles_key.text().strip(),

@@ -35,13 +35,23 @@ PROFILES = {
     "high": (len(TIERS) - 1, len(TIERS) - 1),   # starts on the best scaler and steps back if frames are dropped
 }
 DIAG_ENV = "CINELOCAL_PLAYER_LOG"   # path of a text file: when set, one line of measurements is appended per sample
+# Settings > Image enhancement: (deband, sharpen). Done by libmpv's GPU renderer on every video, enlarged or not.
+# "light" uses mpv's own deband defaults (they fix the bands that compression leaves in gradients and add a little
+# grain to hide them); "strong" adds a gentle unsharp mask. The page's sharpness slider, when moved, wins over it.
+ENHANCEMENTS = {
+    "off": (False, 0),
+    "light": (True, 0),
+    "strong": (True, 0.3),
+}
 ADAPT_EVERY = 2.0      # seconds between two samples of the frame counters
 CLIMB_AFTER = 15.0     # seconds without late/dropped frames before trying the next tier
 DROP_LIMIT = 3         # late or dropped frames within one sample that mean "this tier is too heavy"
 MIN_UPSCALE = 1.05     # the picture must be at least 5% larger than the video for the tier to matter
 
-_learned = {"start": START_TIER, "ceiling": len(TIERS) - 1}   # shared by every movie of this session
+# shared by every movie of this session; "enhance" goes False for good when the enhancement made playback drop frames
+_learned = {"start": START_TIER, "ceiling": len(TIERS) - 1, "enhance": True}
 _profile = "auto"
+_enhancement = "off"
 _engine = None
 _failed = False
 _reason = ""      # why libmpv could not be used (shown in Settings)
@@ -73,6 +83,12 @@ def set_profile(name: str) -> None:
     """Chooses the quality profile for the players created from now on (unknown names mean \"auto\")."""
     global _profile
     _profile = name if name in PROFILES else "auto"
+
+
+def set_enhancement(name: str) -> None:
+    """Chooses the image enhancement level for the players created from now on (unknown names mean \"off\")."""
+    global _enhancement
+    _enhancement = name if name in ENHANCEMENTS else "off"
 
 
 def _options(extra: dict | None = None) -> dict:
@@ -137,7 +153,7 @@ def _new_core(**opts):
 class _Player:
     """Plays one movie in a native window (the same one the page gives to VLC)."""
 
-    def __init__(self, extra: dict | None = None, profile: str = "auto"):
+    def __init__(self, extra: dict | None = None, profile: str = "auto", enhancement: str = "off"):
         self._extra = extra
         self._max_tier, self._forced = PROFILES.get(profile, PROFILES["auto"])
         self._m = None                 # the mpv core, created at the first play() (it needs the window id)
@@ -147,6 +163,8 @@ class _Player:
         self._released = False
         self._props: dict[str, object] = {}   # volume, picture, speed...: kept to survive reopening the file
         self._tier = min(self._ceiling(), _learned["start"] if self._forced is None else self._forced)
+        self._enh = enhancement if enhancement in ENHANCEMENTS and _learned["enhance"] else "off"
+        self._manual_sharpen = None    # the page's sharpness slider (None = untouched)
         self._sample_at = 0.0
         self._counted = None           # late+dropped frames at the last sample (None = start over)
         self._clean_since = time.monotonic()
@@ -190,6 +208,7 @@ class _Player:
                 opts["wid"] = str(self._wid)
             self._m = _new_core(**opts)
             self._apply_tier()
+            self._apply_enhancement()
             for name, value in self._props.items():
                 self._set(name, value)
         return self._m
@@ -210,7 +229,8 @@ class _Player:
         self._media, self._loaded = media, False
         sigma = next((float(o.split("=", 1)[1]) for o in media.options if o.startswith(":sharpen-sigma=")), None)
         # the page's sharpness slider (VLC sigma 0.2-2.0) becomes mpv's GPU unsharp mask (0-1); 0 = off
-        self._set("sharpen", 0 if sigma is None else round((sigma - 0.2) / 1.8, 2), remember=True)
+        self._manual_sharpen = None if sigma is None else round((sigma - 0.2) / 1.8, 2)
+        self._set("sharpen", self._sharpen(), remember=True)
 
     def play(self) -> int:
         if self._media is None or self._core() is None:
@@ -346,6 +366,15 @@ class _Player:
         if self._forced is None:   # a profile that starts on a fixed tier must not change where the others start
             _learned["start"] = self._tier
 
+    # -- image enhancement ---------------------------------------------------------------------------------------
+    def _sharpen(self):
+        """What mpv's `sharpen` should be: the slider of the page when it was moved, else the enhancement's."""
+        return ENHANCEMENTS[self._enh][1] if self._manual_sharpen is None else self._manual_sharpen
+
+    def _apply_enhancement(self) -> None:
+        self._set("deband", ENHANCEMENTS[self._enh][0])
+        self._set("sharpen", self._sharpen(), remember=True)
+
     def _upscaling(self) -> bool:
         """Is the video being enlarged right now? (otherwise the tier changes nothing and drops mean other things)"""
         window, video = self._get("osd_dimensions", {}), self._get("video_params", {})
@@ -362,7 +391,7 @@ class _Player:
             return
         video, window = self._get("video_params", {}) or {}, self._get("osd_dimensions", {}) or {}
         fields = (("mpv", self._get("mpv_version", "?")), ("vo", self._get("current_vo", "?")),
-                  ("hwdec", self._get("hwdec_current", "?")), ("tier", f"{self._tier}:{TIERS[self._tier][0]}"),
+                  ("hwdec", self._get("hwdec_current", "?")), ("tier", f"{self._tier}:{TIERS[self._tier][0]}"), ("enhancement", self._enh),
                   ("video", f"{video.get('dw', '?')}x{video.get('dh', '?')}"),
                   ("window", f"{window.get('w', '?')}x{window.get('h', '?')}"),
                   ("late_in_sample", "?" if late is None else late),
@@ -387,7 +416,15 @@ class _Player:
         total = self._get("frame_drop_count", 0) + self._get("vo_delayed_frame_count", 0)
         late, self._counted = (None if self._counted is None else total - self._counted), total
         self._log_diagnostics(late)
-        if late is None or not self._upscaling():
+        if late is None:
+            self._clean_since = now
+        elif late >= DROP_LIMIT and self._enh != "off":
+            # the enhancement is the optional part of the picture: it is the first thing to give up, for the whole session
+            self._clean_since = now
+            self._enh = "off"
+            _learned["enhance"] = False
+            self._apply_enhancement()
+        elif not self._upscaling():
             self._clean_since = now
         elif late >= DROP_LIMIT:
             self._clean_since = now
@@ -408,7 +445,7 @@ class _Engine:
     MediaSlaveType = MediaSlaveType
 
     def media_player_new(self) -> _Player:
-        return _Player(profile=_profile)
+        return _Player(profile=_profile, enhancement=_enhancement)
 
     def media_new(self, path: str) -> _Media:
         return _Media(path)

@@ -45,9 +45,9 @@ class FakeCore:
         return {a[1]: a[2] for a in self.sent if a[0] == "set"}
 
 
-def make_player(**props):
-    mb._learned.update(start=mb.START_TIER, ceiling=len(mb.TIERS) - 1)
-    player = mb._Player()
+def make_player(enhancement="off", **props):
+    mb._learned.update(start=mb.START_TIER, ceiling=len(mb.TIERS) - 1, enhance=True)
+    player = mb._Player(enhancement=enhancement)
     player._m, player._loaded = FakeCore(**props), True
     return player
 
@@ -248,7 +248,7 @@ class ProfileTests(unittest.TestCase):
         self.addCleanup(setattr, mb, "_profile", mb._profile)
 
     def player(self, profile):
-        mb._learned.update(start=mb.START_TIER, ceiling=len(mb.TIERS) - 1)
+        mb._learned.update(start=mb.START_TIER, ceiling=len(mb.TIERS) - 1, enhance=True)
         p = mb._Player(profile=profile)
         p._m, p._loaded = FakeCore(), True
         return p
@@ -402,6 +402,99 @@ class LinuxBundledLibmpvTests(unittest.TestCase):
         self.assertEqual(self.util.find_library("mpv"), str(custom))
 
 
+class EnhancementTests(unittest.TestCase):
+    """Settings > Image enhancement: deband and gentle sharpening, which give way before the scaler does."""
+
+    def setUp(self):
+        self.now = 1000.0
+        patcher = mock.patch.object(mb.time, "monotonic", lambda: self.now)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(setattr, mb, "_enhancement", mb._enhancement)
+        self.addCleanup(mb._learned.update, enhance=True)
+
+    def player(self, level):
+        p = make_player(enhancement=level)
+        p._apply_enhancement()
+        return p
+
+    def sample(self, p, late=0):
+        self.now += mb.ADAPT_EVERY
+        p._m.frame_drop_count += late
+        p.get_state()
+
+    def test_off_changes_nothing_visible(self):
+        sets = self.player("off")._m.sets()
+        self.assertEqual((sets["deband"], sets["sharpen"]), ("no", "0"))
+
+    def test_light_only_debands(self):
+        sets = self.player("light")._m.sets()
+        self.assertEqual((sets["deband"], sets["sharpen"]), ("yes", "0"))
+
+    def test_strong_debands_and_sharpens_gently(self):
+        sets = self.player("strong")._m.sets()
+        self.assertEqual((sets["deband"], sets["sharpen"]), ("yes", "0.3"))
+
+    def test_an_unknown_level_means_off(self):
+        self.assertEqual(self.player("extreme")._enh, "off")
+        mb.set_enhancement("extreme")
+        self.assertEqual(mb._enhancement, "off")
+        mb.set_enhancement("strong")
+        self.assertEqual(mb._Engine().media_player_new()._enh, "strong")
+
+    def test_the_slider_of_the_page_wins_over_the_enhancement(self):
+        p = self.player("strong")
+        media = mb._Media("/x.mkv")
+        media.add_option(":sharpen-sigma=1.10")
+        p.set_media(media)
+        self.assertEqual(p._m.sets()["sharpen"], "0.5")
+        p.set_media(mb._Media("/y.mkv"))               # slider back at its default: the enhancement's value returns
+        self.assertEqual(p._m.sets()["sharpen"], "0.3")
+
+    def test_it_is_applied_when_the_core_is_created(self):
+        mb._learned.update(start=mb.START_TIER, ceiling=len(mb.TIERS) - 1, enhance=True)
+        p = mb._Player(enhancement="strong")
+        with mock.patch.object(mb, "_new_core", lambda **opts: FakeCore()):
+            p._core()
+        sets = p._m.sets()
+        self.assertEqual((sets["deband"], sets["sharpen"]), ("yes", "0.3"))
+
+    def test_dropped_frames_turn_it_off_before_touching_the_scaler(self):
+        p = self.player("strong")
+        self.sample(p)                                  # baseline
+        tier = p._tier
+        self.sample(p, late=mb.DROP_LIMIT)
+        self.assertEqual((p._enh, p._tier), ("off", tier))
+        self.assertEqual((p._m.sets()["deband"], p._m.sets()["sharpen"]), ("no", "0"))
+        self.assertEqual(mb._learned["ceiling"], len(mb.TIERS) - 1)    # the scaler was not blamed
+        self.sample(p, late=mb.DROP_LIMIT)              # still dropping: now the scaler gives way
+        self.assertEqual(p._tier, tier - 1)
+
+    def test_it_also_gives_way_when_the_video_is_not_being_enlarged(self):
+        p = self.player("light")
+        p._m.osd_dimensions = {"w": 1280, "h": 720}     # window as big as the video: the scaler is irrelevant here
+        self.sample(p)
+        self.sample(p, late=mb.DROP_LIMIT)
+        self.assertEqual(p._enh, "off")
+
+    def test_the_manual_sharpness_survives_the_enhancement_giving_way(self):
+        p = self.player("strong")
+        media = mb._Media("/x.mkv")
+        media.add_option(":sharpen-sigma=1.10")
+        p.set_media(media)
+        p._loaded = True                                # set_media() starts over; pretend the movie is playing again
+        self.sample(p)
+        self.sample(p, late=mb.DROP_LIMIT)
+        self.assertEqual((p._m.sets()["deband"], p._m.sets()["sharpen"]), ("no", "0.5"))
+
+    def test_the_next_movie_does_not_try_again(self):
+        p = self.player("strong")
+        self.sample(p)
+        self.sample(p, late=mb.DROP_LIMIT)
+        self.assertFalse(mb._learned["enhance"])
+        self.assertEqual(mb._Player(enhancement="strong")._enh, "off")   # a new movie of the same session
+
+
 class WindowsDllLookupTests(unittest.TestCase):
     """_use_bundled_mpv() with a pretend Windows: where it looks for the DLL and what it changes."""
 
@@ -515,6 +608,32 @@ class RealLibmpvTests(unittest.TestCase):
             finally:
                 p.stop()
                 p.release()
+
+
+@unittest.skipUnless(libmpv_works(), "needs libmpv")
+class RealEnhancementOptionsTests(unittest.TestCase):
+    """_set() ignores options a libmpv does not know, so ask a real core whether it took the enhancement."""
+
+    def real_player(self, level):
+        mb._learned.update(start=mb.START_TIER, ceiling=len(mb.TIERS) - 1, enhance=True)
+        p = mb._Player(extra={"vo": "null", "ao": "null"}, enhancement=level)
+        p.set_media(mb._Media("/does/not/exist.mkv"))
+        self.assertIsNotNone(p._core())
+        self.addCleanup(p.release)
+        return p
+
+    def test_strong_reaches_mpv(self):
+        p = self.real_player("strong")
+        self.assertIs(p._m.deband, True)
+        self.assertAlmostEqual(p._m.sharpen, 0.3, places=5)
+
+    def test_off_and_giving_way_restore_mpv_defaults(self):
+        p = self.real_player("off")
+        self.assertEqual((p._m.deband, p._m.sharpen), (False, 0.0))
+        p = self.real_player("strong")
+        p._enh = "off"
+        p._apply_enhancement()
+        self.assertEqual((p._m.deband, p._m.sharpen), (False, 0.0))
 
 
 if __name__ == "__main__":
