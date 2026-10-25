@@ -644,7 +644,8 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(reason + " Using the system player.", 10000)
             return self._play(movie_id)
         self._playing_id = movie_id
-        page = VlcPlayerPage(self._movie_title(movie), self)
+        page = VlcPlayerPage(self._movie_title(movie), self,
+                             upscaling=self.service.settings.get("upscaling") != "off")
         page.back_requested.connect(self.close_player)
         page.progress.connect(self.service.save_progress)
         page.finished.connect(self.service.mark_finished)

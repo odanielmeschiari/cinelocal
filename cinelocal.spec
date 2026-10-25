@@ -30,11 +30,19 @@ def vlc_binaries():
     return found
 
 
+def mpv_binaries():
+    """Optional, Windows only: mpv-2.dll from $MPV_DIR gives the built-in player GPU upscaling. Without it the build
+    still works and the player uses VLC. On Linux the system libmpv is used (the .deb recommends it)."""
+    root = os.environ.get("MPV_DIR")
+    dlls = [Path(root) / name for name in ("mpv-2.dll", "libmpv-2.dll")] if win and root else []
+    return [(str(dll), ".") for dll in dlls if dll.is_file()]
+
+
 a = Analysis(
     ["main.py"],
-    binaries=vlc_binaries(),
+    binaries=vlc_binaries() + mpv_binaries(),
     datas=[("assets/cinelocal.svg", "assets")],
-    hiddenimports=["PySide6.QtSvg", "vlc"],   # QtSvg: the .svg window icon; vlc: python-vlc, imported lazily
+    hiddenimports=["PySide6.QtSvg", "vlc", "mpv"],   # QtSvg: the .svg window icon; vlc, mpv: imported lazily
 )
 exe = EXE(
     PYZ(a.pure),

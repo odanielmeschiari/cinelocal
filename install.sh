@@ -27,6 +27,12 @@ if ((${#missing[@]})); then
     done
 fi
 
+# Optional: libmpv adds GPU upscaling to the built-in player (without it the player uses VLC, as before).
+if ! dpkg -s libmpv2 >/dev/null 2>&1 && ! dpkg -s libmpv1 >/dev/null 2>&1; then
+    sudo apt-get install -y libmpv2 >/dev/null 2>&1 || sudo apt-get install -y libmpv1 >/dev/null 2>&1 \
+        || echo "    note: libmpv is not available here; the built-in player will use VLC (no GPU upscaling)"
+fi
+
 echo "==> Copying files to $PREFIX"
 mkdir -p "$PREFIX" "$BIN" "$APPS" "$ICONS"
 rm -rf "$PREFIX/cinelocal" "$PREFIX/assets"

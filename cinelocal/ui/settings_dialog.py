@@ -194,6 +194,14 @@ class SettingsDialog(QDialog):
         self.default_player.setCurrentIndex(max(0, self.default_player.findData(chosen)))
         form.addRow("Default player", self.default_player)
 
+        self.upscaling = QComboBox()
+        self.upscaling.addItem("Automatic (needs libmpv)", "auto")
+        self.upscaling.addItem("Off (always VLC)", "off")
+        self.upscaling.setCurrentIndex(max(0, self.upscaling.findData(s.get("upscaling"))))
+        self.upscaling.setToolTip("Upscales videos smaller than the window on the GPU, adapting to your hardware. "
+                                  "Applies to the next movie you open.")
+        form.addRow("Upscaling", self.upscaling)
+
         self.audio_language = self._track_combo(s.get("audio_language"), "File default")
         form.addRow("Audio language", self.audio_language)
         self.subtitle_language = self._track_combo(s.get("subtitle_language"), "File default")
@@ -329,6 +337,7 @@ class SettingsDialog(QDialog):
             "language": self.language.currentData(),
             "player_command": self.player_edit.text().strip(),
             "default_player": self.default_player.currentData(),
+            "upscaling": self.upscaling.currentData(),
             "audio_language": self.audio_language.currentData(),
             "subtitle_language": self.subtitle_language.currentData(),
             "opensubtitles_api_key": self.opensubtitles_key.text().strip(),

@@ -37,6 +37,7 @@ Priority: optional
 Maintainer: odanielmeschiari <odanielmeschiari@users.noreply.github.com>
 Homepage: https://github.com/odanielmeschiari/cinelocal
 Depends: libc6, libegl1, libgl1, libxkbcommon-x11-0, libxcb-cursor0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-render-util0, libxcb-shape0, libxcb-xinerama0
+Recommends: libmpv2 | libmpv1
 Description: Local movie and series browser and player
  Browse and play the movies and series in your local folders, with posters
  and metadata. Includes a built-in player (libVLC is bundled).

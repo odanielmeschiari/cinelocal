@@ -12,6 +12,7 @@ from PySide6.QtGui import (QColor, QCursor, QGuiApplication, QKeySequence, QLine
 from PySide6.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
                                QSizePolicy, QSlider, QStyle, QToolTip, QVBoxLayout, QWidget, QWidgetAction)
 
+from .. import mpvbackend
 from ..config import TRACK_LANGUAGES
 from ..tracks import choose_track, track_name as _track_name
 from .icons import IconButton
@@ -136,9 +137,10 @@ class VlcPlayerPage(QWidget):
     prefs_changed = Signal(dict)      # volume and picture adjustments, to remember for the next movies
     subtitle_search_requested = Signal(str, str)   # path, language ('' = preferred): look for a subtitle on OpenSubtitles
 
-    def __init__(self, title: str, parent=None):
+    def __init__(self, title: str, parent=None, upscaling: bool = False):
         super().__init__(parent)
-        self._vlc, self._instance = _vlc
+        # libmpv (GPU upscaling) when asked for and available; otherwise libVLC, as always
+        self._vlc, self._instance = (mpvbackend.load() if upscaling else None) or _vlc
         self._mp = self._instance.media_player_new()
         self._dragging = False
         self._fullscreen = False
