@@ -52,6 +52,7 @@ class Sidebar(QTreeWidget):
         if counts["continue"]:
             self._entry("Continue watching", ("continue", None), counts["continue"])
         self._entry("All movies", ("all", None), counts["all"])
+        self._entry("For you", ("foryou", None), counts.get("foryou") or None)
         self._entry("Favorites", ("favorites", None), counts["favorites"])
         self._entry("Watchlist", ("watchlist", None), counts["watchlist"])
         self._entry("Watched", ("watched", True), counts["watched"])

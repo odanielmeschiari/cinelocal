@@ -17,6 +17,7 @@ from .library import sync_library
 from .metadata_service import find_candidates, find_series_candidates, process_movie, process_series
 from .movie_fields import decorate
 from .opensubtitles import OpenSubtitlesClient, OpenSubtitlesError, fetch_subtitle, has_subtitle
+from .recommend import match_scores, recommend
 from .tmdb import TMDBClient
 from .workers import FuncWorker, UpdateWorker
 
@@ -49,6 +50,10 @@ class LibraryService(QObject):
         self._subtitle_stop = threading.Event()
         self._probing = False               # technical info of the files being read in the background
         self._probe_stop = threading.Event()
+        self._match: dict[int, float] | None = None   # "For you" scores, kept until something changes
+        self._picks: list[dict] = []
+        self.library_changed.connect(self._forget_match)
+        self.movie_changed.connect(self._forget_match)
 
     # -- estado ----------------------------------------------------------------
     @property
@@ -83,6 +88,22 @@ class LibraryService(QObject):
         self.collections = self.db.all_collections()
         self.membership = self.db.membership()
         self._reload_tags()
+        self._forget_match()
+
+    def _forget_match(self, *_args) -> None:
+        self._match = None
+
+    def match_scores(self) -> dict[int, float]:
+        """id -> 0..1: how much each title resembles what the user favorited and rated (empty if nothing yet)."""
+        if self._match is None:
+            self._match = match_scores(self.movies)
+            self._picks = recommend(self.movies, self._match)
+        return self._match
+
+    def recommendations(self) -> list[dict]:
+        """The "For you" picks: titles still to watch, the one that looks most like the user's taste first."""
+        self.match_scores()
+        return self._picks
 
     def _series_entry(self, row: dict) -> dict:
         """Series in the same format as a movie, for the grid, filters and search (id = -series id)."""

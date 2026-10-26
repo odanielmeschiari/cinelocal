@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QListWidget, QListW
 from ..service import LibraryService
 from .advanced_search import check_icon
 
-FIXED_SECTIONS = (("continue", "Continue watching"), ("history", "History"),
+FIXED_SECTIONS = (("continue", "Continue watching"), ("foryou", "For you"), ("history", "History"),
                   ("favorites", "Favorites"), ("watchlist", "Watchlist"))
 _KEY, _ON = Qt.UserRole, Qt.UserRole + 1
 

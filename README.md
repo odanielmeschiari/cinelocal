@@ -127,8 +127,8 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
 
 - **All movies** (default screen): rows above the grid (← → arrows to move through the movies) that
   disappear when empty or while searching, and scroll together with the grid. Use **Edit home** (in Settings) to choose
-  which rows appear — *Continue watching*, *History*, *Favorites*, *Watchlist* and any of your collections —
-  and in what order (by default only *Continue watching*).
+  which rows appear — *Continue watching*, *For you*, *History*, *Favorites*, *Watchlist* and any of your collections —
+  and in what order (by default *Continue watching* and *For you*).
 - **Grid**: click a poster to open the details (in the same window; `←  Back`, `Esc` or `Alt`+`←` return to the list
   exactly where you were). `Ctrl`/`Shift`+click selects several movies;
   right-click opens the menu (favorite, watched, collections, tags, update, fix match). In details, use **More → More info**
@@ -136,7 +136,7 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   Each movie can have multiple colored tags; add or remove them from details or the grid menu and change their color
   from a tag's context menu. Click a tag on a movie's details page to filter the library to that tag.
 - **Instant search** (`Ctrl+F`) by title, actor, director or genre; **sorting** by title, year,
-  rating, popularity, vote count, runtime or recently added (ascending and descending where applicable).
+  rating, popularity, vote count, runtime, recently added or best match for you (ascending and descending where applicable).
 - **Advanced search** (magnifier button next to the search box): opens a panel where you combine any
   of the filters below; only the ones you fill in count, and a movie must match all of them. It works
   on the data already saved locally, on top of the section selected in the sidebar. The button shows
@@ -189,6 +189,13 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   right-click menu; the list lives in the sidebar.  
   ![Description](examples/description.png "Description")
   
+- **For you**: recommendations from your own library, shown as a row on the home screen and as its own section in the
+  sidebar, with the % each title matches your taste. Your taste is the average of what you favorited and rated
+  (stars weigh most; low stars count against), plus a little for what you watched or queued. Titles you have not
+  watched yet are scored by their genres (rare ones count more), TMDB rating, era and language, and get a boost
+  for the director, cast and franchise of the ones you loved. The row is always ordered by match, whatever sort
+  is chosen for the rest of the home screen; the sidebar section starts by best match and can be sorted freely.
+  It works offline, from the metadata already saved.
 - **Similar movies**: the details of a movie end with a row of movies from your library that resemble it (genres,
   director, cast, franchise and era). It works offline, from the metadata already saved.
 - **Franchises**: movies that belong to the same TMDB franchise (2 or more in your library) are put into a collection
@@ -242,6 +249,7 @@ cinelocal/
   db.py                     SQLite: movies, collections, flags
   scanner.py                folder scanning and filename cleanup
   library.py                syncs disk ↔ database (new, removed, moved)
+  recommend.py              "For you": match of each title with your taste
   similar.py                similar movies from the saved metadata
   franchises.py             which movies go into which franchise collection
   duplicates.py             the same movie or episode in more than one file

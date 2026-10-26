@@ -23,6 +23,7 @@ SORT_OPTIONS = [
     ("added_desc", "Recently added", "added", True),
     ("myrating_desc", "My rating (highest)", "user_rating", True),
     ("myrating_asc", "My rating (lowest)", "user_rating", False),
+    ("match_desc", "Best match for you", "match", True),
 ]
 _SORT_BY_ID = {o[0]: o for o in SORT_OPTIONS}
 
@@ -176,7 +177,9 @@ def filter_movies(movies: list[dict], flt: Filter, membership: dict[int, set[int
     return result
 
 
-def _sort_value(movie: dict, field: str):
+def _sort_value(movie: dict, field: str, match: dict | None = None):
+    if field == "match":   # how much it looks like what the user likes (see recommend.py)
+        return (match or {}).get(movie["id"])
     if field == "title":
         return movie["sort_title"]
     if field == "year":
@@ -194,15 +197,15 @@ def _sort_value(movie: dict, field: str):
     return movie["added_at"]
 
 
-def sort_movies(movies: list[dict], sort_id: str) -> list[dict]:
+def sort_movies(movies: list[dict], sort_id: str, match: dict | None = None) -> list[dict]:
     _, _, field, desc = _SORT_BY_ID.get(sort_id, SORT_OPTIONS[0])
-    present = [m for m in movies if _sort_value(m, field) is not None]
-    missing = [m for m in movies if _sort_value(m, field) is None]
+    present = [m for m in movies if _sort_value(m, field, match) is not None]
+    missing = [m for m in movies if _sort_value(m, field, match) is None]
     # Two stable sorts: first by title, then by the chosen field,
     # so ties stay in alphabetical order.
     present.sort(key=lambda m: m["sort_title"])
     if field != "title":
-        present.sort(key=lambda m: _sort_value(m, field), reverse=desc)
+        present.sort(key=lambda m: _sort_value(m, field, match), reverse=desc)
     elif desc:
         present.reverse()
     missing.sort(key=lambda m: m["sort_title"])

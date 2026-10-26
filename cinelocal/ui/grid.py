@@ -17,6 +17,7 @@ from .theme import COLORS
 POSTER_W, POSTER_H = 180, 270
 CELL_W, CELL_H = 204, 346
 MAX_CACHED_POSTERS = 900
+MATCH_ROLE = Qt.UserRole + 1   # model role: how much (%) the title matches the user's taste, if it is being shown
 STACK_STEP = 10   # how far (px) each cover of a collection's pile peeks out to the right of the one in front
 
 
@@ -25,6 +26,7 @@ class MovieModel(QAbstractListModel):
         super().__init__(parent)
         self._movies: list[dict] = []
         self._row_by_id: dict[int, int] = {}
+        self._match: dict[int, float] = {}
 
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self._movies)
@@ -38,11 +40,15 @@ class MovieModel(QAbstractListModel):
         if role == Qt.ToolTipRole:
             year = movie["display_year"]
             return f"{movie['display_title']} ({year})" if year else movie["display_title"]
+        if role == MATCH_ROLE and movie["id"] in self._match:
+            return round(self._match[movie["id"]] * 100)
         return None
 
-    def set_movies(self, movies: list[dict]) -> None:
+    def set_movies(self, movies: list[dict], match: dict[int, float] | None = None) -> None:
+        """`match` (id -> 0..1) makes the posters show a "% match" badge."""
         self.beginResetModel()
         self._movies = movies
+        self._match = match or {}
         self._row_by_id = {m["id"]: i for i, m in enumerate(movies)}
         self.endResetModel()
 
@@ -128,6 +134,10 @@ class MovieDelegate(QStyledItemDelegate):
         painter.setClipping(False)
 
         self._paint_badges(painter, cover, movie)
+        match = index.data(MATCH_ROLE)
+        if match is not None:   # top left, under the "watched" mark
+            self._pill(painter, QRect(cover.left() + 8, cover.top() + (40 if movie["watched"] else 8), 46, 20),
+                       f"{match}%", QColor(0, 0, 0, 185), COLORS["accent"])
 
         if selected or hover:
             pen = QPen(QColor(COLORS["accent"] if selected else COLORS["accent_hover"]),

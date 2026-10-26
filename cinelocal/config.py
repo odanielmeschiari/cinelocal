@@ -67,8 +67,8 @@ DEFAULT_SETTINGS = {
     "resume": {},             # file path -> position (ms) where it stopped
     "sort_id": "title_asc",
     "saved_filters": {},      # name -> criteria of the advanced search
-    "home_sections": ["continue"],   # rows of the home screen, in order: "continue", "history", "favorites",
-                                     # "watchlist" or "collection:<id>"
+    "home_sections": ["continue", "foryou"],   # rows of the home screen, in order: "continue", "foryou", "history",
+                                               # "favorites", "watchlist" or "collection:<id>"
     "grouped_collections": [],       # ids of the collections shown as a single poster in "All movies"
     "group_auto_collections": False,   # also group the automatic (franchise) collections there
     "collection_covers": {},         # str(collection id) -> "cover" (own poster); anything else = stack of covers

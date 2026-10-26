@@ -42,6 +42,7 @@ class MainWindow(QMainWindow):
         self.query = ""
         self.advanced: dict = {}   # criteria of the advanced search (empty = off)
         self.sort_id = service.settings.get("sort_id")
+        self._saved_sort: str | None = None   # the chosen sort while "For you" shows its own (best match first)
         self._home_rows: dict[str, HomeSection] = {}   # row key -> row of the home screen
         self._detail: MovieDialog | None = None
         self._player: VlcPlayerPage | None = None
@@ -302,7 +303,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ view --
     def _home_keys(self) -> list[str]:
         """Rows chosen for the home screen, in order (collections that no longer exist are dropped)."""
-        known = {"continue", "history", "favorites", "watchlist"}
+        known = {"continue", "foryou", "history", "favorites", "watchlist"}
         known |= {f"collection:{c['id']}" for c in self.service.collections}
         return [k for k in self.service.settings.get("home_sections") or [] if k in known]
 
@@ -314,8 +315,11 @@ class MainWindow(QMainWindow):
         if key == "history":
             items = filters.filter_movies(s.movies, ("history", None), s.membership, "", None, None, s.history_stamp)
             return sorted(items, key=lambda m: -s.history_stamp(m))
+        if key == "foryou":   # always by match: the sort chosen for the rest of the home screen does not apply
+            return self.service.recommendations()
         flt = (key, None) if key in ("favorites", "watchlist") else ("collection", int(key.split(":")[1]))
-        return filters.sort_movies(filters.filter_movies(s.movies, flt, s.membership), self.sort_id)
+        return filters.sort_movies(filters.filter_movies(s.movies, flt, s.membership), self.sort_id,
+                                   s.match_scores() if self.sort_id == "match_desc" else None)
 
     def _new_home_row(self, key: str) -> HomeSection:
         section = HomeSection("")
@@ -333,8 +337,8 @@ class MainWindow(QMainWindow):
             section = self._home_rows.pop(key)
             self.home_box.removeWidget(section)
             section.deleteLater()
-        titles = {"continue": "Continue watching", "history": "History", "favorites": "Favorites",
-                  "watchlist": "Watchlist"}
+        titles = {"continue": "Continue watching", "foryou": "For you", "history": "History",
+                  "favorites": "Favorites", "watchlist": "Watchlist"}
         for position, key in enumerate(keys):
             section = self._home_rows.get(key) or self._new_home_row(key)
             self.home_box.removeWidget(section)
@@ -343,7 +347,8 @@ class MainWindow(QMainWindow):
             row = section.row
             bar = row.horizontalScrollBar()
             scroll = bar.value()
-            row.movie_model.set_movies(items[:HOME_ROW_LIMIT])
+            row.movie_model.set_movies(items[:HOME_ROW_LIMIT],
+                                       self.service.match_scores() if key == "foryou" else None)
             QTimer.singleShot(0, lambda b=bar, v=scroll: b.setValue(v))   # the layout only finishes later
             section.title.setText(titles.get(key) or self.service.collection_name(int(key.split(":")[1])))
             section.count.setText(str(len(items)))
@@ -370,14 +375,36 @@ class MainWindow(QMainWindow):
             center = self.grid.viewport().mapTo(self.grid_content, self.grid.visualRect(index).center())
             self.grid_page.ensureVisible(center.x(), center.y(), 0, CELL_H // 2)
 
+    def _scope(self) -> tuple[list[dict], filters.Filter]:
+        """What the current section searches in: the whole library, or just the picks of "For you"."""
+        if self.flt[0] == "foryou":
+            return self.service.recommendations(), ("all", None)
+        return self.service.movies, self.flt
+
+    def _sync_sort(self) -> None:
+        """In "For you" the best match comes first; any sort picked there is forgotten on leaving it."""
+        foryou = self.flt[0] == "foryou"
+        if foryou == (self._saved_sort is not None):
+            return
+        if foryou:
+            self._saved_sort, self.sort_id = self.sort_id, "match_desc"
+        else:
+            self.sort_id, self._saved_sort = self._saved_sort, None
+        self.sort_combo.blockSignals(True)
+        self.sort_combo.setCurrentIndex(max(0, self.sort_combo.findData(self.sort_id)))
+        self.sort_combo.blockSignals(False)
+
     def refresh_view(self) -> None:
+        self._sync_sort()
         self._refresh_home()
         bar = self.grid_page.verticalScrollBar()
         position = bar.value()
-        visible = filters.filter_movies(self.service.movies, self.flt, self.service.membership,
+        pool, flt = self._scope()
+        scores = self.service.match_scores() if self.flt[0] == "foryou" or self.sort_id == "match_desc" else None
+        visible = filters.filter_movies(pool, flt, self.service.membership,
                                         self.query, self.service.progress_of, self.advanced,
                                         self.service.history_stamp)
-        visible = filters.sort_movies(visible, self.sort_id)
+        visible = filters.sort_movies(visible, self.sort_id, scores)
         if self.flt[0] == "continue":   # the one you watched last comes first
             visible.sort(key=lambda m: -self.service.last_played(m))
         elif self.flt[0] == "history":   # most recently watched first
@@ -391,7 +418,7 @@ class MainWindow(QMainWindow):
             shown = filters.group_collections(
                 visible, self.service.membership, group_ids, self.service.collection_name,
                 lambda cid: images.collection_cover(cid) if styles.get(str(cid)) == "cover" else None)
-        self.grid.movie_model.set_movies(shown)
+        self.grid.movie_model.set_movies(shown, scores)
         bar.setValue(position)
         QTimer.singleShot(0, lambda: bar.setValue(position))   # the layout only finishes later
 
@@ -415,6 +442,8 @@ class MainWindow(QMainWindow):
     def _empty_text(self, total: int) -> str:
         if self.query or self.advanced:
             return "No movies match your search."
+        if self.flt[0] == "foryou":
+            return "Nothing to recommend yet.\nFavorite or rate a few movies and your picks will show up here."
         if total == 0:
             return "No movies found in the selected folder.\nUse the Settings button to choose another folder."
         return "No movies in this section."
@@ -422,7 +451,8 @@ class MainWindow(QMainWindow):
     def _heading_text(self) -> str:
         kind, value = self.flt
         names = {"all": "All movies", "favorites": "Favorites", "watchlist": "Watchlist",
-                 "review": "Needs review", "continue": "Continue watching", "history": "History"}
+                 "review": "Needs review", "continue": "Continue watching", "history": "History",
+                 "foryou": "For you"}
         if kind in names:
             return names[kind]
         if kind == "watched":
@@ -439,6 +469,7 @@ class MainWindow(QMainWindow):
 
     def _rebuild_sidebar(self) -> None:
         counts = filters.sidebar_counts(self.service.movies, self.service.progress_of, self.service.history_stamp)
+        counts["foryou"] = len(self.service.recommendations())
         self.sidebar.rebuild(counts, self.service.collections, self.service.membership, self.flt,
                              self.service.tags, self.service.tag_membership)
         if self.sidebar.current_filter != self.flt:   # the previous selection no longer exists
@@ -508,9 +539,10 @@ class MainWindow(QMainWindow):
     def _open_advanced(self) -> None:
         s = self.service
         self.advanced_btn.setChecked(bool(self.advanced))   # the click toggled it; it only shows the filter state
+        pool, flt = self._scope()
         overlay = AdvancedSearch(
             s, self.stack.widget(1), self.advanced,
-            lambda adv: len(filters.filter_movies(s.movies, self.flt, s.membership, self.query,
+            lambda adv: len(filters.filter_movies(pool, flt, s.membership, self.query,
                                                   s.progress_of, adv, s.history_stamp)))
         overlay.applied.connect(self._on_advanced)
 
@@ -530,7 +562,8 @@ class MainWindow(QMainWindow):
 
     def _on_sort(self) -> None:
         self.sort_id = self.sort_combo.currentData()
-        self.service.settings.update(sort_id=self.sort_id)
+        if self._saved_sort is None:   # inside "For you" the choice is not kept
+            self.service.settings.update(sort_id=self.sort_id)
         self.refresh_view()
 
     def _focus_search(self) -> None:
@@ -547,7 +580,7 @@ class MainWindow(QMainWindow):
             section.row.movie_model.refresh_movie(movie_id)
         if self.flt[0] == "all" and not self.query and not self.advanced:
             self._home_timer.start()
-        if self.flt[0] in ("favorites", "watchlist", "watched", "review", "stars") or self.advanced or (
+        if self.flt[0] in ("favorites", "watchlist", "watched", "review", "stars", "foryou") or self.advanced or (
                 self.flt[0] in ("continue", "history") and self._player is None):
             self.refresh_view()   # the movie may have entered/left the current section
         self._sidebar_timer.start()
