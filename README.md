@@ -190,12 +190,51 @@ Your movies are **never deleted**: the uninstaller only removes the app and, if 
   ![Description](examples/description.png "Description")
   
 - **For you**: recommendations from your own library, shown as a row on the home screen and as its own section in the
-  sidebar, with the % each title matches your taste. Your taste is the average of what you favorited and rated
-  (stars weigh most; low stars count against), plus a little for what you watched or queued. Titles you have not
-  watched yet are scored by their genres (rare ones count more), TMDB rating, era and language, and get a boost
-  for the director, cast and franchise of the ones you loved. The row is always ordered by match, whatever sort
-  is chosen for the rest of the home screen; the sidebar section starts by best match and can be sorted freely.
-  It works offline, from the metadata already saved.
+  sidebar, with the % each title matches your taste. The row is always ordered by match, whatever sort is chosen for
+  the rest of the home screen; the sidebar section starts by best match (**Sort → Best match for you**) and can be
+  sorted freely (that choice is forgotten when you leave it). It works offline, from the metadata already saved, and
+  is recalculated whenever you favorite, rate, mark as watched, queue or update something. The exact criteria:
+
+  1. **What counts as taste.** Each title with metadata gets a score from -1 to 1, the sum of (limited to that range):
+
+     | Signal | Weight |
+     |---|---|
+     | Your stars: 1★ / 2★ / 3★ / 4★ / 5★ (half stars in between) | -1.0 / -0.5 / +0.1 / +0.6 / +1.0 |
+     | Favorite | +0.8 |
+     | In the watchlist | +0.2 |
+     | Watched, without stars | +0.1 |
+
+     Titles with a positive score are what you like; a negative one counts against. Nothing happens until at least
+     one title has a score.
+
+  2. **The profile** is the average of those titles, weighted by their score:
+     - *Genres*: the average of their genres, where rare genres in your library count more than common ones
+       (weight `ln((N+1)/(n+1)) + 1`; `N` titles, `n` with that genre). Series genres such as "Action & Adventure"
+       are split into their parts. Negative scores subtract.
+     - *Rating*: the average TMDB rating of what you like. The rating of a title with few votes is pulled towards 6.0:
+       `(rating × votes + 6.0 × 200) / (votes + 200)`.
+     - *Era*: the average year of what you like, and how spread out those years are (at least 10 years).
+     - *Language*: the share of what you like (by score) in each original language.
+     - *Director, cast and franchise*: how much you love each one, from 0 to 1: `1 - ∏(1 - score)` over the titles you
+       like with that director, one of the 5 top-billed actors or that franchise (so two 5★ movies from the same
+       director make 100%), minus the same amount computed from the titles you dislike (never below 0).
+       Era, rating and language only look at the titles you like.
+
+  3. **The match** of a title, from 0 to 100%:
+     - `genres` = cosine similarity between the title's genres and the profile's genres (0 if they share none);
+     - `rating` = 100% if the title is as good as what you like or better, else it falls as `exp(-gap² / 2)`, where
+       `gap` is the difference in TMDB rating points (50% if you have not rated anything with TMDB votes);
+     - `era` = `exp(-((year - average year) / spread)² / 2)` (50% if the year is unknown);
+     - `language` = your share for the title's original language (0 if unknown or never seen);
+     - `base = genres × (0.55 + 0.45 × (0.5 × rating + 0.25 × era + 0.25 × language))`, so without genres in common
+       there is no base;
+     - `bonus` = `1 - ∏(1 - k × love)` over the title's directors (`k` = 0.5), top-5 cast (0.25 each) and franchise
+       (0.6), where `love` is from the profile (0 to 1);
+     - **match = base + (1 - base) × bonus**.
+
+  4. **Who is recommended.** Titles with metadata that you have not watched, favorited or rated, with a match of at
+     least 40%; the best 100, ties in alphabetical order. The poster shows the match in its top left corner.
+
 - **Similar movies**: the details of a movie end with a row of movies from your library that resemble it (genres,
   director, cast, franchise and era). It works offline, from the metadata already saved.
 - **Franchises**: movies that belong to the same TMDB franchise (2 or more in your library) are put into a collection
