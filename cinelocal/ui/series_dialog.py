@@ -1,6 +1,8 @@
 """Series page: general metadata, seasons and episodes (each with its own metadata)."""
 from __future__ import annotations
 
+from collections import Counter
+
 from PySide6.QtCore import QPoint, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QMenu,
@@ -197,7 +199,7 @@ class SeriesDialog(QWidget):
             return
         self.setWindowTitle(s["display_title"])
         self.title.setText(s["display_title"])
-        parts = [str(s["display_year"] or ""),
+        parts = [str(s["display_year"] or ""), s.get("certification") or "",
                  _plural(s["season_count"], "season", "seasons"),
                  _plural(s["episode_count"], "episode", "episodes"),
                  format_runtime(s["runtime"]), ", ".join(s["genres"])]
@@ -410,9 +412,11 @@ class SeriesDialog(QWidget):
         series = self.service.by_id[self.movie_id]
         episodes = self.service.episodes.get(self.series_id, [])
         total_size = sum(episode.get("size") or 0 for episode in episodes)
+        techs = Counter(tuple(sorted(e["tech"].items())) for e in episodes if e.get("tech"))
+        tech = dict(techs.most_common(1)[0][0]) if techs else None   # the most common quality among the episodes
         show_more_info(self, series["display_title"], series.get("extra") or {}, total_size,
                        series.get("franchise"), "Episode files size",
-                       (("Episodes in library", str(len(episodes))),))
+                       (("Episodes in library", str(len(episodes))),), tech)
 
     def _fix_match(self) -> None:
         dialog = MatchDialog(self.service, self.service.by_id[self.movie_id], self)

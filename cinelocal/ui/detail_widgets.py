@@ -6,6 +6,7 @@ from PySide6.QtGui import QColor, QLinearGradient, QPainter
 from PySide6.QtWidgets import (QDialog, QFormLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit,
                                QVBoxLayout, QWidget)
 
+from ..mediainfo import channels_label, resolution_label
 from ..utils import format_size
 from .theme import COLORS
 
@@ -48,12 +49,25 @@ def cap_offset(label: QLabel) -> int:
     return max(0, metrics.ascent() - metrics.capHeight())
 
 
+def _tech_rows(tech: dict) -> list[tuple[str, str | None]]:
+    """Quality, resolution and codecs of the video file(s) for the 'More info' page."""
+    width, height = tech.get("width") or 0, tech.get("height") or 0
+    audio = " ".join(p for p in (tech.get("audio"), channels_label(tech.get("channels") or 0)) if p)
+    return [
+        ("Quality", resolution_label(width, height)),
+        ("Resolution", f"{width} × {height}" if width and height else None),
+        ("Video codec", tech.get("video")),
+        ("Audio", audio),
+    ]
+
+
 def show_more_info(parent: QWidget, title: str, extra: dict, file_size: int | None = None,
                    franchise: str | None = None, size_label: str = "File size",
-                   other_rows: tuple[tuple[str, str], ...] = ()) -> None:
+                   other_rows: tuple[tuple[str, str], ...] = (), tech: dict | None = None) -> None:
     """Show locally stored TMDB production data and file details."""
     details = [
         (size_label, format_size(file_size) if file_size else None),
+        *_tech_rows(tech or {}),
         ("Budget", f"${int(extra['budget']):,}" if extra.get("budget") else None),
         ("Box office", f"${int(extra['revenue']):,}" if extra.get("revenue") else None),
         ("Production countries", ", ".join(extra.get("production_countries") or [])),
@@ -94,7 +108,7 @@ def show_more_info(parent: QWidget, title: str, extra: dict, file_size: int | No
 
 
 class TechBadges(QWidget):
-    """Row of small labels with the file's resolution, codecs and size ('1080p', 'H.264', 'AC3 5.1', '2.1 GB')."""
+    """Row of small labels with the file's resolution and codecs ('1080p', 'H.264', 'AC3 5.1')."""
 
     def __init__(self, parent=None):
         super().__init__(parent)

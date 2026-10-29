@@ -10,7 +10,7 @@ from .. import images
 from ..mediainfo import badges
 from ..service import LibraryService
 from ..similar import similar_movies
-from ..utils import format_runtime, format_size, format_votes
+from ..utils import format_runtime, format_votes
 from .dialogs import populate_collections_menu
 from .detail_widgets import (ACTION_BOX, DETAIL_STYLE, DETAILS_OFFSET, POSTER_SIZE, SECTION_GAP,
                              ReviewBox, TechBadges, backdrop_gradient, cap_offset, show_more_info,
@@ -203,9 +203,10 @@ class MovieDialog(QWidget):
         if m["original_title"] and m["original_title"] != m["display_title"]:
             self.title.setToolTip(f"Original title: {m['original_title']}")
 
-        parts = [str(m["display_year"] or ""), format_runtime(m["runtime"]), ", ".join(m["genres"])]
+        parts = [str(m["display_year"] or ""), m.get("certification") or "", format_runtime(m["runtime"]),
+                 ", ".join(m["genres"])]
         self.meta.setText("   •   ".join(p for p in parts if p))
-        self.tech.set_badges(badges(m.get("tech")) + ([format_size(m["size"])] if m.get("size") else []))
+        self.tech.set_badges(badges(m.get("tech")))
 
         if m["rating"] and m["votes"]:
             self.rating.setText(f"Rating {m['rating']:.1f}/10   "
@@ -313,7 +314,7 @@ class MovieDialog(QWidget):
     def _more_info(self) -> None:
         movie = self.service.by_id[self.movie_id]
         show_more_info(self, movie["display_title"], movie.get("extra") or {},
-                       movie.get("size"), movie.get("franchise"))
+                       movie.get("size"), movie.get("franchise"), tech=movie.get("tech"))
 
     def _load_poster(self, m: dict) -> None:
         dpr = self.devicePixelRatioF()
