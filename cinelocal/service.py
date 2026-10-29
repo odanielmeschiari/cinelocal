@@ -9,7 +9,7 @@ import traceback
 
 from PySide6.QtCore import QObject, Signal
 
-from . import images, mediainfo, player
+from . import images, mediainfo, player, vlc_setup
 from .config import DEFAULT_SETTINGS, TRACK_LANGUAGES, Settings
 from .db import Database
 from .franchises import franchise_plan
@@ -32,6 +32,7 @@ class LibraryService(QObject):
     update_finished = Signal(dict)      # update summary
     message = Signal(str)               # short notice for the status bar
     error = Signal(str)
+    vlc_missing = Signal()              # libVLC cannot be loaded: the interface offers to install it
 
     def __init__(self, db: Database, settings: Settings, parent=None):
         super().__init__(parent)
@@ -676,6 +677,38 @@ class LibraryService(QObject):
 
         def failed(_exc):
             self._probing = False
+
+        self.run_async(job, done, failed)
+
+    # -- libVLC -----------------------------------------------------------------------
+    def ensure_vlc(self) -> None:
+        """At startup: if libVLC cannot be loaded, asks the interface to offer installing it."""
+        def checked(missing):
+            if missing:
+                self.vlc_missing.emit()
+
+        self.run_async(lambda: not mediainfo.available(), checked)
+
+    def install_vlc(self) -> None:
+        """Installs libVLC in the background (see vlc_setup), then reads the files that were waiting for it."""
+        self.busy_changed.emit(True, "Installing VLC…")
+
+        def job():
+            vlc_setup.install(lambda text: self.busy_changed.emit(True, text))
+            from .ui.player_page import reset_load
+            mediainfo.reset()
+            reset_load()
+            if not mediainfo.available():
+                raise RuntimeError("VLC was installed but could not be loaded. Restart CineLocal.")
+
+        def done(_value):
+            self.busy_changed.emit(False, "")
+            self.message.emit("VLC installed. The built-in player is ready.")
+            self.probe_files()
+
+        def failed(exc):
+            self.busy_changed.emit(False, "")
+            self.error.emit(str(exc))
 
         self.run_async(job, done, failed)
 

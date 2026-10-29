@@ -84,6 +84,17 @@ def _load():
     return _vlc
 
 
+def available() -> bool:
+    """True if libVLC can be loaded."""
+    return _load() is not None
+
+
+def reset() -> None:
+    """Forgets a failed load, so the next call tries again (after VLC was installed)."""
+    global _vlc, _failed
+    _vlc, _failed = None, False
+
+
 def probe(path: str) -> dict | None:
     """{'width', 'height', 'video', 'audio', 'channels'} of the file; {} if it cannot be read; None if libVLC
     is not available. Runs in a background thread (parsing a file takes a moment)."""

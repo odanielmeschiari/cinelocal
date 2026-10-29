@@ -50,8 +50,8 @@ To remove it: `./uninstall.sh` (`--purge` also deletes the data).
    checking **"Add python.exe to PATH"** in the installer.
 2. Extract the CineLocal zip and double-click **`install.bat`** (or run `install.bat` in Command Prompt,
    inside the extracted folder).
-3. To use the **built-in player**, also install 64-bit [VLC](https://www.videolan.org/vlc/)
-   (`winget install VideoLAN.VLC`). Without it, CineLocal opens the movie in the Windows default player.
+3. The **built-in player** needs VLC: if it is not installed, CineLocal offers to download it the first time it
+   opens (no administrator rights needed). Without it, CineLocal opens the movie in the Windows default player.
 4. Open **CineLocal** from the Start Menu.
 
 The script copies the app to `%LOCALAPPDATA%\Programs\cinelocal`, creates a virtual environment with PySide6
@@ -293,6 +293,7 @@ cinelocal/
   franchises.py             which movies go into which franchise collection
   duplicates.py             the same movie or episode in more than one file
   mediainfo.py              resolution/codecs of a file (libVLC) and the badges
+  vlc_setup.py              installs VLC (libVLC) automatically when the computer does not have it
   stats.py                  numbers for the statistics page
   tmdb.py                   TMDB HTTP client
   opensubtitles.py          OpenSubtitles HTTP client: finds and saves subtitles next to the videos

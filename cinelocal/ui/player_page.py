@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLabel, Q
 
 from ..config import TRACK_LANGUAGES
 from ..tracks import choose_track, track_name as _track_name
+from ..vlc_setup import use_local_vlc
 from .icons import IconButton
 
 SAVE_EVERY_MS = 5000      # how often the playback position is saved
@@ -43,6 +44,13 @@ def _use_bundled_vlc() -> None:
         os.environ.setdefault("VLC_PLUGIN_PATH", str(root / ("plugins" if sys.platform == "win32" else "vlc/plugins")))
         if sys.platform == "win32":
             os.add_dll_directory(str(root))   # libvlc.dll needs libvlccore.dll and its dependencies from this folder
+    use_local_vlc()   # no bundled copy: the VLC that CineLocal downloaded, if any
+
+
+def reset_load() -> None:
+    """Forgets a failed libVLC load, so the next one tries again (after VLC was installed)."""
+    global _vlc, _error
+    _vlc, _error = None, ""
 
 
 def load_error() -> str:

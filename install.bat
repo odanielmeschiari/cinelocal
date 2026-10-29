@@ -30,7 +30,7 @@ if not exist "%PREFIX%\venv\Scripts\python.exe" %PY% -m venv "%PREFIX%\venv" || 
 echo ==^> Creating the Start Menu shortcut
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%LNK%'); $s.TargetPath='%PREFIX%\venv\Scripts\pythonw.exe'; $s.Arguments='\"%PREFIX%\main.py\"'; $s.WorkingDirectory='%PREFIX%'; $s.IconLocation='%PREFIX%\assets\cinelocal.ico'; $s.Description='CineLocal'; $s.Save()" || goto fail
 
-if not exist "%ProgramFiles%\VideoLAN\VLC\libvlc.dll" echo WARNING: VLC not found. To use the built-in player, install 64-bit VLC: winget install VideoLAN.VLC
+if not exist "%ProgramFiles%\VideoLAN\VLC\libvlc.dll" echo NOTE: VLC not found. CineLocal will offer to download it the first time it opens.
 echo.
 echo Done! Open CineLocal from the Start Menu (type "CineLocal").
 pause

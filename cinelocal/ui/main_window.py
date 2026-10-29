@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 from PySide6.QtCore import (QEasingCurve, QParallelAnimationGroup, QPoint,
                             QPropertyAnimation, Qt, QTimer)
@@ -264,6 +265,7 @@ class MainWindow(QMainWindow):
         s.scan_finished.connect(self._on_scan_finished)
         s.update_finished.connect(self._on_update_finished)
         s.message.connect(lambda text: self.statusBar().showMessage(text, 6000))
+        s.vlc_missing.connect(self._offer_vlc_install)
         s.error.connect(lambda text: QMessageBox.warning(self, "CineLocal", text))
 
         QShortcut(QKeySequence.Find, self, activated=self._focus_search)
@@ -284,6 +286,20 @@ class MainWindow(QMainWindow):
             self.service.start_scan()
         else:
             self.stack.setCurrentIndex(0)
+        self.service.ensure_vlc()
+
+    def _offer_vlc_install(self) -> None:
+        box = QMessageBox(QMessageBox.Question, "CineLocal",
+                          "CineLocal needs VLC to play movies inside the app and to show each file's quality "
+                          "and codecs.", parent=self)
+        box.setInformativeText("It will be downloaded now (about 40 MB); no administrator rights are needed."
+                               if sys.platform == "win32" else
+                               "Your system will ask for your password to install it.")
+        install = box.addButton("Install", QMessageBox.AcceptRole)
+        box.addButton("Not now", QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is install:
+            self.service.install_vlc()
 
     def _choose_folder(self) -> None:
         import os
