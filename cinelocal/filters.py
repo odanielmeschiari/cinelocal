@@ -264,6 +264,33 @@ def group_collections(movies: list[dict], membership: dict[int, set[int]], group
     return result
 
 
+def collection_group_ids(grouped: list[int], separate: list[int], automatic: list[int]) -> list[int]:
+    """Collections that "All movies" shows as one poster: the ones the user chose plus the automatic (franchise) ones,
+    except those the user keeps separate."""
+    return [c for c in dict.fromkeys([*grouped, *automatic]) if c not in set(separate)]
+
+
+def collection_mode(group_ids: list[int], covers: dict, collection_id: int) -> str:
+    """How a collection looks in "All movies": "stack" (covers piled), "cover" (a poster of its own) or "separate"."""
+    if collection_id not in group_ids:
+        return "separate"
+    return "cover" if covers.get(str(collection_id)) == "cover" else "stack"
+
+
+def set_collection_mode(grouped: list[int], separate: list[int], covers: dict, collection_id: int, mode: str) -> dict:
+    """New settings (grouped_collections, separate_collections, collection_covers) after the user picks `mode`."""
+    grouped = [c for c in grouped if c != collection_id]
+    separate = [c for c in separate if c != collection_id]
+    covers = {k: v for k, v in covers.items() if k != str(collection_id)}
+    if mode == "separate":
+        separate.append(collection_id)
+    else:
+        grouped.append(collection_id)
+        if mode == "cover":
+            covers[str(collection_id)] = "cover"
+    return {"grouped_collections": grouped, "separate_collections": separate, "collection_covers": covers}
+
+
 def sidebar_counts(movies: list[dict], progress=None, history=None) -> dict:
     genres: Counter = Counter()
     decades: Counter = Counter()

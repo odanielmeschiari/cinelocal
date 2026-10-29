@@ -11,12 +11,18 @@ from .theme import COLORS
 
 _NEW_COLLECTION = ("new_collection", None)
 _VALUE_ROLE = Qt.UserRole + 1
+# What the user can hide from the sidebar (Settings): (key, label). "All movies" is always there.
+SIDEBAR_OPTIONS = (("continue", "Continue watching"), ("foryou", "For you"), ("favorites", "Favorites"),
+                   ("watchlist", "Watchlist"), ("watched", "Watched"), ("unwatched", "Unwatched"),
+                   ("history", "History"), ("review", "Needs review"), ("collections", "Collections"),
+                   ("tags", "Tags"), ("stars", "My rating"), ("genres", "Genres"), ("decades", "Year"))
 
 
 class Sidebar(QTreeWidget):
     filter_changed = Signal(object)
     new_collection_requested = Signal()
     rename_collection_requested = Signal(int)
+    configure_collection_requested = Signal(int)
     delete_collection_requested = Signal(int)
     edit_tag_requested = Signal(int)
     delete_tag_requested = Signal(int)
@@ -44,47 +50,58 @@ class Sidebar(QTreeWidget):
     def rebuild(self, counts: dict, collections: list[dict],
                 membership: dict[int, set[int]], current: Filter,
                 tags: list[dict] | None = None,
-                tag_membership: dict[int, set[int]] | None = None) -> None:
+                tag_membership: dict[int, set[int]] | None = None,
+                hidden: set[str] | frozenset = frozenset()) -> None:
+        """`hidden`: keys of SIDEBAR_OPTIONS the user chose not to see."""
         self._rebuilding = True
         self.clear()
 
+        def shown(key: str) -> bool:
+            return key not in hidden
+
         self._header("LIBRARY")
-        if counts["continue"]:
+        if counts["continue"] and shown("continue"):
             self._entry("Continue watching", ("continue", None), counts["continue"])
         self._entry("All movies", ("all", None), counts["all"])
-        self._entry("For you", ("foryou", None), counts.get("foryou") or None)
-        self._entry("Favorites", ("favorites", None), counts["favorites"])
-        self._entry("Watchlist", ("watchlist", None), counts["watchlist"])
-        self._entry("Watched", ("watched", True), counts["watched"])
-        self._entry("Unwatched", ("watched", False), counts["unwatched"])
-        if counts["history"]:
+        if shown("foryou"):
+            self._entry("For you", ("foryou", None), counts.get("foryou") or None)
+        if shown("favorites"):
+            self._entry("Favorites", ("favorites", None), counts["favorites"])
+        if shown("watchlist"):
+            self._entry("Watchlist", ("watchlist", None), counts["watchlist"])
+        if shown("watched"):
+            self._entry("Watched", ("watched", True), counts["watched"])
+        if shown("unwatched"):
+            self._entry("Unwatched", ("watched", False), counts["unwatched"])
+        if counts["history"] and shown("history"):
             self._entry("History", ("history", None), counts["history"])
-        if counts["review"]:
+        if counts["review"] and shown("review"):
             self._entry("Needs review", ("review", None), counts["review"])
 
-        self._header("COLLECTIONS")
-        self._entry("New collection", _NEW_COLLECTION, None)
-        for c in collections:
-            self._entry(c["name"], ("collection", c["id"]), len(membership.get(c["id"], ())))
+        if shown("collections"):
+            self._header("COLLECTIONS")
+            self._entry("New collection", _NEW_COLLECTION, None)
+            for c in collections:
+                self._entry(c["name"], ("collection", c["id"]), len(membership.get(c["id"], ())))
 
-        if tags:
+        if tags and shown("tags"):
             self._header("TAGS")
             tag_membership = tag_membership or {}
             for tag in tags:
                 self._entry(tag["name"], ("tag", tag["id"]),
                             sum(tag["id"] in ids for ids in tag_membership.values()))
 
-        if counts["stars"]:
+        if counts["stars"] and shown("stars"):
             self._header("MY RATING")
             for n, count in counts["stars"]:
                 self._entry(star_text(n), ("stars", n), count)
 
-        if counts["genres"]:
+        if counts["genres"] and shown("genres"):
             self._header("GENRES")
             for name, n in counts["genres"]:
                 self._entry(name, ("genre", name), n)
 
-        if counts["decades"]:
+        if counts["decades"] and shown("decades"):
             self._header("YEAR")
             for decade, n in counts["decades"]:
                 self._entry(f"{decade}s", ("decade", decade), n)
@@ -121,6 +138,10 @@ class Sidebar(QTreeWidget):
             if self._filter_of(item) == flt:
                 return item
         return None
+
+    def select(self, flt: Filter) -> None:
+        """Highlights `flt` (the "All movies" entry if it is not in the list), without rebuilding the list."""
+        self._select(flt)
 
     def _select(self, flt: Filter) -> None:
         item = self._find(flt) or self._find(("all", None))
@@ -163,9 +184,12 @@ class Sidebar(QTreeWidget):
             return
         menu = QMenu(self)
         rename = menu.addAction("Rename collection…")
+        configure = menu.addAction("Configure collection…")
         delete = menu.addAction("Delete collection")
         chosen = menu.exec(self.viewport().mapToGlobal(pos))
         if chosen == rename:
             self.rename_collection_requested.emit(data[1])
+        elif chosen == configure:
+            self.configure_collection_requested.emit(data[1])
         elif chosen == delete:
             self.delete_collection_requested.emit(data[1])

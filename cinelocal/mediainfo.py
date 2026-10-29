@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import struct
 
 _vlc = None        # (vlc module, Instance) after the first successful load
@@ -33,6 +34,26 @@ def resolution_label(width: int, height: int) -> str:
         if effective >= limit:
             return label
     return "SD"
+
+
+_NAME_QUALITY = ((re.compile(r"(?<![a-z0-9])(2160p|4k|uhd)(?![a-z0-9])", re.I), "4K"),
+                 (re.compile(r"(?<![a-z0-9])1440p(?![a-z0-9])", re.I), "1440p"),
+                 (re.compile(r"(?<![a-z0-9])(1080[pi]|fullhd|fhd)(?![a-z0-9])", re.I), "1080p"),
+                 (re.compile(r"(?<![a-z0-9])720[pi](?![a-z0-9])", re.I), "720p"),
+                 (re.compile(r"(?<![a-z0-9])(576p|480p|dvdrip|dvdscr)(?![a-z0-9])", re.I), "SD"))
+
+
+def name_quality(path: str | None) -> str:
+    """Quality written in the file name, or in its folder's ('Movie.2010.1080p.BluRay.mkv' -> '1080p'); '' if none.
+    Used when the real resolution could not be read from the file (no libVLC, or an unreadable file)."""
+    if not path:
+        return ""
+    folder, name = os.path.split(path)
+    for text in (name, os.path.basename(folder)):
+        for pattern, label in _NAME_QUALITY:
+            if pattern.search(text):
+                return label
+    return ""
 
 
 def video_codec_label(code: int) -> str:

@@ -314,7 +314,7 @@ class MovieDialog(QWidget):
     def _more_info(self) -> None:
         movie = self.service.by_id[self.movie_id]
         show_more_info(self, movie["display_title"], movie.get("extra") or {},
-                       movie.get("size"), movie.get("franchise"), tech=movie.get("tech"))
+                       movie.get("size"), movie.get("franchise"), tech=movie.get("tech"), path=movie.get("path"))
 
     def _load_poster(self, m: dict) -> None:
         dpr = self.devicePixelRatioF()

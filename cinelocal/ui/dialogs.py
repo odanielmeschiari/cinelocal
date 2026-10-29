@@ -1,9 +1,12 @@
 """Shared dialogs and menus (collections)."""
 from __future__ import annotations
 
+import os
+
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
-                               QListWidgetItem, QMessageBox, QMenu, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtGui import QImage
+from PySide6.QtWidgets import (QDialog, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
+                               QListWidgetItem, QMessageBox, QMenu, QPushButton, QRadioButton, QVBoxLayout, QWidget)
 
 from ..service import LibraryService
 from ..utils import normalize_text
@@ -62,6 +65,78 @@ class MovieSelectionDialog(QDialog):
         for index in range(self.movies.count()):
             item = self.movies.item(index)
             item.setHidden(not all(term in item.data(Qt.UserRole + 1) for term in terms))
+
+
+class CollectionDialog(QDialog):
+    """How a collection shows up in “All movies”: a stack of covers, a poster of its own, or its movies one by one."""
+
+    CHOICES = (("stack", "Stack of covers", "One poster that opens the collection, with the next covers piled behind it."),
+               ("cover", "Own cover", "One poster that opens the collection, using an image you choose."),
+               ("separate", "All movies separately", "Every movie of the collection appears on its own."))
+
+    def __init__(self, name: str, mode: str, has_cover: bool, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configure collection")
+        self.setModal(True)
+        self.setMinimumWidth(460)
+        self.new_cover: str | None = None   # image picked in this dialog (copied by the caller when accepted)
+        self._has_cover = has_cover
+        self._mode = mode
+        root = QVBoxLayout(self)
+        root.setContentsMargins(26, 24, 26, 22)
+        root.setSpacing(8)
+        title = QLabel(name)
+        title.setStyleSheet("font-size: 14pt; font-weight: 700;")
+        root.addWidget(title)
+        self.radios: dict[str, QRadioButton] = {}
+        for key, label, hint in self.CHOICES:
+            radio = QRadioButton(label)
+            radio.setChecked(key == mode)
+            radio.toggled.connect(lambda checked, key=key: checked and self._chosen(key))
+            note = QLabel(hint)
+            note.setObjectName("muted")
+            note.setWordWrap(True)
+            note.setContentsMargins(26, 0, 0, 6)
+            self.radios[key] = radio
+            root.addWidget(radio)
+            if key == "cover":
+                row = QHBoxLayout()
+                row.addWidget(note, 1)
+                self.pick = QPushButton("Choose poster…")
+                self.pick.clicked.connect(self._pick_poster)
+                row.addWidget(self.pick)
+                root.addLayout(row)
+            else:
+                root.addWidget(note)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel = QPushButton("Cancel")
+        ok = QPushButton("OK")
+        ok.setProperty("primary", True)
+        cancel.clicked.connect(self.reject)
+        ok.clicked.connect(self.accept)
+        buttons.addWidget(cancel)
+        buttons.addWidget(ok)
+        root.addLayout(buttons)
+        self.pick.setEnabled(mode == "cover")
+
+    def mode(self) -> str:
+        return self._mode
+
+    def _chosen(self, key: str) -> None:
+        if key == "cover" and not (self._has_cover or self.new_cover) and not self._pick_poster():
+            self.radios[self._mode].setChecked(True)   # no image picked: stays as it was
+            return
+        self._mode = key
+        self.pick.setEnabled(key == "cover")
+
+    def _pick_poster(self) -> bool:
+        path, _ = QFileDialog.getOpenFileName(self, "Choose poster", os.path.expanduser("~"),
+                                              "Images (*.jpg *.jpeg *.png *.webp *.bmp)")
+        if not path or QImage(path).isNull():
+            return False
+        self.new_cover = path
+        return True
 
 
 def ask_new_collection(parent: QWidget, service: LibraryService) -> int | None:

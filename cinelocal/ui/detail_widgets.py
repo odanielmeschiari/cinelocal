@@ -6,7 +6,7 @@ from PySide6.QtGui import QColor, QLinearGradient, QPainter
 from PySide6.QtWidgets import (QDialog, QFormLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit,
                                QVBoxLayout, QWidget)
 
-from ..mediainfo import channels_label, resolution_label
+from ..mediainfo import channels_label, name_quality, resolution_label
 from ..utils import format_size
 from .theme import COLORS
 
@@ -49,12 +49,14 @@ def cap_offset(label: QLabel) -> int:
     return max(0, metrics.ascent() - metrics.capHeight())
 
 
-def _tech_rows(tech: dict) -> list[tuple[str, str | None]]:
-    """Quality, resolution, codecs, frame rate, bitrate and languages of the video file(s) ('More info' page)."""
+def _tech_rows(tech: dict, path: str | None = None) -> list[tuple[str, str | None]]:
+    """Quality, resolution, codecs, frame rate, bitrate and languages of the video file(s) ('More info' page).
+    Without the real resolution, the quality is taken from the file name when it says one ('1080p')."""
     width, height = tech.get("width") or 0, tech.get("height") or 0
     audio = " ".join(p for p in (tech.get("audio"), channels_label(tech.get("channels") or 0)) if p)
+    named = name_quality(path)
     return [
-        ("Quality", resolution_label(width, height)),
+        ("Quality", resolution_label(width, height) or (f"{named} (from the file name)" if named else None)),
         ("Resolution", f"{width} × {height}" if width and height else None),
         ("Video codec", tech.get("video")),
         ("Audio", audio),
@@ -67,11 +69,12 @@ def _tech_rows(tech: dict) -> list[tuple[str, str | None]]:
 
 def show_more_info(parent: QWidget, title: str, extra: dict, file_size: int | None = None,
                    franchise: str | None = None, size_label: str = "File size",
-                   other_rows: tuple[tuple[str, str], ...] = (), tech: dict | None = None) -> None:
+                   other_rows: tuple[tuple[str, str], ...] = (), tech: dict | None = None,
+                   path: str | None = None) -> None:
     """Show locally stored TMDB production data and file details."""
     details = [
         (size_label, format_size(file_size) if file_size else None),
-        *_tech_rows(tech or {}),
+        *_tech_rows(tech or {}, path),
         ("Budget", f"${int(extra['budget']):,}" if extra.get("budget") else None),
         ("Box office", f"${int(extra['revenue']):,}" if extra.get("revenue") else None),
         ("Production countries", ", ".join(extra.get("production_countries") or [])),

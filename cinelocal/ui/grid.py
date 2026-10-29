@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from collections import OrderedDict
 
-from PySide6.QtCore import (QAbstractAnimation, QAbstractListModel, QEasingCurve, QModelIndex, QPoint,
-                            QPropertyAnimation, QRect, QRectF, QSize, Qt, Signal)
+from PySide6.QtCore import (QAbstractAnimation, QAbstractListModel, QEasingCurve, QEvent, QModelIndex, QPoint,
+                            QPropertyAnimation, QRect, QRectF, QSize, Qt, QVariantAnimation, Signal)
 from PySide6.QtGui import (QColor, QFont, QFontMetrics, QGuiApplication, QLinearGradient,
                            QPainter, QPainterPath, QPen, QPixmap)
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QListView, QScrollArea, QStyle,
@@ -14,11 +14,30 @@ from .. import images
 from .icons import draw_icon
 from .theme import COLORS
 
-POSTER_W, POSTER_H = 180, 270
-CELL_W, CELL_H = 204, 346
+POSTER_W, POSTER_H = 180, 270   # poster size at 100% zoom
+CELL_PAD_W, CELL_PAD_H = 24, 76   # what a cell adds around its poster: side margins; room for the title and subtitle
+ZOOM_LEVELS = (60, 70, 80, 90, 100, 110, 120, 140, 160)   # what the "-" and "+" buttons step through (percent)
+GROW_SCALE = 0.05   # a clicked poster grows by this much (5%)
 MAX_CACHED_POSTERS = 900
 MATCH_ROLE = Qt.UserRole + 1   # model role: how much (%) the title matches the user's taste, if it is being shown
-STACK_STEP = 10   # how far (px) each cover of a collection's pile peeks out to the right of the one in front
+STACK_STEP = 10   # how far (px) each cover of a collection's pile peeks out to the right of the one in front (at 100%)
+
+_zoom = 100   # shared by every grid and row, so they always match
+
+
+def set_zoom(percent: int) -> None:
+    global _zoom
+    _zoom = percent
+
+
+def poster_size() -> tuple[int, int]:
+    width = round(POSTER_W * _zoom / 100)
+    return width, round(width * POSTER_H / POSTER_W)
+
+
+def cell_size() -> tuple[int, int]:
+    width, height = poster_size()
+    return width + CELL_PAD_W, height + CELL_PAD_H
 
 
 class MovieModel(QAbstractListModel):
@@ -67,6 +86,7 @@ class MovieDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self._cache: OrderedDict = OrderedDict()
         self.progress_of = None   # function(movie) -> watched fraction (0 to 1), set by the window
+        self.hidden: set[str] = set()   # badges the user chose not to see (see BADGES in settings_dialog)
         self._title_font = QFont()
         self._title_font.setBold(True)
         self._title_font.setPointSize(10)
@@ -77,11 +97,13 @@ class MovieDelegate(QStyledItemDelegate):
         self._badge_font.setPointSize(9)
 
     def sizeHint(self, option, index):
-        return QSize(CELL_W, CELL_H)
+        cell = option.widget.gridSize() if option.widget else QSize()   # the width the view stretched the cells to
+        return cell if cell.isValid() else QSize(*cell_size())
 
     # -- poster cache ---------------------------------------------------------
     def _poster(self, movie: dict, dpr: float):
-        key = (movie["id"], movie["updated_at"], dpr)
+        pw, ph = poster_size()
+        key = (movie["id"], movie["updated_at"], dpr, pw)
         if key in self._cache:
             self._cache.move_to_end(key)
             return self._cache[key]
@@ -89,7 +111,7 @@ class MovieDelegate(QStyledItemDelegate):
         if movie["has_poster"]:
             loaded = QPixmap(movie.get("cover_file") or str(images.thumb_file(movie.get("poster_id", movie["id"]))))
             if not loaded.isNull():
-                tw, th = int(POSTER_W * dpr), int(POSTER_H * dpr)
+                tw, th = int(pw * dpr), int(ph * dpr)
                 scaled = loaded.scaled(tw, th, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
                 x, y = (scaled.width() - tw) // 2, (scaled.height() - th) // 2
                 pixmap = scaled.copy(x, y, tw, th)
@@ -106,22 +128,30 @@ class MovieDelegate(QStyledItemDelegate):
         dpr = widget.devicePixelRatioF() if widget else 1.0
         hover = bool(option.state & QStyle.State_MouseOver)
         selected = bool(option.state & QStyle.State_Selected)
+        grow = widget.grow_of(index.row()) if hasattr(widget, "grow_of") else 0.0
+        pw, ph = poster_size()
 
         painter.save()
         painter.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform
                                | QPainter.TextAntialiasing)
-        left = option.rect.left() + (option.rect.width() - POSTER_W) // 2
+        if grow:   # clicked: the whole card (poster and texts) swells a little around its center
+            center = QRectF(option.rect).center()
+            painter.translate(center)
+            painter.scale(1 + GROW_SCALE * grow, 1 + GROW_SCALE * grow)
+            painter.translate(-center)
+        left = option.rect.left() + (option.rect.width() - pw) // 2
         top = option.rect.top() + 10
-        poster = QRect(left, top, POSTER_W, POSTER_H)
+        poster = QRect(left, top, pw, ph)
 
         pixmap = self._poster(movie, dpr)
         cover = poster   # a collection's pile fits in the poster's box: the cover in front shrinks to make room
         piled = movie.get("stack_movies") or []
         if piled:
-            width = POSTER_W - STACK_STEP * len(piled)
-            height = round(POSTER_H * width / POSTER_W)
-            cover = QRect(poster.left(), poster.top() + POSTER_H - height, width, height)
-            self._paint_stack(painter, cover, piled, dpr)
+            step = round(STACK_STEP * pw / POSTER_W)
+            width = pw - step * len(piled)
+            height = round(ph * width / pw)
+            cover = QRect(poster.left(), poster.top() + ph - height, width, height)
+            self._paint_stack(painter, cover, piled, dpr, step)
         path = QPainterPath()
         path.addRect(QRectF(cover))
         painter.setClipPath(path)
@@ -135,24 +165,23 @@ class MovieDelegate(QStyledItemDelegate):
 
         self._paint_badges(painter, cover, movie)
         match = index.data(MATCH_ROLE)
-        if match is not None:   # top left, under the "watched" mark
-            self._pill(painter, QRect(cover.left() + 8, cover.top() + (40 if movie["watched"] else 8), 46, 20),
+        if match is not None and "match" not in self.hidden:   # top left, under the "watched" mark
+            shown = movie["watched"] and "watched" not in self.hidden
+            self._pill(painter, QRect(cover.left() + 8, cover.top() + (40 if shown else 8), 46, 20),
                        f"{match}%", QColor(0, 0, 0, 185), COLORS["accent"])
 
-        if selected or hover:
-            pen = QPen(QColor(COLORS["accent"] if selected else COLORS["accent_hover"]),
-                       3 if selected else 2)
-            painter.setPen(pen)
+        if selected:   # no outline on hover; only on what is selected
+            painter.setPen(QPen(QColor(COLORS["accent"]), 3))
             painter.setBrush(Qt.NoBrush)
             painter.drawRect(QRectF(cover).adjusted(1, 1, -1, -1))
 
         self._paint_texts(painter, poster, movie, hover or selected)
         painter.restore()
 
-    def _paint_stack(self, painter, front, piled, dpr):
+    def _paint_stack(self, painter, front, piled, dpr, step):
         """The covers of the next movies of a collection, piled behind the one in front (up and to the right)."""
         for depth in range(len(piled), 0, -1):   # the farthest first
-            rect = front.translated(STACK_STEP * depth, -round(STACK_STEP * depth * POSTER_H / POSTER_W))
+            rect = front.translated(step * depth, -round(step * depth * POSTER_H / POSTER_W))
             path = QPainterPath()
             path.addRect(QRectF(rect))
             painter.setClipPath(path)
@@ -197,29 +226,30 @@ class MovieDelegate(QStyledItemDelegate):
         if movie.get("group") is not None:   # a collection standing in for its movies: only its own marker
             self._disc(painter, QRectF(poster.right() - 34, poster.top() + 8, 26, 26), "collections")
             return
+        hidden = self.hidden
         x = poster.left() + 8
-        if movie["rating"] and movie["votes"]:
+        if movie["rating"] and movie["votes"] and "rating" not in hidden:
             self._pill(painter, QRect(x, poster.bottom() - 28, 42, 20),
                        f"{movie['rating']:.1f}", QColor(0, 0, 0, 185), "#ffd25e")
             x += 48
-        rated = bool(movie.get("user_rating"))
+        rated = bool(movie.get("user_rating")) and "user_rating" not in hidden
         if rated:   # the user's own stars, in the bottom right corner
             self._pill(painter, QRect(poster.right() - 54, poster.bottom() - 28, 46, 20),
                        f"★ {movie['user_rating']:g}", QColor(COLORS["accent"]), COLORS["bg"])
-        if movie["status"] in ("ambiguous", "not_found"):
+        if movie["status"] in ("ambiguous", "not_found") and "review" not in hidden:
             self._pill(painter, QRect(poster.right() - 70, poster.bottom() - (52 if rated else 28), 62, 20),
                        "Review", QColor(COLORS["warn"]), "#1b1200")
         corner = poster.right() - 34   # top right: the watchlist marker stays in the corner, the heart moves aside
-        if movie["watchlist"]:
+        if movie["watchlist"] and "watchlist" not in hidden:
             self._disc(painter, QRectF(corner, poster.top() + 8, 26, 26), "watchlist_on")
             corner -= 30
-        if movie["favorite"]:
+        if movie["favorite"] and "favorite" not in hidden:
             self._disc(painter, QRectF(corner, poster.top() + 8, 26, 26), "favorite_on")
-        if movie["watched"]:
+        if movie["watched"] and "watched" not in hidden:
             self._disc(painter, QRectF(poster.left() + 8, poster.top() + 8, 26, 26), "watched_on")
-        fraction = self.progress_of(movie) if self.progress_of else 0
+        fraction = self.progress_of(movie) if self.progress_of and "progress" not in hidden else 0
         if fraction > 0:   # mini-tracker: how much of the movie has been watched
-            track = QRectF(poster.left() + 8, poster.bottom() - 6, POSTER_W - 16, 4)
+            track = QRectF(poster.left() + 8, poster.bottom() - 6, poster.width() - 16, 4)
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(255, 255, 255, 90))
             painter.drawRoundedRect(track, 2, 2)
@@ -227,11 +257,11 @@ class MovieDelegate(QStyledItemDelegate):
             painter.drawRoundedRect(QRectF(track.left(), track.top(), max(4.0, track.width() * fraction), 4), 2, 2)
 
     def _paint_texts(self, painter, poster, movie, highlighted):
-        title_rect = QRect(poster.left(), poster.bottom() + 8, POSTER_W, 20)
+        title_rect = QRect(poster.left(), poster.bottom() + 8, poster.width(), 20)
         painter.setFont(self._title_font)
         painter.setPen(QColor("#ffffff" if highlighted else COLORS["text"]))
         title = QFontMetrics(self._title_font).elidedText(
-            movie["display_title"], Qt.ElideRight, POSTER_W)
+            movie["display_title"], Qt.ElideRight, poster.width())
         painter.drawText(title_rect, Qt.AlignLeft | Qt.AlignVCenter, title)
 
         parts = []
@@ -245,7 +275,7 @@ class MovieDelegate(QStyledItemDelegate):
             parts.insert(0, "Series")
         painter.setFont(self._small_font)
         painter.setPen(QColor(COLORS["muted"]))
-        painter.drawText(QRect(poster.left(), poster.bottom() + 28, POSTER_W, 18),
+        painter.drawText(QRect(poster.left(), poster.bottom() + 28, poster.width(), 18),
                          Qt.AlignLeft | Qt.AlignVCenter, "  •  ".join(parts))
 
 
@@ -265,7 +295,7 @@ class MovieGrid(QListView):
         self.setUniformItemSizes(True)
         self.setLayoutMode(QListView.Batched)
         self.setBatchSize(100)
-        self.setGridSize(QSize(CELL_W, CELL_H))
+        self.setGridSize(QSize(*cell_size()))
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
@@ -276,10 +306,89 @@ class MovieGrid(QListView):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context)
         self.clicked.connect(self._on_clicked)
+        self._grown_row = -1     # the poster that was clicked and is enlarged (until the mouse leaves it)
+        self._grow_value = 0.0   # 0 (normal size) to 1 (fully enlarged)
+        self._grow_anim = QVariantAnimation(self)
+        self._grow_anim.setDuration(130)
+        self._grow_anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._grow_anim.valueChanged.connect(self._on_grow)
+        self._model.modelReset.connect(self._reset_grown)
 
     @property
     def movie_model(self) -> MovieModel:
         return self._model
+
+    # -- size of the cells: the zoom, and the leftover width shared among the columns -------------------
+    def apply_metrics(self) -> None:
+        """Cell size for the current zoom. Whatever width is left after the last whole column is spread over
+        the cells, so every row (and every home row above) ends exactly at the right edge of the window."""
+        width, height = cell_size()
+        available = self.viewport().width()
+        width = max(width, available // max(1, available // width))
+        if self.gridSize() != QSize(width, height):
+            self.setGridSize(QSize(width, height))
+        self.viewport().update()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.apply_metrics()
+
+    # -- a clicked poster grows a little, and goes back to normal when the mouse leaves it ---------------
+    def grow_of(self, row: int) -> float:
+        return self._grow_value if row == self._grown_row else 0.0
+
+    def _dirty(self, row: int) -> None:
+        if 0 <= row < self._model.rowCount():
+            self.viewport().update(self.visualRect(self._model.index(row)).adjusted(-20, -20, 20, 20))
+
+    def _set_grown(self, row: int) -> None:
+        """`row` is the poster to enlarge (-1: none, the enlarged one returns to normal)."""
+        if row >= 0:
+            if row != self._grown_row:
+                self._dirty(self._grown_row)
+                self._grown_row, self._grow_value = row, 0.0
+            elif self._grow_anim.endValue() == 1.0:
+                return
+            target = 1.0
+        elif self._grown_row >= 0 and self._grow_value > 0:
+            target = 0.0
+        else:
+            return
+        self._grow_anim.stop()
+        self._grow_anim.setStartValue(self._grow_value)
+        self._grow_anim.setEndValue(target)
+        self._grow_anim.start()
+
+    def _on_grow(self, value) -> None:
+        self._grow_value = float(value)
+        self._dirty(self._grown_row)
+        if self._grow_value <= 0 and self._grow_anim.endValue() == 0.0:
+            self._grown_row = -1
+
+    def _reset_grown(self) -> None:
+        self._grow_anim.stop()
+        self._grown_row, self._grow_value = -1, 0.0
+
+    def mousePressEvent(self, event) -> None:
+        index = self.indexAt(event.position().toPoint())
+        if event.button() == Qt.LeftButton and index.isValid():
+            self._set_grown(index.row())
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._grown_row >= 0 and self.indexAt(event.position().toPoint()).row() != self._grown_row:
+            self._set_grown(-1)
+        super().mouseMoveEvent(event)
+
+    def viewportEvent(self, event) -> bool:
+        if event.type() == QEvent.Leave:
+            self._set_grown(-1)
+        return super().viewportEvent(event)
+
+    def hideEvent(self, event) -> None:   # e.g. the movie page covers the list: it is back to normal when you return
+        self._dirty(self._grown_row)
+        self._reset_grown()
+        super().hideEvent(event)
 
     def selected_ids(self) -> list[int]:
         rows = sorted(i.row() for i in self.selectionModel().selectedIndexes())
@@ -326,11 +435,12 @@ class MovieFlow(MovieGrid):
         self.movie_model.modelReset.connect(self._fit)
 
     def _fit(self) -> None:
-        per_row = max(1, self.viewport().width() // CELL_W)
-        self.setFixedHeight(-(-self.movie_model.rowCount() // per_row) * CELL_H)
+        cell = self.gridSize()
+        per_row = max(1, self.viewport().width() // cell.width())
+        self.setFixedHeight(-(-self.movie_model.rowCount() // per_row) * cell.height())
 
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
+    def apply_metrics(self) -> None:
+        super().apply_metrics()
         self._fit()
 
     def wheelEvent(self, event) -> None:
@@ -347,11 +457,10 @@ class MovieRow(MovieGrid):
         self.setWrapping(False)
         self.setResizeMode(QListView.Fixed)
         self.setLayoutMode(QListView.SinglePass)
-        self.setGridSize(QSize(CELL_W, CELL_H))
         self.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setFixedHeight(CELL_H + 8)
+        self.setFixedHeight(cell_size()[1] + 8)
         self._anim = QPropertyAnimation(self.horizontalScrollBar(), b"value", self)
         self._anim.setDuration(320)
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
@@ -360,12 +469,17 @@ class MovieRow(MovieGrid):
         """Moves one 'page' of whole posters to the left (-1) or right (1)."""
         bar = self.horizontalScrollBar()
         base = self._anim.endValue() if self._anim.state() == QAbstractAnimation.Running else bar.value()
-        step = max(CELL_W, (self.viewport().width() // CELL_W) * CELL_W)
+        cell = self.gridSize().width()
+        step = max(cell, (self.viewport().width() // cell) * cell)
         target = max(bar.minimum(), min(bar.maximum(), int(base) + direction * step))
         self._anim.stop()
         self._anim.setStartValue(bar.value())
         self._anim.setEndValue(target)
         self._anim.start()
+
+    def apply_metrics(self) -> None:
+        super().apply_metrics()
+        self.setFixedHeight(cell_size()[1] + 8)
 
     def wheelEvent(self, event) -> None:
         if event.angleDelta().x():   # horizontal scroll (touchpad): moves the row

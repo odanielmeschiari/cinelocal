@@ -72,6 +72,10 @@ DEFAULT_SETTINGS = {
     "grouped_collections": [],       # ids of the collections shown as a single poster in "All movies"
     "group_auto_collections": False,   # also group the automatic (franchise) collections there
     "collection_covers": {},         # str(collection id) -> "cover" (own poster); anything else = stack of covers
+    "separate_collections": [],      # ids of the collections that are never grouped (even with the option above)
+    "grid_zoom": 100,                # size of the posters, in percent (buttons at the bottom of the window)
+    "hidden_badges": [],             # marks not shown on the posters: "match", "rating", "user_rating", "favorite", ...
+    "hidden_sidebar": [],            # sidebar entries/sections not shown: "foryou", "favorites", "genres", ...
 }
 
 

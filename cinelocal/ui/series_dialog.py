@@ -419,7 +419,8 @@ class SeriesDialog(QWidget):
         tech = next((t for t in with_tech if tuple(t.get(k) for k in keys) == common), None)
         show_more_info(self, series["display_title"], series.get("extra") or {}, total_size,
                        series.get("franchise"), "Episode files size",
-                       (("Episodes in library", str(len(episodes))),), tech)
+                       (("Episodes in library", str(len(episodes))),), tech,
+                       next((e["path"] for e in episodes if e.get("path")), None))
 
     def _fix_match(self) -> None:
         dialog = MatchDialog(self.service, self.service.by_id[self.movie_id], self)

@@ -13,6 +13,7 @@ from ..config import LANGUAGES, TRACK_LANGUAGES
 from ..service import LibraryService
 from .advanced_search import check_icon
 from .restore_dialog import RestoreDialog
+from .sidebar import SIDEBAR_OPTIONS
 
 _HELP = ('Free: create an account at <a href="https://www.themoviedb.org/signup">themoviedb.org</a>, '
          'open <a href="https://www.themoviedb.org/settings/api">Settings → API</a> and copy the '
@@ -21,6 +22,48 @@ _HELP_SUBTITLES = ('With a key, the subtitle of each new movie is downloaded aut
                    '(or the metadata language), and saved next to the video. Free: create an account at '
                    '<a href="https://www.opensubtitles.com/en/consumers">opensubtitles.com</a> and register an API '
                    'consumer. There is a daily download limit; what is left is downloaded on the next scan.')
+
+
+# What the posters can show: (key, label). The ones the user unchecks are kept in the setting "hidden_badges".
+POSTER_MARKS = (("match", "Match % (“For you”)"), ("rating", "TMDB rating"), ("user_rating", "My rating"),
+                ("favorite", "Favorite"), ("watchlist", "Watchlist"), ("watched", "Watched"),
+                ("progress", "Watch progress bar"), ("review", "“Review” flag"))
+
+
+class CheckListDialog(QDialog):
+    """A list of options to check (shown) or uncheck (hidden). `hidden()` gives the keys left unchecked."""
+
+    def __init__(self, title: str, note: str, options, hidden, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setMinimumWidth(380)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(26, 24, 26, 22)
+        root.setSpacing(10)
+        label = QLabel(note)
+        label.setObjectName("muted")
+        label.setWordWrap(True)
+        root.addWidget(label)
+        self.boxes: dict[str, QCheckBox] = {}
+        for key, text in options:
+            box = QCheckBox(text)
+            box.setChecked(key not in hidden)
+            self.boxes[key] = box
+            root.addWidget(box)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel = QPushButton("Cancel")
+        ok = QPushButton("OK")
+        ok.setProperty("primary", True)
+        cancel.clicked.connect(self.reject)
+        ok.clicked.connect(self.accept)
+        buttons.addWidget(cancel)
+        buttons.addWidget(ok)
+        root.addLayout(buttons)
+
+    def hidden(self) -> list[str]:
+        return [key for key, box in self.boxes.items() if not box.isChecked()]
 
 
 class GroupCollectionsDialog(QDialog):
@@ -137,6 +180,9 @@ class SettingsDialog(QDialog):
         s = service.settings
         self.grouped = list(s.get("grouped_collections") or [])
         self.cover_styles = dict(s.get("collection_covers") or {})
+        self.separate = list(s.get("separate_collections") or [])
+        self.hidden_badges = list(s.get("hidden_badges") or [])
+        self.hidden_sidebar = list(s.get("hidden_sidebar") or [])
         self.new_covers: dict[int, str] = {}   # posters picked for collections, copied when the settings are saved
         self.setWindowTitle("Settings")
         self.setModal(True)
@@ -205,6 +251,20 @@ class SettingsDialog(QDialog):
         self.group_auto = QCheckBox("Group automatic collections (franchises) in “All movies”")
         self.group_auto.setChecked(bool(s.get("group_auto_collections")))
         form.addRow("Collections", self.group_auto)
+
+        display = QWidget()
+        display_row = QHBoxLayout(display)
+        display_row.setContentsMargins(0, 0, 0, 0)
+        marks = QPushButton("Poster marks…")
+        marks.setToolTip("Choose which marks and percentages the posters show")
+        marks.clicked.connect(self._poster_marks)
+        sidebar = QPushButton("Sidebar filters…")
+        sidebar.setToolTip("Choose which filters the sidebar shows")
+        sidebar.clicked.connect(self._sidebar_filters)
+        display_row.addWidget(marks)
+        display_row.addWidget(sidebar)
+        display_row.addStretch(1)
+        form.addRow("Display", display)
 
         self.opensubtitles_key = QLineEdit(s.get("opensubtitles_api_key"))
         self.opensubtitles_key.setEchoMode(QLineEdit.Password)
@@ -282,6 +342,18 @@ class SettingsDialog(QDialog):
             self.cover_styles = dialog.styles
             self.new_covers.update(dialog.new_covers)
 
+    def _poster_marks(self) -> None:
+        dialog = CheckListDialog("Poster marks", "Checked marks are shown on the posters.", POSTER_MARKS,
+                                 self.hidden_badges, self)
+        if dialog.exec():
+            self.hidden_badges = dialog.hidden()
+
+    def _sidebar_filters(self) -> None:
+        dialog = CheckListDialog("Sidebar filters", "Checked filters are shown in the sidebar (“All movies” always is).",
+                                 SIDEBAR_OPTIONS, self.hidden_sidebar, self)
+        if dialog.exec():
+            self.hidden_sidebar = dialog.hidden()
+
     def _restore(self) -> None:
         dialog = RestoreDialog(self)
         if dialog.exec() and self.service.restore(dialog.selected()):
@@ -335,4 +407,7 @@ class SettingsDialog(QDialog):
             "grouped_collections": self.grouped,
             "group_auto_collections": self.group_auto.isChecked(),
             "collection_covers": self.cover_styles,
+            "separate_collections": [c for c in self.separate if c not in self.grouped],   # checked there = grouped
+            "hidden_badges": self.hidden_badges,
+            "hidden_sidebar": self.hidden_sidebar,
         }

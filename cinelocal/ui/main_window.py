@@ -15,10 +15,10 @@ from .. import filters, images
 from ..service import LibraryService
 from ..utils import star_text
 from .advanced_search import AdvancedSearch
-from .dialogs import (MovieSelectionDialog, ask_new_collection, ask_rename_collection,
+from .dialogs import (CollectionDialog, MovieSelectionDialog, ask_new_collection, ask_rename_collection,
                       confirm_delete_collection, populate_collections_menu)
 from .duplicates_dialog import DuplicatesDialog
-from .grid import CELL_H, MovieFlow
+from .grid import ZOOM_LEVELS, MovieFlow, cell_size, set_zoom
 from .home import HomeSection
 from .home_dialog import HomeDialog
 from .icons import IconButton
@@ -50,6 +50,7 @@ class MainWindow(QMainWindow):
         self._player_origin: QWidget | None = None
         self._playing_id: int | None = None   # movie/episode in the built-in player
         self._sliding = False
+        self._back: list[dict] = []   # where the user was before each section opened (the back arrow pops these)
         self.setWindowTitle("CineLocal")
         self.resize(1380, 860)
         self.setMinimumSize(920, 600)
@@ -185,6 +186,13 @@ class MainWindow(QMainWindow):
         self.head_bar = QWidget()   # moves below the home rows (see _place_heading)
         head = QHBoxLayout(self.head_bar)
         head.setContentsMargins(0, 0, 0, 0)
+        self.back_btn = QPushButton("←")   # back to the previous section, at the same scroll position
+        self.back_btn.setFixedSize(34, 34)
+        self.back_btn.setStyleSheet("QPushButton { padding: 0; font-size: 16pt; font-weight: 700; }")
+        self.back_btn.setToolTip("Back")
+        self.back_btn.setFocusPolicy(Qt.NoFocus)
+        self.back_btn.clicked.connect(self._go_back)
+        self.back_btn.hide()
         self.heading = QLabel("All movies")
         self.heading.setObjectName("heading")
         self.manage_btn = QPushButton("+")
@@ -195,6 +203,7 @@ class MainWindow(QMainWindow):
         self.manage_btn.hide()
         self.count_label = QLabel("")
         self.count_label.setObjectName("muted")
+        head.addWidget(self.back_btn)
         head.addWidget(self.heading)
         head.addWidget(self.manage_btn)
         head.addSpacing(12)
@@ -241,12 +250,30 @@ class MainWindow(QMainWindow):
         for w in (self.progress_label, self.progress_bar, self.cancel_btn):
             self.statusBar().addPermanentWidget(w)
             w.hide()
+        self.zoom_out = self._zoom_button("−", "Smaller posters", -1)
+        self.zoom_label = QLabel("")
+        self.zoom_label.setObjectName("muted")
+        self.zoom_label.setAlignment(Qt.AlignCenter)
+        self.zoom_label.setFixedWidth(44)
+        self.zoom_in = self._zoom_button("+", "Larger posters", 1)
+        for w in (self.zoom_out, self.zoom_label, self.zoom_in):   # always visible, at the right end
+            self.statusBar().addPermanentWidget(w)
+
+    def _zoom_button(self, text: str, tip: str, direction: int) -> QPushButton:
+        button = QPushButton(text)
+        button.setFixedSize(26, 22)
+        button.setStyleSheet("QPushButton { padding: 0; font-size: 12pt; font-weight: 700; }")
+        button.setToolTip(tip)
+        button.setFocusPolicy(Qt.NoFocus)
+        button.clicked.connect(lambda _checked=False: self._step_zoom(direction))
+        return button
 
     def _connect(self) -> None:
         s = self.service
         self.sidebar.filter_changed.connect(self._on_filter)
         self.sidebar.new_collection_requested.connect(lambda: ask_new_collection(self, s))
         self.sidebar.rename_collection_requested.connect(lambda cid: ask_rename_collection(self, s, cid))
+        self.sidebar.configure_collection_requested.connect(self._configure_collection)
         self.sidebar.delete_collection_requested.connect(self._delete_collection)
         self.sidebar.edit_tag_requested.connect(self._edit_tag)
         self.sidebar.delete_tag_requested.connect(self._delete_tag)
@@ -256,6 +283,7 @@ class MainWindow(QMainWindow):
         self.grid.movie_opened.connect(self._open_from_grid)
         self.grid.context_requested.connect(self._context_menu)
         self.grid.itemDelegate().progress_of = s.progress_of
+        self._apply_view_options()
         self.grid.selectionModel().currentChanged.connect(self._reveal_current)
 
         s.library_changed.connect(self._on_library_changed)
@@ -340,6 +368,7 @@ class MainWindow(QMainWindow):
     def _new_home_row(self, key: str) -> HomeSection:
         section = HomeSection("")
         section.row.itemDelegate().progress_of = self.service.progress_of
+        section.row.itemDelegate().hidden = self._hidden_badges()
         section.row.movie_opened.connect(self.open_movie)
         section.row.context_requested.connect(self._context_menu)
         self._home_rows[key] = section
@@ -389,7 +418,7 @@ class MainWindow(QMainWindow):
         """Keyboard navigation: scrolls the page to the current movie."""
         if index.isValid():
             center = self.grid.viewport().mapTo(self.grid_content, self.grid.visualRect(index).center())
-            self.grid_page.ensureVisible(center.x(), center.y(), 0, CELL_H // 2)
+            self.grid_page.ensureVisible(center.x(), center.y(), 0, cell_size()[1] // 2)
 
     def _scope(self) -> tuple[list[dict], filters.Filter]:
         """What the current section searches in: the whole library, or just the picks of "For you"."""
@@ -427,9 +456,7 @@ class MainWindow(QMainWindow):
             visible.sort(key=lambda m: -self.service.history_stamp(m))
         shown = visible
         if self.flt == ("all", None) and not self.query and not self.advanced:   # only in "All movies"
-            group_ids = list(self.service.settings.get("grouped_collections") or [])
-            if self.service.settings.get("group_auto_collections"):
-                group_ids += filters.automatic_collections(self.service.movies, self.service.collections)
+            group_ids = self._group_ids()
             styles = self.service.settings.get("collection_covers") or {}
             shown = filters.group_collections(
                 visible, self.service.membership, group_ids, self.service.collection_name,
@@ -449,6 +476,7 @@ class MainWindow(QMainWindow):
                                  else f"{total} movie{'' if total == 1 else 's'}")
         self.filterbar.setVisible(bool(self.advanced))
         self.filter_label.setText(f"Advanced search: {len(visible)} of {total}")
+        self.back_btn.setVisible(bool(self._back) and not self._is_home())
         if visible:
             self.views.setCurrentWidget(self.grid_page)
         else:
@@ -487,7 +515,8 @@ class MainWindow(QMainWindow):
         counts = filters.sidebar_counts(self.service.movies, self.service.progress_of, self.service.history_stamp)
         counts["foryou"] = len(self.service.recommendations())
         self.sidebar.rebuild(counts, self.service.collections, self.service.membership, self.flt,
-                             self.service.tags, self.service.tag_membership)
+                             self.service.tags, self.service.tag_membership,
+                             set(self.service.settings.get("hidden_sidebar") or []))
         if self.sidebar.current_filter != self.flt:   # the previous selection no longer exists
             self.flt = self.sidebar.current_filter
             self.refresh_view()
@@ -497,7 +526,97 @@ class MainWindow(QMainWindow):
 
     # ---------------------------------------------------------------------- events --
     def _on_filter(self, flt) -> None:
+        if flt != self.flt:
+            self._remember()
+            self.grid_page.verticalScrollBar().setValue(0)
         self.flt = flt
+        if self._is_home():   # back at the start: nothing left to go back to
+            self._back.clear()
+        self.refresh_view()
+
+    def _is_home(self) -> bool:
+        return self.flt == ("all", None) and not self.query and not self.advanced
+
+    def _remember(self) -> None:
+        """Saves where the user is (section, search, scroll positions) so the back arrow can return exactly there."""
+        self._back.append({"flt": self.flt, "query": self.query, "advanced": self.advanced,
+                           "scroll": self.grid_page.verticalScrollBar().value(),
+                           "rows": {key: section.row.horizontalScrollBar().value()
+                                    for key, section in self._home_rows.items()}})
+
+    def _go_back(self) -> None:
+        if not self._back:
+            return
+        state = self._back.pop()
+        self.flt, self.query, self.advanced = state["flt"], state["query"], state["advanced"]
+        self.advanced_btn.setChecked(bool(self.advanced))
+        self.search.blockSignals(True)
+        self.search.setText(self.query)
+        self.search.blockSignals(False)
+        self.sidebar.select(self.flt)
+        self.flt = self.sidebar.current_filter   # the section may be gone (a deleted collection...)
+        self.refresh_view()
+
+        def restore() -> None:   # the layout only finishes later
+            self.grid_page.verticalScrollBar().setValue(state["scroll"])
+            for key, value in state["rows"].items():
+                if key in self._home_rows:
+                    self._home_rows[key].row.horizontalScrollBar().setValue(value)
+
+        QTimer.singleShot(0, restore)
+
+    # -- view options: poster size and marks ------------------------------------------------------------
+    def _hidden_badges(self) -> set[str]:
+        return set(self.service.settings.get("hidden_badges") or [])
+
+    def _apply_view_options(self) -> None:
+        """Poster marks the user hid, and the poster size, on the grid and on every home row."""
+        grids = [self.grid] + [section.row for section in self._home_rows.values()]
+        for grid in grids:
+            grid.itemDelegate().hidden = self._hidden_badges()
+        self._apply_zoom()
+
+    def _apply_zoom(self) -> None:
+        percent = self.service.settings.get("grid_zoom")
+        percent = percent if percent in ZOOM_LEVELS else 100
+        set_zoom(percent)
+        self.zoom_label.setText(f"{percent}%")
+        self.zoom_out.setEnabled(percent > ZOOM_LEVELS[0])
+        self.zoom_in.setEnabled(percent < ZOOM_LEVELS[-1])
+        bar = self.grid_page.verticalScrollBar()
+        ratio = bar.value() / bar.maximum() if bar.maximum() else 0
+        for grid in [self.grid] + [section.row for section in self._home_rows.values()]:
+            grid.apply_metrics()
+        QTimer.singleShot(0, lambda: bar.setValue(round(ratio * bar.maximum())))   # stays around the same movies
+
+    def _step_zoom(self, direction: int) -> None:
+        percent = self.service.settings.get("grid_zoom")
+        index = ZOOM_LEVELS.index(percent) if percent in ZOOM_LEVELS else ZOOM_LEVELS.index(100)
+        index = max(0, min(len(ZOOM_LEVELS) - 1, index + direction))
+        self.service.settings.update(grid_zoom=ZOOM_LEVELS[index])
+        self._apply_zoom()
+
+    def _group_ids(self) -> list[int]:
+        """Collections shown as a single poster in "All movies"."""
+        s = self.service
+        automatic = (filters.automatic_collections(s.movies, s.collections)
+                     if s.settings.get("group_auto_collections") else [])
+        return filters.collection_group_ids(s.settings.get("grouped_collections") or [],
+                                            s.settings.get("separate_collections") or [], automatic)
+
+    def _configure_collection(self, collection_id: int) -> None:
+        s = self.service
+        covers = s.settings.get("collection_covers") or {}
+        dialog = CollectionDialog(s.collection_name(collection_id),
+                                  filters.collection_mode(self._group_ids(), covers, collection_id),
+                                  images.collection_cover(collection_id) is not None, self)
+        if not dialog.exec():
+            return
+        if dialog.mode() == "cover" and dialog.new_cover:
+            images.store_collection_cover(collection_id, dialog.new_cover)
+        s.settings.update(**filters.set_collection_mode(
+            list(s.settings.get("grouped_collections") or []), list(s.settings.get("separate_collections") or []),
+            covers, collection_id, dialog.mode()))
         self.refresh_view()
 
     def _manage_sidebar_items(self, flt: filters.Filter) -> None:
@@ -564,6 +683,7 @@ class MainWindow(QMainWindow):
 
     def _clear_search(self) -> None:
         """Back to the whole catalog: no advanced filters, no text search, section \"All\"."""
+        self._back.clear()
         self.advanced = {}
         self.advanced_btn.setChecked(False)
         self.flt = ("all", None)
@@ -833,6 +953,8 @@ class MainWindow(QMainWindow):
         if not dialog.saved:
             return
         s.update(**dialog.values())
+        self._apply_view_options()
+        self._rebuild_sidebar()   # filters may have been hidden
         self.refresh_view()   # grouped collections and their covers may have changed
         self._update_infobar()
         if not s.get("library_path"):
@@ -908,6 +1030,8 @@ class MainWindow(QMainWindow):
     def _open_filter(self, flt: filters.Filter) -> None:
         if self._detail is not None:
             self.close_movie()
+        if flt != self.flt or self.query or self.advanced:
+            self._remember()
         self.flt = flt
         self.advanced = {}
         self.advanced_btn.setChecked(False)
@@ -921,6 +1045,13 @@ class MainWindow(QMainWindow):
 
     def _context_menu(self, ids: list[int], global_pos) -> None:
         s = self.service
+        group = filters.group_of(ids[0]) if len(ids) == 1 else None
+        if group is not None:   # the poster of a grouped collection
+            menu = QMenu(self)
+            menu.addAction("Open collection", lambda: self._open_filter(("collection", group)))
+            menu.addAction("Configure collection…", lambda: self._configure_collection(group))
+            menu.exec(global_pos)
+            return
         movies = [s.by_id[i] for i in ids if i in s.by_id]
         if not movies:
             return
