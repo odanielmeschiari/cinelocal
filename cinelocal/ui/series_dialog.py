@@ -412,8 +412,11 @@ class SeriesDialog(QWidget):
         series = self.service.by_id[self.movie_id]
         episodes = self.service.episodes.get(self.series_id, [])
         total_size = sum(episode.get("size") or 0 for episode in episodes)
-        techs = Counter(tuple(sorted(e["tech"].items())) for e in episodes if e.get("tech"))
-        tech = dict(techs.most_common(1)[0][0]) if techs else None   # the most common quality among the episodes
+        keys = ("width", "height", "video", "audio", "channels")
+        with_tech = [e["tech"] for e in episodes if e.get("tech")]
+        techs = Counter(tuple(t.get(k) for k in keys) for t in with_tech)
+        common = techs.most_common(1)[0][0] if techs else None   # the most common quality among the episodes
+        tech = next((t for t in with_tech if tuple(t.get(k) for k in keys) == common), None)
         show_more_info(self, series["display_title"], series.get("extra") or {}, total_size,
                        series.get("franchise"), "Episode files size",
                        (("Episodes in library", str(len(episodes))),), tech)

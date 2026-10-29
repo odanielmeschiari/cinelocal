@@ -1,18 +1,22 @@
 """Technical info of a video file (resolution, codecs, audio channels) read with libVLC, and its badges."""
 from __future__ import annotations
 
+import os
 import struct
 
 _vlc = None        # (vlc module, Instance) after the first successful load
 _failed = False    # libVLC is missing: do not try again
 
-_VIDEO, _AUDIO = 1, 0   # libvlc_track_type_t
+_VIDEO, _AUDIO, _TEXT = 1, 0, 2   # libvlc_track_type_t
 _VIDEO_CODECS = {"h264": "H.264", "avc1": "H.264", "hevc": "HEVC", "hvc1": "HEVC", "h265": "HEVC", "av01": "AV1",
                  "vp90": "VP9", "vp80": "VP8", "mp4v": "MPEG-4", "xvid": "MPEG-4", "divx": "MPEG-4",
                  "mpgv": "MPEG-2", "mp2v": "MPEG-2", "wmv3": "VC-1", "wvc1": "VC-1", "vc-1": "VC-1"}
 _AUDIO_CODECS = {"mp4a": "AAC", "a52 ": "AC3", "ac-3": "AC3", "eac3": "E-AC3", "dts ": "DTS", "dtsh": "DTS-HD",
                  "dtse": "DTS", "mpga": "MP3", "mp3 ": "MP3", "opus": "Opus", "flac": "FLAC", "vorb": "Vorbis",
                  "trhd": "TrueHD", "mlp ": "TrueHD"}
+_LANGUAGES = {"eng": "English", "por": "Portuguese", "spa": "Spanish", "fre": "French", "fra": "French",
+              "ger": "German", "deu": "German", "ita": "Italian", "jpn": "Japanese", "kor": "Korean",
+              "chi": "Chinese", "zho": "Chinese", "rus": "Russian"}
 _CHANNELS = {1: "1.0", 2: "2.0", 3: "2.1", 6: "5.1", 7: "6.1", 8: "7.1"}
 
 
@@ -43,6 +47,16 @@ def audio_codec_label(code: int) -> str:
 
 def channels_label(channels: int) -> str:
     return _CHANNELS.get(channels, f"{channels}ch" if channels else "")
+
+
+def language_label(code) -> str:
+    """'por' -> 'Portuguese'; unknown codes are kept ('pol' -> 'POL'); '' when there is no language."""
+    if isinstance(code, bytes):
+        code = code.decode("utf-8", "ignore")
+    code = (code or "").strip()
+    if code.lower() in ("", "und", "unk"):
+        return ""
+    return _LANGUAGES.get(code.lower(), code.upper() if len(code) <= 3 else code.title())
 
 
 def badges(info: dict | None) -> list[str]:
@@ -83,14 +97,27 @@ def probe(path: str) -> dict | None:
         media.parse()   # synchronous in libVLC 3
         tracks = media.tracks_get()
         best_channels = -1
+        audio_langs: list[str] = []
+        sub_langs: list[str] = []
         for track in ([tracks[i] for i in range(len(tracks))] if tracks else []):
             kind = int(getattr(track.type, "value", track.type))
+            if kind in (_AUDIO, _TEXT):
+                language = language_label(getattr(track, "language", None))
+                languages = audio_langs if kind == _AUDIO else sub_langs
+                if language and language not in languages:
+                    languages.append(language)
             if kind == _VIDEO and "video" not in info:
                 video = track.u.video.contents
-                info.update(width=video.width, height=video.height, video=video_codec_label(track.codec))
+                fps = video.frame_rate_num / video.frame_rate_den if video.frame_rate_den else 0
+                info.update(width=video.width, height=video.height, video=video_codec_label(track.codec),
+                            fps=round(fps, 3))
             elif kind == _AUDIO and track.u.audio.contents.channels > best_channels:   # the richest audio track
                 best_channels = track.u.audio.contents.channels
                 info.update(audio=audio_codec_label(track.codec), channels=best_channels)
+        if info:
+            seconds = (media.get_duration() or 0) / 1000
+            info.update(audio_langs=audio_langs, sub_langs=sub_langs,
+                        bitrate=round(os.path.getsize(path) * 8 / seconds / 1000) if seconds else 0)   # kbps
     except Exception:  # noqa: BLE001 - unreadable file or a libVLC without these calls
         return {}
     return info

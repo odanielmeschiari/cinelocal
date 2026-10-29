@@ -648,7 +648,8 @@ class LibraryService(QObject):
         if self._probing:
             return
         todo = [(i, m["path"]) for i, m in self.by_id.items()
-                if i > 0 and m.get("tech") is None and m.get("path")]
+                if i > 0 and m.get("path")
+                and (m.get("tech") is None or (m["tech"] and "bitrate" not in m["tech"]))]   # or read by an older version
         if not todo:
             return
         self._probing = True
@@ -661,6 +662,8 @@ class LibraryService(QObject):
                 info = mediainfo.probe(path)
                 if info is None:   # no libVLC
                     break
+                if not info and self.by_id[movie_id].get("tech"):   # unreadable now: keep what was read before
+                    info = {**self.by_id[movie_id]["tech"], "bitrate": 0}
                 self.db.save_tech(movie_id, info)
                 found[movie_id] = info
             return found

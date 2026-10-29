@@ -50,7 +50,7 @@ def cap_offset(label: QLabel) -> int:
 
 
 def _tech_rows(tech: dict) -> list[tuple[str, str | None]]:
-    """Quality, resolution and codecs of the video file(s) for the 'More info' page."""
+    """Quality, resolution, codecs, frame rate, bitrate and languages of the video file(s) ('More info' page)."""
     width, height = tech.get("width") or 0, tech.get("height") or 0
     audio = " ".join(p for p in (tech.get("audio"), channels_label(tech.get("channels") or 0)) if p)
     return [
@@ -58,6 +58,10 @@ def _tech_rows(tech: dict) -> list[tuple[str, str | None]]:
         ("Resolution", f"{width} × {height}" if width and height else None),
         ("Video codec", tech.get("video")),
         ("Audio", audio),
+        ("Frame rate", f"{tech['fps']:g} fps" if tech.get("fps") else None),
+        ("Bitrate", f"{tech['bitrate'] / 1000:.1f} Mbps" if tech.get("bitrate") else None),
+        ("Audio languages", ", ".join(tech.get("audio_langs") or [])),
+        ("Embedded subtitles", ", ".join(tech.get("sub_langs") or [])),
     ]
 
 

@@ -154,6 +154,10 @@ class MediaInfoTests(unittest.TestCase):
         self.assertEqual(mediainfo.audio_codec_label(fourcc("a52 ")), "AC3")
         self.assertEqual([mediainfo.channels_label(n) for n in (2, 6, 8, 5, 0)], ["2.0", "5.1", "7.1", "5ch", ""])
 
+    def test_language_label(self):
+        self.assertEqual([mediainfo.language_label(c) for c in (b"por", "ENG", b"pol", b"und", None)],
+                         ["Portuguese", "English", "POL", "", ""])
+
     def test_badges(self):
         info = {"width": 1920, "height": 1080, "video": "H.264", "audio": "AAC", "channels": 2}
         self.assertEqual(mediainfo.badges(info), ["1080p", "H.264", "AAC 2.0"])
