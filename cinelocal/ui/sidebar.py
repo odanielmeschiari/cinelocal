@@ -1,4 +1,4 @@
-"""Sidebar: library, collections, genres and decades."""
+"""Sidebar: library, collections, genres, decades, age ratings, actors and directors."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
@@ -15,7 +15,8 @@ _VALUE_ROLE = Qt.UserRole + 1
 SIDEBAR_OPTIONS = (("continue", "Continue watching"), ("foryou", "For you"), ("favorites", "Favorites"),
                    ("watchlist", "Watchlist"), ("watched", "Watched"), ("unwatched", "Unwatched"),
                    ("history", "History"), ("review", "Needs review"), ("collections", "Collections"),
-                   ("tags", "Tags"), ("stars", "My rating"), ("genres", "Genres"), ("decades", "Year"))
+                   ("tags", "Tags"), ("stars", "My rating"), ("genres", "Genres"), ("decades", "Year"),
+                   ("certifications", "Age rating"), ("cast", "Actors"), ("directors", "Directors"))
 
 
 class Sidebar(QTreeWidget):
@@ -105,6 +106,13 @@ class Sidebar(QTreeWidget):
             self._header("YEAR")
             for decade, n in counts["decades"]:
                 self._entry(f"{decade}s", ("decade", decade), n)
+
+        for key, header, kind in (("certifications", "AGE RATING", "certification"), ("cast", "ACTORS", "cast"),
+                                  ("directors", "DIRECTORS", "director")):
+            if counts[key] and shown(key):
+                self._header(header)
+                for name, n in counts[key]:
+                    self._entry(name, (kind, name), n)
 
         self._select(current)
         self._rebuilding = False

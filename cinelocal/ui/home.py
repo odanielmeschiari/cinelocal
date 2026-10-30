@@ -8,9 +8,9 @@ from .grid import MovieRow
 
 
 class HomeSection(QWidget):
-    """Title + arrows + a single row of posters."""
+    """Title + arrows + a single row of posters (`peek`: close together, ending in half a poster)."""
 
-    def __init__(self, title: str, parent=None):
+    def __init__(self, title: str, parent=None, peek: bool = False):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -29,7 +29,7 @@ class HomeSection(QWidget):
         head.addWidget(self.left)
         head.addWidget(self.right)
         layout.addLayout(head)
-        self.row = MovieRow()
+        self.row = MovieRow(peek=peek)
         layout.addWidget(self.row)
         bar = self.row.horizontalScrollBar()
         bar.valueChanged.connect(self._sync_arrows)

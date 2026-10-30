@@ -509,6 +509,9 @@ class MainWindow(QMainWindow):
             return f"{value}s"
         if kind == "stars":
             return f"My rating: {star_text(value)}"
+        labels = {"cast": "Actor", "director": "Director", "certification": "Age rating"}
+        if kind in labels:
+            return f"{labels[kind]}: {value}"
         return str(value)
 
     def _rebuild_sidebar(self) -> None:
@@ -587,6 +590,8 @@ class MainWindow(QMainWindow):
         ratio = bar.value() / bar.maximum() if bar.maximum() else 0
         for grid in [self.grid] + [section.row for section in self._home_rows.values()]:
             grid.apply_metrics()
+        if self._detail is not None and hasattr(self._detail, "similar"):   # the open description page too
+            self._detail.similar.row.apply_metrics()
         QTimer.singleShot(0, lambda: bar.setValue(round(ratio * bar.maximum())))   # stays around the same movies
 
     def _step_zoom(self, direction: int) -> None:

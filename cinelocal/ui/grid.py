@@ -5,7 +5,7 @@ from collections import OrderedDict
 
 from PySide6.QtCore import (QAbstractAnimation, QAbstractListModel, QEasingCurve, QEvent, QModelIndex, QPoint,
                             QPropertyAnimation, QRect, QRectF, QSize, Qt, QVariantAnimation, Signal)
-from PySide6.QtGui import (QColor, QFont, QFontMetrics, QGuiApplication, QLinearGradient,
+from PySide6.QtGui import (QColor, QFont, QFontMetrics, QLinearGradient,
                            QPainter, QPainterPath, QPen, QPixmap)
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QListView, QScrollArea, QStyle,
                                QStyledItemDelegate)
@@ -17,9 +17,10 @@ from .theme import COLORS
 POSTER_W, POSTER_H = 180, 270   # poster size at 100% zoom
 CELL_PAD_W, CELL_PAD_H = 24, 76   # what a cell adds around its poster: side margins; room for the title and subtitle
 ZOOM_LEVELS = (60, 70, 80, 90, 100, 110, 120, 140, 160)   # what the "-" and "+" buttons step through (percent)
-GROW_SCALE = 0.05   # a clicked poster grows by this much (5%)
+GROW_SCALE = 0.05   # the poster under the mouse grows by this much (5%)
 MAX_CACHED_POSTERS = 900
 MATCH_ROLE = Qt.UserRole + 1   # model role: how much (%) the title matches the user's taste, if it is being shown
+PEEK_GAP = 10   # space (px) between the posters of a row that shows half a poster at its end (see MovieRow)
 STACK_STEP = 10   # how far (px) each cover of a collection's pile peeks out to the right of the one in front (at 100%)
 
 _zoom = 100   # shared by every grid and row, so they always match
@@ -87,6 +88,7 @@ class MovieDelegate(QStyledItemDelegate):
         self._cache: OrderedDict = OrderedDict()
         self.progress_of = None   # function(movie) -> watched fraction (0 to 1), set by the window
         self.hidden: set[str] = set()   # badges the user chose not to see (see BADGES in settings_dialog)
+        self._dims: tuple[int, int] | None = None   # poster size in the view being painted (None: the zoom's)
         self._title_font = QFont()
         self._title_font.setBold(True)
         self._title_font.setPointSize(10)
@@ -102,7 +104,7 @@ class MovieDelegate(QStyledItemDelegate):
 
     # -- poster cache ---------------------------------------------------------
     def _poster(self, movie: dict, dpr: float):
-        pw, ph = poster_size()
+        pw, ph = self._dims or poster_size()
         key = (movie["id"], movie["updated_at"], dpr, pw)
         if key in self._cache:
             self._cache.move_to_end(key)
@@ -129,12 +131,12 @@ class MovieDelegate(QStyledItemDelegate):
         hover = bool(option.state & QStyle.State_MouseOver)
         selected = bool(option.state & QStyle.State_Selected)
         grow = widget.grow_of(index.row()) if hasattr(widget, "grow_of") else 0.0
-        pw, ph = poster_size()
+        pw, ph = self._dims = widget.poster_dims() if hasattr(widget, "poster_dims") else poster_size()
 
         painter.save()
         painter.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform
                                | QPainter.TextAntialiasing)
-        if grow:   # clicked: the whole card (poster and texts) swells a little around its center
+        if grow:   # under the mouse: the whole card (poster and texts) swells a little around its center
             center = QRectF(option.rect).center()
             painter.translate(center)
             painter.scale(1 + GROW_SCALE * grow, 1 + GROW_SCALE * grow)
@@ -169,11 +171,6 @@ class MovieDelegate(QStyledItemDelegate):
             shown = movie["watched"] and "watched" not in self.hidden
             self._pill(painter, QRect(cover.left() + 8, cover.top() + (40 if shown else 8), 46, 20),
                        f"{match}%", QColor(0, 0, 0, 185), COLORS["accent"])
-
-        if selected:   # no outline on hover; only on what is selected
-            painter.setPen(QPen(QColor(COLORS["accent"]), 3))
-            painter.setBrush(Qt.NoBrush)
-            painter.drawRect(QRectF(cover).adjusted(1, 1, -1, -1))
 
         self._paint_texts(painter, poster, movie, hover or selected)
         painter.restore()
@@ -296,7 +293,7 @@ class MovieGrid(QListView):
         self.setLayoutMode(QListView.Batched)
         self.setBatchSize(100)
         self.setGridSize(QSize(*cell_size()))
-        self.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.setSelectionMode(QAbstractItemView.SingleSelection)
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -306,7 +303,7 @@ class MovieGrid(QListView):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context)
         self.clicked.connect(self._on_clicked)
-        self._grown_row = -1     # the poster that was clicked and is enlarged (until the mouse leaves it)
+        self._grown_row = -1     # the poster under the mouse, which is enlarged (until the mouse leaves it)
         self._grow_value = 0.0   # 0 (normal size) to 1 (fully enlarged)
         self._grow_anim = QVariantAnimation(self)
         self._grow_anim.setDuration(130)
@@ -322,18 +319,23 @@ class MovieGrid(QListView):
     def apply_metrics(self) -> None:
         """Cell size for the current zoom. Whatever width is left after the last whole column is spread over
         the cells, so every row (and every home row above) ends exactly at the right edge of the window."""
-        width, height = cell_size()
-        available = self.viewport().width()
-        width = max(width, available // max(1, available // width))
+        width, height = self._cell_for(self.viewport().width())
         if self.gridSize() != QSize(width, height):
             self.setGridSize(QSize(width, height))
         self.viewport().update()
+
+    def _cell_for(self, available: int) -> tuple[int, int]:
+        width, height = cell_size()
+        return max(width, available // max(1, available // width)), height
+
+    def poster_dims(self) -> tuple[int, int]:
+        return poster_size()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self.apply_metrics()
 
-    # -- a clicked poster grows a little, and goes back to normal when the mouse leaves it ---------------
+    # -- the poster under the mouse grows a little, and goes back to normal when the mouse leaves it ---------------
     def grow_of(self, row: int) -> float:
         return self._grow_value if row == self._grown_row else 0.0
 
@@ -376,8 +378,7 @@ class MovieGrid(QListView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
-        if self._grown_row >= 0 and self.indexAt(event.position().toPoint()).row() != self._grown_row:
-            self._set_grown(-1)
+        self._set_grown(self.indexAt(event.position().toPoint()).row())   # -1 over an empty spot
         super().mouseMoveEvent(event)
 
     def viewportEvent(self, event) -> bool:
@@ -395,9 +396,6 @@ class MovieGrid(QListView):
         return [self._model.movie_at(r)["id"] for r in rows]
 
     def _on_clicked(self, index):
-        mods = QGuiApplication.keyboardModifiers()
-        if mods & (Qt.ControlModifier | Qt.ShiftModifier):
-            return  # multiple selection
         self.movie_opened.emit(self._model.movie_at(index.row())["id"])
 
     def _on_context(self, pos):
@@ -448,10 +446,14 @@ class MovieFlow(MovieGrid):
 
 
 class MovieRow(MovieGrid):
-    """A single horizontal row of posters (used on the home page), scrolled with arrows."""
+    """A single horizontal row of posters (used on the home page), scrolled with arrows.
+    With `peek` (the "similar" row of a description) the posters sit close together and the row always ends with
+    half a poster, which tells there is more; to get that at any width, the posters are a little larger or smaller
+    than the zoom's size."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, peek: bool = False):
         super().__init__(parent)
+        self._peek = peek
         self.setViewMode(QListView.ListMode)
         self.setFlow(QListView.LeftToRight)
         self.setWrapping(False)
@@ -461,6 +463,8 @@ class MovieRow(MovieGrid):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setFixedHeight(cell_size()[1] + 8)
+        if peek:
+            self.setGridSize(QSize(*self._cell_for(0)))
         self._anim = QPropertyAnimation(self.horizontalScrollBar(), b"value", self)
         self._anim.setDuration(320)
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
@@ -477,9 +481,23 @@ class MovieRow(MovieGrid):
         self._anim.setEndValue(target)
         self._anim.start()
 
+    def _cell_for(self, available: int) -> tuple[int, int]:
+        if not self._peek or available <= 0:
+            return super()._cell_for(available)
+        natural = poster_size()[0] + PEEK_GAP
+        whole = max(1, round(available / natural - 0.5))   # whole posters in view, besides the half one
+        width = round(available / (whole + 0.5))
+        return width, round((width - PEEK_GAP) * POSTER_H / POSTER_W) + CELL_PAD_H
+
+    def poster_dims(self) -> tuple[int, int]:
+        if not self._peek:
+            return super().poster_dims()
+        width = self.gridSize().width() - PEEK_GAP
+        return width, round(width * POSTER_H / POSTER_W)
+
     def apply_metrics(self) -> None:
         super().apply_metrics()
-        self.setFixedHeight(cell_size()[1] + 8)
+        self.setFixedHeight(self.gridSize().height() + 8)
 
     def wheelEvent(self, event) -> None:
         if event.angleDelta().x():   # horizontal scroll (touchpad): moves the row

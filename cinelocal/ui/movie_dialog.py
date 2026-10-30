@@ -113,7 +113,7 @@ class MovieDialog(QWidget):
         body_layout.addWidget(self.tags_box)
         self.director = self._text_block(body_layout, "DIRECTOR")
         self.cast = self._text_block(body_layout, "CAST")
-        self.similar = HomeSection("Similar in your library")
+        self.similar = HomeSection("Similar in your library", peek=True)
         self.similar.setContentsMargins(0, SECTION_GAP, 0, 0)
         self.similar.row.itemDelegate().progress_of = self.service.progress_of
         self.similar.row.movie_opened.connect(self.open_requested)

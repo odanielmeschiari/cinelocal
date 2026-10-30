@@ -61,6 +61,12 @@ def matches(movie: dict, flt: Filter, membership: dict[int, set[int]], progress=
         return value in movie["genres"]
     if kind == "decade":
         return decade_of(movie) == value
+    if kind == "cast":
+        return any(c["name"] == value for c in movie.get("cast") or ())
+    if kind == "director":
+        return value in _directors(movie)
+    if kind == "certification":   # the age rating
+        return movie.get("certification") == value
     return True
 
 
@@ -291,12 +297,26 @@ def set_collection_mode(grouped: list[int], separate: list[int], covers: dict, c
     return {"grouped_collections": grouped, "separate_collections": separate, "collection_covers": covers}
 
 
+PEOPLE_IN_SIDEBAR = 100   # the sidebar lists at most this many actors (and directors), the ones in most titles
+
+
+def _top_people(counter: Counter) -> list[tuple[str, int]]:
+    """People worth a sidebar entry: in at least 2 titles, most titles first (the rest are in the advanced search)."""
+    common = [kv for kv in counter.items() if kv[1] >= 2]
+    return sorted(common, key=lambda kv: (-kv[1], kv[0]))[:PEOPLE_IN_SIDEBAR]
+
+
 def sidebar_counts(movies: list[dict], progress=None, history=None) -> dict:
     genres: Counter = Counter()
+    cast: Counter = Counter()
+    directors: Counter = Counter()
+    certifications: Counter = Counter(m["certification"] for m in movies if m.get("certification"))
     decades: Counter = Counter()
     stars: Counter = Counter(m["user_rating"] for m in movies if m.get("user_rating"))
     for m in movies:
         genres.update(m["genres"])
+        cast.update({c["name"] for c in m.get("cast") or ()})
+        directors.update(_directors(m))
         d = decade_of(m)
         if d:
             decades[d] += 1
@@ -311,5 +331,8 @@ def sidebar_counts(movies: list[dict], progress=None, history=None) -> dict:
         "review": sum(m["status"] in ("ambiguous", "not_found") for m in movies),
         "genres": sorted(genres.items(), key=lambda kv: (-kv[1], kv[0])),
         "decades": sorted(decades.items(), reverse=True),
+        "certifications": sorted(certifications.items(), key=lambda kv: (-kv[1], kv[0])),
+        "cast": _top_people(cast),
+        "directors": _top_people(directors),
         "stars": sorted(stars.items(), reverse=True),
     }
