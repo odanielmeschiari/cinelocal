@@ -1,6 +1,7 @@
 """Filters, sorting and sidebar counts (no Qt)."""
 from __future__ import annotations
 
+import random
 import time
 from collections import Counter
 
@@ -203,6 +204,14 @@ def _sort_value(movie: dict, field: str, match: dict | None = None):
     if field == "popularity":
         return (movie.get("extra") or {}).get("popularity")
     return movie["added_at"]
+
+
+def surprise_pick(movies: list[dict], avoid: int | None = None, choose=random.choice) -> dict | None:
+    """A movie at random: one not watched yet, if there is any, and not `avoid` (the one picked last time)."""
+    pool = [m for m in movies if not m.get("watched")] or list(movies)
+    if len(pool) > 1:
+        pool = [m for m in pool if m["id"] != avoid]
+    return choose(pool) if pool else None
 
 
 def sort_by_order(movies: list[dict], order: list[int]) -> list[dict]:

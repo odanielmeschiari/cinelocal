@@ -21,7 +21,16 @@ DEFAULT_TARGET = 180   # the size used until the user picks one
 MIN_POSTER_W, MAX_POSTER_W = 96, 320   # no size may make the posters smaller or larger than this
 GROW_SCALE = 0.05   # the poster under the mouse grows by this much (5%)
 MAX_CACHED_POSTERS = 900
-MOVE_MIME = "application/x-cinelocal-movie"   # what is dragged to put a movie of a list in another place
+MOVE_MIME = "application/x-cinelocal-movie"   # what is dragged: the ids (comma-separated) of the movies
+
+
+def dragged_ids(mime) -> list[int]:
+    """The ids of the movies carried by a drag started in a grid."""
+    if not mime.hasFormat(MOVE_MIME):
+        return []
+    return [int(i) for i in bytes(mime.data(MOVE_MIME)).decode().split(",") if i]
+
+
 MATCH_ROLE = Qt.UserRole + 1   # model role: how much (%) the title matches the user's taste, if it is being shown
 PEEK_GAP = 10   # space (px) between the posters of a row that shows half a poster at its end (see MovieRow)
 STACK_STEP = 10   # how far (px) each cover of a collection's pile peeks out to the right of the one in front (at 100%)
@@ -329,6 +338,7 @@ class MovieGrid(QListView):
         self.setBatchSize(100)
         self.setGridSize(QSize(*cell_size()))
         self.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.setDragEnabled(True)   # a poster can be dropped on a list of the sidebar
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -427,14 +437,13 @@ class MovieGrid(QListView):
         self._reset_grown()
         super().hideEvent(event)
 
-    # -- manual order (the movies of a list can be dragged) ------------------------------------------------
+    # -- dragging: to a list of the sidebar, or (in a list in manual order) to another place of the list ------
     def set_reorderable(self, on: bool) -> None:
-        self.setDragEnabled(on)
         self.setAcceptDrops(on)
 
     def startDrag(self, actions) -> None:
         index = self.currentIndex()
-        if not index.isValid():
+        if not index.isValid() or self._model.movie_at(index.row())["id"] <= 0:   # series and piles are not dragged
             return
         mime = QMimeData()
         mime.setData(MOVE_MIME, str(self._model.movie_at(index.row())["id"]).encode())
@@ -451,12 +460,12 @@ class MovieGrid(QListView):
 
     def dropEvent(self, event) -> None:
         target = self.indexAt(event.position().toPoint())
-        if not event.mimeData().hasFormat(MOVE_MIME) or not target.isValid():
+        ids = dragged_ids(event.mimeData())
+        if not ids or not target.isValid():
             event.ignore()
             return
         event.acceptProposedAction()
-        self.reorder_requested.emit(int(bytes(event.mimeData().data(MOVE_MIME)).decode()),
-                                    self._model.movie_at(target.row())["id"])
+        self.reorder_requested.emit(ids[0], self._model.movie_at(target.row())["id"])
 
     def selected_ids(self) -> list[int]:
         rows = sorted(i.row() for i in self.selectionModel().selectedIndexes())

@@ -76,6 +76,7 @@ DEFAULT_SETTINGS = {
     "grid_size": 0,                  # size of the posters: 1 (smallest), 2, 3... (buttons at the bottom); 0 = not chosen
     "hidden_badges": [],             # marks not shown on the posters: "match", "rating", "user_rating", "favorite", ...
     "sidebar_sort": {},              # sidebar section ("genres", "cast", ...) -> "count" (default), "az" or "za"
+    "list_sorts": {},                # id of a list -> the sort chosen for it (a list opens in its manual order)
     "collapsed_sidebar": [],         # headings of the sidebar sections the user closed ("GENRES", "LISTS", ...)
     "hidden_sidebar": ["cast", "directors"],   # sidebar entries/sections not shown: "foryou", "genres", "cast", ...
 }

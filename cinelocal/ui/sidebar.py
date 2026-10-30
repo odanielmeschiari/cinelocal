@@ -8,12 +8,14 @@ from PySide6.QtWidgets import (QAbstractItemView, QHBoxLayout, QMenu, QSizePolic
 
 from ..filters import Filter
 from ..utils import normalize_text, star_text
+from .grid import MOVE_MIME, dragged_ids
 from .theme import COLORS
 
 _NEW_COLLECTION = ("new_collection", None)
 _NEW_LIST = ("new_list", None)
 _VALUE_ROLE = Qt.UserRole + 1
 _HEADER_ROLE = Qt.UserRole + 2   # True on the headings
+_DROP_ROLE = Qt.UserRole + 4     # True on the entry a drag is over
 _SECTION_ROLE = Qt.UserRole + 3  # the heading of the section an item belongs to (on the heading itself too)
 _RULE_COLOR = "#4a4a4a"   # the thin line under each heading
 # What the user can hide from the sidebar (Settings): (key, label). "All movies" is always there.
@@ -46,6 +48,11 @@ class _Delegate(QStyledItemDelegate):
 
     def paint(self, painter, option, index) -> None:
         super().paint(painter, option, index)
+        if index.data(_DROP_ROLE):   # the movies being dragged will go into this one
+            painter.save()
+            painter.setPen(QPen(QColor(COLORS["accent"]), 2))
+            painter.drawRect(option.rect.adjusted(6, 1, -6, -1))
+            painter.restore()
         if index.data(_HEADER_ROLE):
             painter.save()
             painter.setPen(QPen(QColor(_RULE_COLOR), 1))
@@ -65,6 +72,7 @@ class Sidebar(QTreeWidget):
     delete_tag_requested = Signal(int)
     sort_requested = Signal(str, str)   # section key, mode (see SORT_MODES)
     collapsed_changed = Signal(list)    # headings of the closed sections
+    movies_dropped = Signal(int, list)  # id of a collection or list, ids of the movies dropped on it
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -79,6 +87,8 @@ class Sidebar(QTreeWidget):
         self.customContextMenuRequested.connect(self._on_context)
         self.itemClicked.connect(self._on_item_clicked)
         self.setItemDelegate(_Delegate(self))
+        self.setAcceptDrops(True)
+        self._drop_item = None   # the entry under a drag
         self._current: Filter = ("all", None)
         self._rebuilding = False
         self._sorts: dict = {}
@@ -102,6 +112,7 @@ class Sidebar(QTreeWidget):
         scroll = self.verticalScrollBar().value()   # a rebuild (e.g. a new order) leaves the list where it was
         self._rebuilding = True
         self.clear()
+        self._drop_item = None
 
         def shown(key: str) -> bool:
             return key not in hidden
@@ -262,6 +273,43 @@ class Sidebar(QTreeWidget):
         if item is not None:
             self._current = self._filter_of(item)
             self.setCurrentItem(item)
+
+    # -- movies dragged from the grid onto a collection or list ----------------------------------------------
+    def _drop_target(self, event):
+        item = self.itemAt(event.position().toPoint())
+        data = self._filter_of(item) if item else None
+        return item if data and data[0] == "collection" and event.mimeData().hasFormat(MOVE_MIME) else None
+
+    def _mark_drop(self, item) -> None:
+        if item is self._drop_item:
+            return
+        for entry, on in ((self._drop_item, False), (item, True)):
+            if entry is not None:
+                entry.setData(0, _DROP_ROLE, on)
+        self._drop_item = item
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasFormat(MOVE_MIME):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event) -> None:
+        super().dragMoveEvent(event)   # scrolls the list when the drag reaches its edge
+        item = self._drop_target(event)
+        self._mark_drop(item)
+        event.acceptProposedAction() if item else event.ignore()
+
+    def dragLeaveEvent(self, event) -> None:
+        self._mark_drop(None)
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        item = self._drop_target(event)
+        self._mark_drop(None)
+        if item is None:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self.movies_dropped.emit(self._filter_of(item)[1], dragged_ids(event.mimeData()))
 
     # -- events --------------------------------------------------------------------------
     def _on_item_clicked(self, item, _column) -> None:

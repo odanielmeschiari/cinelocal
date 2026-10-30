@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QColorDialog, QDialog, QFormLayout, QHBoxLayout, 
 
 from ..service import LibraryService
 from ..utils import normalize_text
-from .dialogs import CheckList
+from .dialogs import CheckList, check_bar
 
 
 class TagDialog(QDialog):
@@ -40,6 +40,7 @@ class TagDialog(QDialog):
         root.addWidget(self.search)
         self.movies = CheckList()
         self.search.textChanged.connect(self.movies.filter)
+        root.addLayout(check_bar(self.movies))
         members = {movie_id for movie_id, tag_ids in service.tag_membership.items() if tag_id in tag_ids}
         for movie in sorted((m for m in service.movies if m["id"] > 0),
                             key=lambda m: (normalize_text(m["display_title"]), m["id"])):
@@ -47,6 +48,7 @@ class TagDialog(QDialog):
             if movie.get("display_year"):
                 title += f" ({movie['display_year']})"
             self.movies.add(title, movie["id"], movie["id"] in members)
+        self.movies.changed.emit()   # the first count
         root.addWidget(self.movies, 1)
 
         buttons = QHBoxLayout()

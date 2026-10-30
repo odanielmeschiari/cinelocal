@@ -43,7 +43,12 @@ class MainWindow(QMainWindow):
         self.query = ""
         self.advanced: dict = {}   # criteria of the advanced search (empty = off)
         self.sort_id = service.settings.get("sort_id")
-        self._saved_sort: str | None = None   # the chosen sort while "For you" shows its own (best match first)
+        if self.sort_id == "manual":   # only a list has a manual order; the other sections start by title
+            self.sort_id = "title_asc"
+        self._saved_sort: str | None = None   # the chosen sort while a section with a sort of its own is open
+        self._sort_scope: str | None = None   # that section: "foryou" or "list:<id>"
+        self._visible: list[dict] = []        # what the section shows now (after the search and filters)
+        self._last_surprise: int | None = None
         self._home_rows: dict[str, HomeSection] = {}   # row key -> row of the home screen
         self._detail: MovieDialog | None = None
         self._player: VlcPlayerPage | None = None
@@ -154,6 +159,9 @@ class MainWindow(QMainWindow):
         settings.clicked.connect(lambda: self.open_settings())
         bar.addWidget(self.search, 1)
         bar.addWidget(self.advanced_btn)
+        self.surprise_btn = QPushButton("Surprise me")
+        self.surprise_btn.setToolTip("Open a random movie of what is shown (one you have not watched, if there is any)")
+        bar.addWidget(self.surprise_btn)
         bar.addWidget(QLabel("Sort:"))
         bar.addWidget(self.sort_combo)
         bar.addWidget(rescan)
@@ -283,6 +291,8 @@ class MainWindow(QMainWindow):
         self.sidebar.delete_tag_requested.connect(self._delete_tag)
         self.search.textChanged.connect(self._on_search)
         self.advanced_btn.clicked.connect(self._open_advanced)
+        self.surprise_btn.clicked.connect(self._surprise)
+        self.sidebar.movies_dropped.connect(self._drop_in_list)
         self.sort_combo.currentIndexChanged.connect(self._on_sort)
         self.grid.movie_opened.connect(self._open_from_grid)
         self.grid.reorder_requested.connect(self._move_in_list)
@@ -432,15 +442,30 @@ class MainWindow(QMainWindow):
             return self.service.recommendations(), ("all", None)
         return self.service.movies, self.flt
 
+    def _scoped_sort(self) -> tuple[str, str] | None:
+        """The sections with a sort of their own, as (key, sort): "For you" is always by match (a sort picked there is
+        forgotten on leaving it); a list has the sort chosen for it, its manual order at first."""
+        kind, value = self.flt
+        if kind == "foryou":
+            return "foryou", "match_desc"
+        if kind == "collection" and self.service.collection_kind(value) == "list":
+            return f"list:{value}", (self.service.settings.get("list_sorts") or {}).get(str(value), "manual")
+        return None
+
     def _sync_sort(self) -> None:
-        """In "For you" the best match comes first; any sort picked there is forgotten on leaving it."""
-        foryou = self.flt[0] == "foryou"
-        if foryou == (self._saved_sort is not None):
+        scoped = self._scoped_sort()
+        manual = self.sort_combo.model().item(self.sort_combo.findData("manual"))
+        manual.setEnabled(bool(scoped) and scoped[0].startswith("list:"))   # a manual order only exists in a list
+        key = scoped[0] if scoped else None
+        if key == self._sort_scope:
             return
-        if foryou:
-            self._saved_sort, self.sort_id = self.sort_id, "match_desc"
+        if self._sort_scope is None:   # coming from a section that uses the general sort
+            self._saved_sort = self.sort_id
+        if scoped:
+            self.sort_id = scoped[1]
         else:
             self.sort_id, self._saved_sort = self._saved_sort, None
+        self._sort_scope = key
         self.sort_combo.blockSignals(True)
         self.sort_combo.setCurrentIndex(max(0, self.sort_combo.findData(self.sort_id)))
         self.sort_combo.blockSignals(False)
@@ -466,6 +491,8 @@ class MainWindow(QMainWindow):
         elif self.flt[0] == "history":   # most recently watched first
             visible.sort(key=lambda m: -self.service.history_stamp(m))
         shown = visible
+        self._visible = visible
+        self.surprise_btn.setEnabled(bool(visible))
         if self.flt == ("all", None) and not self.query and not self.advanced:   # only in "All movies"
             group_ids = self._group_ids()
             styles = self.service.settings.get("collection_covers") or {}
@@ -720,13 +747,33 @@ class MainWindow(QMainWindow):
         self.advanced_btn.setChecked(bool(criteria))
         self.refresh_view()
 
+    def _drop_in_list(self, collection_id: int, movie_ids: list[int]) -> None:
+        """Movies dragged from the grid onto a list (or collection) of the sidebar."""
+        s = self.service
+        new = [i for i in movie_ids if i > 0 and i not in s.membership.get(collection_id, ())]
+        name = s.collection_name(collection_id)
+        if new:
+            s.set_in_collection(collection_id, new, True)
+            self.statusBar().showMessage(f"Added to “{name}”.", 5000)
+        else:
+            self.statusBar().showMessage(f"Already in “{name}”.", 5000)
+
+    def _surprise(self) -> None:
+        movie = filters.surprise_pick(self._visible, self._last_surprise)
+        if movie is not None:
+            self._last_surprise = movie["id"]
+            self.open_movie(movie["id"])
+
     def _move_in_list(self, movie_id: int, target_id: int) -> None:
         self.service.move_in_collection(self.flt[1], movie_id, target_id)
 
     def _on_sort(self) -> None:
         self.sort_id = self.sort_combo.currentData()
-        if self._saved_sort is None:   # inside "For you" the choice is not kept
-            self.service.settings.update(sort_id=self.sort_id)
+        settings = self.service.settings
+        if self._sort_scope is None:   # inside "For you" the choice is not kept
+            settings.update(sort_id=self.sort_id)
+        elif self._sort_scope.startswith("list:"):   # a list remembers its own sort
+            settings.update(list_sorts={**(settings.get("list_sorts") or {}), self._sort_scope[5:]: self.sort_id})
         self.refresh_view()
 
     def _focus_search(self) -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (QDialog, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QMessageBox, QMenu, QPushButton, QRadioButton, QVBoxLayout, QWidget)
@@ -20,12 +20,14 @@ class CheckList(QListWidget):
     """Rows with a box on the left: it is an icon, so it is always the same size, and a click anywhere on the row
     (or Space) checks or unchecks it."""
 
+    changed = Signal()   # a row was checked or unchecked
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSpacing(3)
         self.setSelectionMode(QListWidget.NoSelection)
         self.setIconSize(QSize(16, 16))
-        self.itemClicked.connect(lambda item: self.mark(item, not item.data(_ON)))
+        self.itemClicked.connect(self._toggle)
 
     def add(self, text: str, key: int, on: bool) -> None:
         item = QListWidgetItem(text)
@@ -40,6 +42,17 @@ class CheckList(QListWidget):
         item.setData(_ON, on)
         item.setIcon(check_icon(on))
 
+    def _toggle(self, item: QListWidgetItem) -> None:
+        self.mark(item, not item.data(_ON))
+        self.changed.emit()
+
+    def set_shown(self, on: bool) -> None:
+        """Checks or unchecks the rows being shown (the ones the filter leaves out stay as they are)."""
+        for i in range(self.count()):
+            if not self.item(i).isHidden():
+                self.mark(self.item(i), on)
+        self.changed.emit()
+
     def checked(self) -> set[int]:
         items = (self.item(i) for i in range(self.count()))
         return {item.data(Qt.UserRole) for item in items if item.data(_ON)}
@@ -52,9 +65,26 @@ class CheckList(QListWidget):
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key_Space and self.currentItem() is not None:
-            self.mark(self.currentItem(), not self.currentItem().data(_ON))
+            self._toggle(self.currentItem())
             return
         super().keyPressEvent(event)
+
+
+def check_bar(rows: CheckList) -> QHBoxLayout:
+    """“Select all” and “Clear” (for the rows being shown) and how many rows are checked."""
+    bar = QHBoxLayout()
+    bar.setSpacing(6)
+    for text, on in (("Select all", True), ("Clear", False)):
+        button = QPushButton(text)
+        button.setStyleSheet("padding: 3px 10px;")
+        button.clicked.connect(lambda _checked=False, on=on: rows.set_shown(on))
+        bar.addWidget(button)
+    bar.addStretch(1)
+    count = QLabel()
+    count.setObjectName("muted")
+    rows.changed.connect(lambda: count.setText(f"{len(rows.checked())} selected"))
+    bar.addWidget(count)
+    return bar
 
 
 class MovieSelectionDialog(QDialog):
@@ -72,6 +102,7 @@ class MovieSelectionDialog(QDialog):
 
         self.movies = CheckList()
         self.search.textChanged.connect(self.movies.filter)
+        root.addLayout(check_bar(self.movies))
         for movie in sorted(movies, key=lambda m: (normalize_text(m["display_title"]), m["id"])):
             title_text = movie["display_title"]
             if movie.get("display_year"):
@@ -79,6 +110,7 @@ class MovieSelectionDialog(QDialog):
             if movie.get("kind") == "series":
                 title_text += " [Series]"
             self.movies.add(title_text, movie["id"], movie["id"] in selected_ids)
+        self.movies.changed.emit()   # the first count
         root.addWidget(self.movies, 1)
 
         buttons = QHBoxLayout()
