@@ -271,6 +271,7 @@ class MainWindow(QMainWindow):
     def _connect(self) -> None:
         s = self.service
         self.sidebar.filter_changed.connect(self._on_filter)
+        self.sidebar.sort_requested.connect(self._sort_sidebar)
         self.sidebar.new_collection_requested.connect(lambda: ask_new_collection(self, s))
         self.sidebar.rename_collection_requested.connect(lambda cid: ask_rename_collection(self, s, cid))
         self.sidebar.configure_collection_requested.connect(self._configure_collection)
@@ -519,10 +520,15 @@ class MainWindow(QMainWindow):
         counts["foryou"] = len(self.service.recommendations())
         self.sidebar.rebuild(counts, self.service.collections, self.service.membership, self.flt,
                              self.service.tags, self.service.tag_membership,
-                             set(self.service.settings.get("hidden_sidebar") or []))
+                             set(self.service.settings.get("hidden_sidebar") or []),
+                             self.service.settings.get("sidebar_sort") or {})
         if self.sidebar.current_filter != self.flt:   # the previous selection no longer exists
             self.flt = self.sidebar.current_filter
             self.refresh_view()
+
+    def _sort_sidebar(self, key: str, mode: str) -> None:
+        self.service.settings.update(sidebar_sort={**(self.service.settings.get("sidebar_sort") or {}), key: mode})
+        QTimer.singleShot(0, self._rebuild_sidebar)   # after the button that asked for it has finished its click
 
     def _update_infobar(self) -> None:
         self.infobar.setVisible(not self.service.has_key)

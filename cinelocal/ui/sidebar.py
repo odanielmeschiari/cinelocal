@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont
-from PySide6.QtWidgets import QAbstractItemView, QMenu, QTreeWidget, QTreeWidgetItem
+from PySide6.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel, QMenu, QToolButton, QTreeWidget,
+                               QTreeWidgetItem, QWidget)
 
 from ..filters import Filter
-from ..utils import star_text
+from ..utils import normalize_text, star_text
 from .theme import COLORS
 
 _NEW_COLLECTION = ("new_collection", None)
@@ -17,6 +18,15 @@ SIDEBAR_OPTIONS = (("continue", "Continue watching"), ("foryou", "For you"), ("f
                    ("history", "History"), ("review", "Needs review"), ("collections", "Collections"),
                    ("tags", "Tags"), ("stars", "My rating"), ("genres", "Genres"), ("decades", "Year"),
                    ("certifications", "Age rating"), ("cast", "Actors"), ("directors", "Directors"))
+# How the long lists of the sidebar can be ordered (the user picks it with the button of the section's heading)
+SORT_MODES = (("count", "Most frequent"), ("az", "A–Z"), ("za", "Z–A"))
+
+
+def sort_entries(entries: list[tuple[str, int]], mode: str) -> list[tuple[str, int]]:
+    """`entries` are (name, count), already from the most to the least frequent."""
+    if mode in ("az", "za"):
+        return sorted(entries, key=lambda e: (normalize_text(e[0]), e[0]), reverse=mode == "za")
+    return entries
 
 
 class Sidebar(QTreeWidget):
@@ -27,6 +37,7 @@ class Sidebar(QTreeWidget):
     delete_collection_requested = Signal(int)
     edit_tag_requested = Signal(int)
     delete_tag_requested = Signal(int)
+    sort_requested = Signal(str, str)   # section key, mode (see SORT_MODES)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -42,6 +53,7 @@ class Sidebar(QTreeWidget):
         self.itemClicked.connect(self._on_item_clicked)
         self._current: Filter = ("all", None)
         self._rebuilding = False
+        self._sorts: dict = {}
 
     @property
     def current_filter(self) -> Filter:
@@ -52,8 +64,9 @@ class Sidebar(QTreeWidget):
                 membership: dict[int, set[int]], current: Filter,
                 tags: list[dict] | None = None,
                 tag_membership: dict[int, set[int]] | None = None,
-                hidden: set[str] | frozenset = frozenset()) -> None:
-        """`hidden`: keys of SIDEBAR_OPTIONS the user chose not to see."""
+                hidden: set[str] | frozenset = frozenset(), sorts: dict | None = None) -> None:
+        """`hidden`: keys of SIDEBAR_OPTIONS the user chose not to see. `sorts`: section key -> mode of SORT_MODES."""
+        self._sorts = sorts or {}
         self._rebuilding = True
         self.clear()
 
@@ -98,8 +111,8 @@ class Sidebar(QTreeWidget):
                 self._entry(star_text(n), ("stars", n), count)
 
         if counts["genres"] and shown("genres"):
-            self._header("GENRES")
-            for name, n in counts["genres"]:
+            self._header("GENRES", "genres")
+            for name, n in sort_entries(counts["genres"], self._sorts.get("genres", "count")):
                 self._entry(name, ("genre", name), n)
 
         if counts["decades"] and shown("decades"):
@@ -110,15 +123,16 @@ class Sidebar(QTreeWidget):
         for key, header, kind in (("certifications", "AGE RATING", "certification"), ("cast", "ACTORS", "cast"),
                                   ("directors", "DIRECTORS", "director")):
             if counts[key] and shown(key):
-                self._header(header)
-                for name, n in counts[key]:
+                self._header(header, key)
+                for name, n in sort_entries(counts[key], self._sorts.get(key, "count")):
                     self._entry(name, (kind, name), n)
 
         self._select(current)
         self._rebuilding = False
 
-    def _header(self, text: str) -> None:
-        item = QTreeWidgetItem([text])
+    def _header(self, text: str, sort_key: str | None = None) -> None:
+        """A section heading; with `sort_key`, it has a small button to choose how the section is ordered."""
+        item = QTreeWidgetItem(["" if sort_key else text])
         item.setFlags(Qt.ItemIsEnabled)
         font = QFont(self.font())
         font.setBold(True)
@@ -126,6 +140,38 @@ class Sidebar(QTreeWidget):
         item.setFont(0, font)
         item.setForeground(0, QBrush(QColor(COLORS["muted"])))
         self.addTopLevelItem(item)
+        if sort_key:
+            box = QWidget()
+            row = QHBoxLayout(box)
+            row.setContentsMargins(0, 0, 6, 0)
+            label = QLabel(text)
+            label.setFont(font)
+            label.setStyleSheet(f"color: {COLORS['muted']}; background: transparent;")
+            button = QToolButton()
+            button.setText("⇅")
+            button.setToolTip("Sort")
+            button.setCursor(Qt.PointingHandCursor)
+            button.setFocusPolicy(Qt.NoFocus)
+            button.setStyleSheet(f"QToolButton {{ border: none; background: transparent; color: {COLORS['muted']};"
+                                 f" padding: 0 4px; }} QToolButton:hover {{ color: {COLORS['accent_hover']}; }}")
+            button.clicked.connect(lambda _checked=False, b=button, k=sort_key: self._pick_sort(b, k))
+            row.addWidget(label)
+            row.addStretch(1)
+            row.addWidget(button)
+            item.setSizeHint(0, box.sizeHint())
+            self.setItemWidget(item, 0, box)
+
+    def _pick_sort(self, button, key: str) -> None:
+        menu = QMenu(self)
+        current = self._sorts.get(key, "count")
+        for mode, label in SORT_MODES:
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(mode == current)
+            action.setData(mode)
+        chosen = menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
+        if chosen is not None and chosen.data() != current:
+            self.sort_requested.emit(key, chosen.data())
 
     def _entry(self, label: str, data: Filter, count: int | None) -> None:
         text = label if count is None else f"{label} ({count})"
