@@ -79,7 +79,7 @@ def fit_cell(area: int) -> tuple[int, int]:
     """Cell size for the current size: the columns share the width of `area` px."""
     if area <= 0:
         return cell_size()
-    width = area // size_columns(area)[size_level(area) - 1]
+    width = (area - 1) // size_columns(area)[size_level(area) - 1]   # 1px spare: if the columns fit exactly, Qt drops one
     return width, round((width - CELL_PAD_W) * POSTER_H / POSTER_W) + CELL_PAD_H
 
 
