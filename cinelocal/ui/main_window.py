@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
         settings.clicked.connect(lambda: self.open_settings())
         bar.addWidget(self.search, 1)
         bar.addWidget(self.advanced_btn)
-        self.surprise_btn = QPushButton("Surprise me")
+        self.surprise_btn = IconButton("surprise", box=TOOL_BOX, size=TOOL_ICON)
         self.surprise_btn.setToolTip("Open a random movie of what is shown (one you have not watched, if there is any)")
         bar.addWidget(self.surprise_btn)
         bar.addWidget(QLabel("Sort:"))

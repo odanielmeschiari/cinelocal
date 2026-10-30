@@ -50,15 +50,16 @@ QPushButton:checked { background: $accent_dark; border-color: $accent; }
 QPushButton:disabled { color: $muted; background: $surface; border-color: $surface2; }
 QPushButton[primary="true"] { background: $accent; border-color: $accent; color: $bg; font-weight: 600; }
 QPushButton[primary="true"]:hover { background: $accent_hover; border-color: $accent_hover; }
-QPushButton#iconBtn { background: transparent; border: none; padding: 0; font-size: 26pt; }
-QPushButton#iconBtn:hover { background: $surface2; border: none; }
-QPushButton#iconBtn:pressed { background: $surface3; }
-QPushButton#plainIcon { background: transparent; border: none; padding: 0 6px; font-size: 26pt; }
-QPushButton#plainIcon:hover { background: transparent; color: $accent_hover; }
-QPushButton#plainIcon:pressed { background: transparent; color: $accent; }
-QPushButton#bigIcon { background: transparent; border: none; padding: 0; font-size: 22pt; }
-QPushButton#bigIcon:hover { background: transparent; color: $accent_hover; }
-QPushButton#bigIcon:checked { background: transparent; color: $accent_hover; }
+QPushButton#iconBtn { background: transparent; border: none; border-radius: 8px; padding: 0; font-size: 26pt; }
+QPushButton#iconBtn:hover { background: rgba(255, 255, 255, 26); border: none; }
+QPushButton#iconBtn:pressed { background: rgba(255, 255, 255, 46); }
+QPushButton#plainIcon { background: transparent; border: none; border-radius: 8px; padding: 0 6px; font-size: 26pt; }
+QPushButton#plainIcon:hover { background: rgba(255, 255, 255, 26); color: $accent_hover; }
+QPushButton#plainIcon:pressed { background: rgba(255, 255, 255, 46); color: $accent; }
+QPushButton#bigIcon { background: transparent; border: none; border-radius: 8px; padding: 0; font-size: 22pt; }
+QPushButton#bigIcon:checked { color: $accent_hover; }
+QPushButton#bigIcon:hover { background: rgba(255, 255, 255, 26); color: $accent_hover; }
+QPushButton#bigIcon:pressed { background: rgba(255, 255, 255, 46); }
 QPushButton::menu-indicator, QToolButton::menu-indicator { image: none; width: 0; }
 
 QTreeWidget#sidebar { background: $surface; border: none; outline: 0; padding: 10px 6px; }
