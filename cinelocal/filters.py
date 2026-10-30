@@ -121,8 +121,9 @@ def matches_advanced(movie: dict, adv: dict, membership: dict[int, set[int]],
         return False
     if adv.get("in_progress") and not (progress and progress(movie) > 0):
         return False
-    if "collections" in adv and not any(movie["id"] in membership.get(c, ()) for c in adv["collections"]):
-        return False
+    for key in ("collections", "lists"):
+        if key in adv and not any(movie["id"] in membership.get(c, ()) for c in adv[key]):
+            return False
     if "tags" in adv and not {tag["id"] for tag in movie.get("tags", ())} & set(adv["tags"]):
         return False
     if "stars" in adv and (movie.get("user_rating") or 0) not in adv["stars"]:

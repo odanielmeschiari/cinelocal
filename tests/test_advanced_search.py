@@ -55,6 +55,8 @@ class AdvancedFilterTests(unittest.TestCase):
         self.assertEqual(self.ids({"certifications": ["PG"]}), [2])
         self.assertEqual(self.ids({"watched": False, "favorite": True}), [1])
         self.assertEqual(self.ids({"collections": [7]}), [2])
+        self.assertEqual(self.ids({"lists": [7]}), [2])
+        self.assertEqual(self.ids({"collections": [7], "lists": [8]}), [])
         self.assertEqual(self.ids({"stars": [0]}), [1, -3])
         self.assertEqual(self.ids({"stars": [4]}), [2])
 

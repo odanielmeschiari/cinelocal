@@ -356,13 +356,17 @@ class AdvancedSearch(QWidget):
         self.added_days = NumberField((7, 30, 90, 180, 365), 1, 1, 36500, label=lambda v: f"{v} days")
         form.addLayout(_row("Added in the last", self.added_days, "days"))
         s = self.service
-        self.collections = CheckList(
-            [(c["id"], f"{c['name']}  ({len(s.membership.get(c['id'], ()))})") for c in sorted(s.collections, key=lambda c: normalize_text(c["name"]))],
-            "You have not created any collections or lists yet.")
+        def mine(kind: str) -> list[tuple]:
+            return [(c["id"], f"{c['name']}  ({len(s.membership.get(c['id'], ()))})")
+                    for c in sorted(s.collections, key=lambda c: normalize_text(c["name"]))
+                    if c.get("kind", "collection") == kind]
+        self.collections = CheckList(mine("collection"), "You have not created any collections yet.")
+        self.lists = CheckList(mine("list"), "You have not created any lists yet.")
         self.tags = CheckList(options["tags"], "You have not created any tags yet.")
         self.stars = CheckList([(v, star_text(v) if v else "Not rated")
                                 for v in (5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5, 0)])
-        pair(("My collections and lists", self.collections), ("My tags", self.tags), ("My rating", self.stars))
+        pair(("My collections", self.collections), ("My lists", self.lists))
+        pair(("My tags", self.tags), ("My rating", self.stars))
 
         # -- footer --
         foot = QHBoxLayout()
@@ -392,7 +396,7 @@ class AdvancedSearch(QWidget):
         for w in (self.genres_all, self.favorite, self.watchlist, self.in_progress):
             w.toggled.connect(self._changed)
         for w in (self.genres, self.certs, self.countries, self.languages, self.directors, self.cast,
-                  self.collections, self.tags, self.stars):
+                  self.collections, self.lists, self.tags, self.stars):
             w.changed.connect(self._changed)
 
     # ---------------------------------------------------------------------- criteria --
@@ -405,7 +409,7 @@ class AdvancedSearch(QWidget):
     def _lists(self) -> dict:
         return {"genres": self.genres, "certifications": self.certs, "countries": self.countries,
                 "languages": self.languages, "directors": self.directors, "cast": self.cast,
-                "collections": self.collections, "tags": self.tags, "stars": self.stars}
+                "collections": self.collections, "lists": self.lists, "tags": self.tags, "stars": self.stars}
 
     def criteria(self) -> dict:
         c: dict = {}
@@ -437,8 +441,9 @@ class AdvancedSearch(QWidget):
     def load(self, c: dict) -> None:
         self._loading = True
         self.kind.setCurrentIndex(max(0, self.kind.findData(c.get("kind"))))
-        for key, widget in self._lists().items():
-            widget.set_checked(c.get(key, ()))
+        for key, widget in self._lists().items():   # (searches saved before had the lists under "collections")
+            same = ("collections", "lists") if key in ("collections", "lists") else (key,)
+            widget.set_checked([v for k in same for v in c.get(k, ())])
         self.genres_all.setChecked(bool(c.get("genres_all")))
         exact = c.get("year_min") is not None and c.get("year_min") == c.get("year_max")
         self.year_mode.setCurrentIndex(1 if exact else 0)

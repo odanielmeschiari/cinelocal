@@ -13,6 +13,7 @@ from ..utils import normalize_text
 from .advanced_search import check_icon
 
 _ON = Qt.UserRole + 2
+ROW_HEIGHT = 18   # px of a row of a CheckList (the 3 px of spacing are added above and below)
 
 
 class CheckList(QListWidget):
@@ -28,6 +29,7 @@ class CheckList(QListWidget):
 
     def add(self, text: str, key: int, on: bool) -> None:
         item = QListWidgetItem(text)
+        item.setSizeHint(QSize(0, ROW_HEIGHT))   # fixed, so the rows never change size (not even after a click)
         item.setData(Qt.UserRole, key)
         item.setData(Qt.UserRole + 1, normalize_text(text))   # what the filter searches
         self.mark(item, on)
