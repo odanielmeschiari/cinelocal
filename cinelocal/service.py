@@ -713,18 +713,18 @@ class LibraryService(QObject):
         self.run_async(job, done, failed)
 
     # -- collections ------------------------------------------------------------------
-    def create_collection(self, name: str) -> int:
+    def create_collection(self, name: str, kind: str = "collection") -> int:
         name = name.strip()
         if not name:
-            raise ValueError("Enter a name for the collection.")
-        collection_id = self.db.create_collection(name)
+            raise ValueError(f"Enter a name for the {kind}.")
+        collection_id = self.db.create_collection(name, kind)
         self._reload_collections()
         return collection_id
 
     def rename_collection(self, collection_id: int, name: str) -> None:
         name = name.strip()
         if not name:
-            raise ValueError("Enter a name for the collection.")
+            raise ValueError(f"Enter a name for the {self.collection_kind(collection_id)}.")
         self.db.rename_collection(collection_id, name)
         self._reload_collections()
 
@@ -735,6 +735,10 @@ class LibraryService(QObject):
 
     def collection_name(self, collection_id: int) -> str:
         return next((c["name"] for c in self.collections if c["id"] == collection_id), "")
+
+    def collection_kind(self, collection_id: int) -> str:
+        """\"collection\" or \"list\" (the same thing, but a list is curated by the user, never made automatically)."""
+        return next((c.get("kind", "collection") for c in self.collections if c["id"] == collection_id), "collection")
 
     def set_in_collection(self, collection_id: int, movie_ids: list[int], present: bool) -> None:
         self.db.set_membership(collection_id, movie_ids, present)

@@ -273,6 +273,7 @@ class MainWindow(QMainWindow):
         self.sidebar.filter_changed.connect(self._on_filter)
         self.sidebar.sort_requested.connect(self._sort_sidebar)
         self.sidebar.new_collection_requested.connect(lambda: ask_new_collection(self, s))
+        self.sidebar.new_list_requested.connect(lambda: ask_new_collection(self, s, "list"))
         self.sidebar.rename_collection_requested.connect(lambda cid: ask_rename_collection(self, s, cid))
         self.sidebar.configure_collection_requested.connect(self._configure_collection)
         self.sidebar.delete_collection_requested.connect(self._delete_collection)
@@ -623,7 +624,8 @@ class MainWindow(QMainWindow):
         covers = s.settings.get("collection_covers") or {}
         dialog = CollectionDialog(s.collection_name(collection_id),
                                   filters.collection_mode(self._group_ids(), covers, collection_id),
-                                  images.collection_cover(collection_id) is not None, self)
+                                  images.collection_cover(collection_id) is not None, self,
+                                  s.collection_kind(collection_id))
         if not dialog.exec():
             return
         if dialog.mode() == "cover" and dialog.new_cover:
@@ -1062,8 +1064,9 @@ class MainWindow(QMainWindow):
         group = filters.group_of(ids[0]) if len(ids) == 1 else None
         if group is not None:   # the poster of a grouped collection
             menu = QMenu(self)
-            menu.addAction("Open collection", lambda: self._open_filter(("collection", group)))
-            menu.addAction("Configure collection…", lambda: self._configure_collection(group))
+            noun = s.collection_kind(group)
+            menu.addAction(f"Open {noun}", lambda: self._open_filter(("collection", group)))
+            menu.addAction(f"Configure {noun}…", lambda: self._configure_collection(group))
             menu.exec(global_pos)
             return
         movies = [s.by_id[i] for i in ids if i in s.by_id]
@@ -1093,6 +1096,7 @@ class MainWindow(QMainWindow):
         if all(i > 0 for i in ids):   # collections only hold movies
             collections_menu = menu.addMenu("Collections")
             populate_collections_menu(collections_menu, s, ids, self)
+            populate_collections_menu(menu.addMenu("Lists"), s, ids, self, "list")
             tags_menu = menu.addMenu("Tags")
             for tag in s.tags:
                 action = tags_menu.addAction(tag["name"])
@@ -1103,7 +1107,7 @@ class MainWindow(QMainWindow):
             tags_menu.addSeparator()
             tags_menu.addAction("Create tag…", lambda: self._create_tag_for(ids))
         if self.flt[0] == "collection":
-            menu.addAction("Remove from this collection",
+            menu.addAction(f"Remove from this {s.collection_kind(self.flt[1])}",
                            lambda: s.set_in_collection(self.flt[1], ids, False))
         menu.addSeparator()
         menu.addAction("Update metadata", lambda: self._refresh_ids(ids))

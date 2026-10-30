@@ -36,11 +36,12 @@ class HomeDialog(QDialog):
         root.addWidget(note)
 
         titles = dict(section_options(service))
+        kinds = {f"collection:{c['id']}": c.get("kind", "collection") for c in service.collections}
         order = [k for k in enabled if k in titles] + [k for k in titles if k not in enabled]
         self.list = QListWidget()
         self.list.setIconSize(QSize(16, 16))
         for key in order:
-            item = QListWidgetItem(titles[key] + ("  (collection)" if key.startswith("collection:") else ""))
+            item = QListWidgetItem(titles[key] + (f"  ({kinds[key]})" if key in kinds else ""))
             item.setData(_KEY, key)
             item.setSizeHint(QSize(0, 36))   # the stylesheet padding isn't counted otherwise: rows overlapped
             self._mark(item, key in enabled)

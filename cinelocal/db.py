@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS series (
 CREATE TABLE IF NOT EXISTS collections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'collection'   -- 'collection' (franchises) or 'list' (curated by the user)
 );
 
 CREATE TABLE IF NOT EXISTS collection_movies (
@@ -187,6 +188,11 @@ class Database:
                     self._conn.commit()
                 except sqlite3.OperationalError:
                     pass
+            try:   # migration: databases created before the lists lack the column
+                self._conn.execute("ALTER TABLE collections ADD COLUMN kind TEXT NOT NULL DEFAULT 'collection'")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_movies_series ON movies(series_id)")
 
     # -- infra ---------------------------------------------------------------
@@ -393,7 +399,7 @@ class Database:
 
     # -- collections ------------------------------------------------------------
     def all_collections(self) -> list[dict]:
-        rows = self._query("SELECT id, name FROM collections ORDER BY name COLLATE NOCASE")
+        rows = self._query("SELECT id, name, kind FROM collections ORDER BY name COLLATE NOCASE")
         return [dict(r) for r in rows]
 
     def membership(self) -> dict[int, set[int]]:
@@ -402,18 +408,18 @@ class Database:
             result.setdefault(r["collection_id"], set()).add(r["movie_id"])
         return result
 
-    def create_collection(self, name: str) -> int:
+    def create_collection(self, name: str, kind: str = "collection") -> int:
         try:
-            return self._run("INSERT INTO collections (name, created_at) VALUES (?, ?)",
-                             (name, time.time())).lastrowid
+            return self._run("INSERT INTO collections (name, created_at, kind) VALUES (?, ?, ?)",
+                             (name, time.time(), kind)).lastrowid
         except sqlite3.IntegrityError:
-            raise ValueError(f"A collection named “{name}” already exists.") from None
+            raise ValueError(f"A collection or list named “{name}” already exists.") from None
 
     def rename_collection(self, collection_id: int, name: str) -> None:
         try:
             self._run("UPDATE collections SET name = ? WHERE id = ?", (name, collection_id))
         except sqlite3.IntegrityError:
-            raise ValueError(f"A collection named “{name}” already exists.") from None
+            raise ValueError(f"A collection or list named “{name}” already exists.") from None
 
     def delete_collection(self, collection_id: int) -> None:
         self._run("DELETE FROM collections WHERE id = ?", (collection_id,))

@@ -147,7 +147,7 @@ class MovieDialog(QWidget):
         self.list_btn.setCheckable(True)
         self.list_btn.toggled.connect(lambda on: self.service.set_flag([self.movie_id], "watchlist", on))
         self.coll_btn = IconButton("collections")
-        self.coll_btn.setToolTip("Collections")
+        self.coll_btn.setToolTip("Collections and lists")
         coll_menu = QMenu(self.coll_btn)
         coll_menu.aboutToShow.connect(lambda: self._fill_collections(coll_menu))
         self.coll_btn.setMenu(coll_menu)
@@ -385,6 +385,8 @@ class MovieDialog(QWidget):
     def _fill_collections(self, menu: QMenu) -> None:
         menu.clear()
         populate_collections_menu(menu, self.service, [self.movie_id], self)
+        menu.addSeparator()
+        populate_collections_menu(menu.addMenu("Lists"), self.service, [self.movie_id], self, "list")
 
     def _open_trailer(self) -> None:
         key = self.service.by_id[self.movie_id]["trailer_key"]

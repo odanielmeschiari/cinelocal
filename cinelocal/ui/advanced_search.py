@@ -358,11 +358,11 @@ class AdvancedSearch(QWidget):
         s = self.service
         self.collections = CheckList(
             [(c["id"], f"{c['name']}  ({len(s.membership.get(c['id'], ()))})") for c in sorted(s.collections, key=lambda c: normalize_text(c["name"]))],
-            "You have not created any collections yet.")
+            "You have not created any collections or lists yet.")
         self.tags = CheckList(options["tags"], "You have not created any tags yet.")
         self.stars = CheckList([(v, star_text(v) if v else "Not rated")
                                 for v in (5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5, 0)])
-        pair(("My collections", self.collections), ("My tags", self.tags), ("My rating", self.stars))
+        pair(("My collections and lists", self.collections), ("My tags", self.tags), ("My rating", self.stars))
 
         # -- footer --
         foot = QHBoxLayout()

@@ -9,7 +9,7 @@ OPTIONS = (
     ("metadata", "Metadata and covers", "Posters, backdrops and info; downloaded again if an API key is set."),
     ("history", "Watch history", "Watched marks and “Continue watching” positions."),
     ("favorites", "Favorites and watchlist", ""),
-    ("collections", "Collections", "The movies themselves stay in the library."),
+    ("collections", "Collections and lists", "The movies themselves stay in the library."),
     ("tags", "Tags", "Tags and their colors; the movies stay in the library."),
     ("reviews", "My reviews", "Your stars and comments."),
     ("settings", "Settings", "Movies folder, API keys, language, players and remembered tracks."),
