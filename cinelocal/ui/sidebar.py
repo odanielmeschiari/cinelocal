@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont
-from PySide6.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel, QMenu, QToolButton, QTreeWidget,
-                               QTreeWidgetItem, QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QHBoxLayout, QMenu, QSizePolicy, QToolButton,
+                               QTreeWidget, QTreeWidgetItem, QWidget)
 
 from ..filters import Filter
 from ..utils import normalize_text, star_text
@@ -132,7 +132,7 @@ class Sidebar(QTreeWidget):
 
     def _header(self, text: str, sort_key: str | None = None) -> None:
         """A section heading; with `sort_key`, it has a small button to choose how the section is ordered."""
-        item = QTreeWidgetItem(["" if sort_key else text])
+        item = QTreeWidgetItem([text])   # the text is the item's own, so the row has the same size as any other
         item.setFlags(Qt.ItemIsEnabled)
         font = QFont(self.font())
         font.setBold(True)
@@ -140,25 +140,23 @@ class Sidebar(QTreeWidget):
         item.setFont(0, font)
         item.setForeground(0, QBrush(QColor(COLORS["muted"])))
         self.addTopLevelItem(item)
-        if sort_key:
+        if sort_key:   # a transparent layer over the row (the text shows through) holding only the button
             box = QWidget()
+            box.setStyleSheet("background: transparent;")
             row = QHBoxLayout(box)
-            row.setContentsMargins(0, 0, 6, 0)
-            label = QLabel(text)
-            label.setFont(font)
-            label.setStyleSheet(f"color: {COLORS['muted']}; background: transparent;")
+            row.setContentsMargins(0, 0, 0, 0)
             button = QToolButton()
             button.setText("⇅")
+            button.setFont(font)
             button.setToolTip("Sort")
             button.setCursor(Qt.PointingHandCursor)
             button.setFocusPolicy(Qt.NoFocus)
+            button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Ignored)
             button.setStyleSheet(f"QToolButton {{ border: none; background: transparent; color: {COLORS['muted']};"
-                                 f" padding: 0 4px; }} QToolButton:hover {{ color: {COLORS['accent_hover']}; }}")
+                                 f" padding: 0 4px; margin: 0; }} QToolButton:hover {{ color: {COLORS['accent_hover']}; }}")
             button.clicked.connect(lambda _checked=False, b=button, k=sort_key: self._pick_sort(b, k))
-            row.addWidget(label)
             row.addStretch(1)
             row.addWidget(button)
-            item.setSizeHint(0, box.sizeHint())
             self.setItemWidget(item, 0, box)
 
     def _pick_sort(self, button, key: str) -> None:
