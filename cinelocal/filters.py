@@ -24,6 +24,7 @@ SORT_OPTIONS = [
     ("myrating_desc", "My rating (highest)", "user_rating", True),
     ("myrating_asc", "My rating (lowest)", "user_rating", False),
     ("match_desc", "Best match for you", "match", True),
+    ("manual", "Manual order (lists)", "title", False),   # in a list: its own order; elsewhere: by title
 ]
 _SORT_BY_ID = {o[0]: o for o in SORT_OPTIONS}
 
@@ -201,6 +202,12 @@ def _sort_value(movie: dict, field: str, match: dict | None = None):
     if field == "popularity":
         return (movie.get("extra") or {}).get("popularity")
     return movie["added_at"]
+
+
+def sort_by_order(movies: list[dict], order: list[int]) -> list[dict]:
+    """The movies in the order of the ids in `order` (any that is not there goes last)."""
+    place = {movie_id: n for n, movie_id in enumerate(order)}
+    return sorted(movies, key=lambda m: place.get(m["id"], len(place)))
 
 
 def sort_movies(movies: list[dict], sort_id: str, match: dict | None = None) -> list[dict]:

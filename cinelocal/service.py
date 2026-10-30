@@ -749,6 +749,21 @@ class LibraryService(QObject):
             members.difference_update(movie_ids)
         self.library_changed.emit()
 
+    def collection_order(self, collection_id: int) -> list[int]:
+        """The movies of a collection in its manual order: the order they were added, until the user moves them."""
+        return self.db.collection_order(collection_id)
+
+    def move_in_collection(self, collection_id: int, movie_id: int, target_id: int) -> None:
+        """Puts a movie where `target_id` is in the manual order; the ones in between move over."""
+        order = self.db.collection_order(collection_id)
+        if movie_id == target_id or movie_id not in order or target_id not in order:
+            return
+        place = order.index(target_id)
+        order.remove(movie_id)
+        order.insert(place, movie_id)
+        self.db.set_collection_order(collection_id, order)
+        self.library_changed.emit()
+
     def _reload_collections(self) -> None:
         self.collections = self.db.all_collections()
         self.membership = self.db.membership()

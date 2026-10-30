@@ -93,8 +93,8 @@ QProgressBar { background: $surface2; border: none; border-radius: 4px; max-heig
 QProgressBar::chunk { background: $accent; border-radius: 4px; }
 QStatusBar { background: $surface; border-top: 1px solid $border; }
 QStatusBar::item { border: none; }
-QCheckBox::indicator, QListWidget::indicator { width: 16px; height: 16px; border: 1px solid $muted; background: $surface; }
-QCheckBox::indicator:checked, QListWidget::indicator:checked { image: url($check); border-color: $accent; }
+QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid $muted; background: $surface; }
+QCheckBox::indicator:checked { image: url($check); border-color: $accent; }
 QRadioButton::indicator { width: 16px; height: 16px; border: 1px solid $muted; border-radius: 9px; background: $surface; }
 QRadioButton::indicator:checked { border-color: $accent; background: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5,
     fx: 0.5, fy: 0.5, stop: 0 $accent, stop: 0.5 $accent, stop: 0.6 $surface, stop: 1 $surface); }

@@ -1,13 +1,13 @@
 """Edit a tag's name, color, and movie membership."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QColorDialog, QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-                               QListWidget, QListWidgetItem, QMessageBox, QPushButton, QVBoxLayout)
+                               QMessageBox, QPushButton, QVBoxLayout)
 
 from ..service import LibraryService
 from ..utils import normalize_text
+from .dialogs import CheckList
 
 
 class TagDialog(QDialog):
@@ -37,22 +37,16 @@ class TagDialog(QDialog):
         self.search = QLineEdit()
         self.search.setPlaceholderText("Filter movies…")
         self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(self._filter)
         root.addWidget(self.search)
-        self.movies = QListWidget()
-        self.movies.setSpacing(6)
+        self.movies = CheckList()
+        self.search.textChanged.connect(self.movies.filter)
         members = {movie_id for movie_id, tag_ids in service.tag_membership.items() if tag_id in tag_ids}
         for movie in sorted((m for m in service.movies if m["id"] > 0),
                             key=lambda m: (normalize_text(m["display_title"]), m["id"])):
             title = movie["display_title"]
             if movie.get("display_year"):
                 title += f" ({movie['display_year']})"
-            item = QListWidgetItem(title)
-            item.setData(Qt.UserRole, movie["id"])
-            item.setData(Qt.UserRole + 1, normalize_text(title))
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Checked if movie["id"] in members else Qt.Unchecked)
-            self.movies.addItem(item)
+            self.movies.add(title, movie["id"], movie["id"] in members)
         root.addWidget(self.movies, 1)
 
         buttons = QHBoxLayout()
@@ -73,12 +67,6 @@ class TagDialog(QDialog):
             self.color_preview.setText(self.color)
             self.color_preview.setStyleSheet(f"color: {self.color}; font-weight: 700;")
 
-    def _filter(self, text: str) -> None:
-        terms = normalize_text(text).split()
-        for index in range(self.movies.count()):
-            item = self.movies.item(index)
-            item.setHidden(not all(term in item.data(Qt.UserRole + 1) for term in terms))
-
     def _save(self) -> None:
         try:
             self.service.rename_tag(self.tag_id, self.name.text())
@@ -88,11 +76,7 @@ class TagDialog(QDialog):
 
         if self.color != self.tag["color"]:
             self.service.set_tag_color(self.tag_id, self.color)
-        selected = {
-            self.movies.item(index).data(Qt.UserRole)
-            for index in range(self.movies.count())
-            if self.movies.item(index).checkState() == Qt.Checked
-        }
+        selected = self.movies.checked()
         current = {movie_id for movie_id, tag_ids in self.service.tag_membership.items()
                    if self.tag_id in tag_ids}
         self.service.set_movie_tags(sorted(selected - current), self.tag_id, True)

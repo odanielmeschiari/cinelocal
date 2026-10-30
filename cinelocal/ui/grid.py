@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from collections import OrderedDict
 
-from PySide6.QtCore import (QAbstractAnimation, QAbstractListModel, QEasingCurve, QEvent, QModelIndex, QPoint,
-                            QPropertyAnimation, QRect, QRectF, QSize, Qt, QVariantAnimation, Signal)
-from PySide6.QtGui import (QColor, QFont, QFontMetrics, QLinearGradient,
+from PySide6.QtCore import (QAbstractAnimation, QAbstractListModel, QEasingCurve, QEvent, QMimeData, QModelIndex,
+                            QPoint, QPropertyAnimation, QRect, QRectF, QSize, Qt, QVariantAnimation, Signal)
+from PySide6.QtGui import (QColor, QDrag, QFont, QFontMetrics, QLinearGradient,
                            QPainter, QPainterPath, QPen, QPixmap)
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QListView, QScrollArea, QStyle,
                                QStyledItemDelegate)
@@ -21,6 +21,7 @@ DEFAULT_TARGET = 180   # the size used until the user picks one
 MIN_POSTER_W, MAX_POSTER_W = 96, 320   # no size may make the posters smaller or larger than this
 GROW_SCALE = 0.05   # the poster under the mouse grows by this much (5%)
 MAX_CACHED_POSTERS = 900
+MOVE_MIME = "application/x-cinelocal-movie"   # what is dragged to put a movie of a list in another place
 MATCH_ROLE = Qt.UserRole + 1   # model role: how much (%) the title matches the user's taste, if it is being shown
 PEEK_GAP = 10   # space (px) between the posters of a row that shows half a poster at its end (see MovieRow)
 STACK_STEP = 10   # how far (px) each cover of a collection's pile peeks out to the right of the one in front (at 100%)
@@ -312,6 +313,7 @@ class MovieGrid(QListView):
     movie_opened = Signal(int)
     metrics_changed = Signal()   # the size of the cells changed (zoom, or the window was resized)
     context_requested = Signal(list, QPoint)   # selected ids, global position
+    reorder_requested = Signal(int, int)   # a movie was dropped on another one: ids of both
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -424,6 +426,37 @@ class MovieGrid(QListView):
         self._dirty(self._grown_row)
         self._reset_grown()
         super().hideEvent(event)
+
+    # -- manual order (the movies of a list can be dragged) ------------------------------------------------
+    def set_reorderable(self, on: bool) -> None:
+        self.setDragEnabled(on)
+        self.setAcceptDrops(on)
+
+    def startDrag(self, actions) -> None:
+        index = self.currentIndex()
+        if not index.isValid():
+            return
+        mime = QMimeData()
+        mime.setData(MOVE_MIME, str(self._model.movie_at(index.row())["id"]).encode())
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        drag.setPixmap(self.viewport().grab(self.visualRect(index)).scaledToWidth(96, Qt.SmoothTransformation))
+        drag.exec(Qt.MoveAction)
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasFormat(MOVE_MIME):
+            event.acceptProposedAction()
+
+    dragMoveEvent = dragEnterEvent
+
+    def dropEvent(self, event) -> None:
+        target = self.indexAt(event.position().toPoint())
+        if not event.mimeData().hasFormat(MOVE_MIME) or not target.isValid():
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self.reorder_requested.emit(int(bytes(event.mimeData().data(MOVE_MIME)).decode()),
+                                    self._model.movie_at(target.row())["id"])
 
     def selected_ids(self) -> list[int]:
         rows = sorted(i.row() for i in self.selectionModel().selectedIndexes())

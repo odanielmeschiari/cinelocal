@@ -14,6 +14,7 @@ _NEW_COLLECTION = ("new_collection", None)
 _NEW_LIST = ("new_list", None)
 _VALUE_ROLE = Qt.UserRole + 1
 _HEADER_ROLE = Qt.UserRole + 2   # True on the headings
+_SECTION_ROLE = Qt.UserRole + 3  # the heading of the section an item belongs to (on the heading itself too)
 _RULE_COLOR = "#4a4a4a"   # the thin line under each heading
 # What the user can hide from the sidebar (Settings): (key, label). "All movies" is always there.
 SIDEBAR_OPTIONS = (("continue", "Continue watching"), ("foryou", "For you"), ("favorites", "Favorites"),
@@ -63,6 +64,7 @@ class Sidebar(QTreeWidget):
     edit_tag_requested = Signal(int)
     delete_tag_requested = Signal(int)
     sort_requested = Signal(str, str)   # section key, mode (see SORT_MODES)
+    collapsed_changed = Signal(list)    # headings of the closed sections
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -81,6 +83,8 @@ class Sidebar(QTreeWidget):
         self._rebuilding = False
         self._sorts: dict = {}
         self._kinds: dict[int, str] = {}   # id of a collection -> "collection" or "list"
+        self.collapsed: set[str] = set()   # headings of the sections that are closed
+        self._section = ""
 
     @property
     def current_filter(self) -> Filter:
@@ -161,6 +165,7 @@ class Sidebar(QTreeWidget):
                 for name, n, _value in self._ordered(key, [(name, n, name) for name, n in counts[key]]):
                     self._entry(name, (kind, name), n)
 
+        self._apply_collapsed()
         self._select(current)
         self._rebuilding = False
         QTimer.singleShot(0, lambda: self.verticalScrollBar().setValue(scroll))   # once the list has its size
@@ -182,6 +187,8 @@ class Sidebar(QTreeWidget):
         item.setFont(0, font)
         item.setForeground(0, QBrush(QColor(COLORS["muted"])))
         item.setData(0, _HEADER_ROLE, True)
+        item.setData(0, _SECTION_ROLE, text)
+        self._section = text
         self.addTopLevelItem(item)
         if sort_key:   # a transparent layer over the row (the text shows through) holding only the button
             box = QWidget()
@@ -220,7 +227,19 @@ class Sidebar(QTreeWidget):
         item.setData(0, Qt.UserRole, data[0])
         item.setData(0, _VALUE_ROLE, data[1])
         item.setToolTip(0, label)
+        item.setData(0, _SECTION_ROLE, self._section)
         self.addTopLevelItem(item)
+
+    def _apply_collapsed(self) -> None:
+        """Shows the arrow of each heading (open or closed) and hides the entries of the closed sections."""
+        for i in range(self.topLevelItemCount()):
+            item = self.topLevelItem(i)
+            section = item.data(0, _SECTION_ROLE)
+            closed = section in self.collapsed
+            if item.data(0, _HEADER_ROLE):
+                item.setText(0, f"{'▸' if closed else '▾'} {section}")
+            else:
+                item.setHidden(closed)
 
     @staticmethod
     def _filter_of(item) -> Filter | None:
@@ -247,6 +266,12 @@ class Sidebar(QTreeWidget):
     # -- events --------------------------------------------------------------------------
     def _on_item_clicked(self, item, _column) -> None:
         if self._rebuilding or item is None:
+            return
+        if item.data(0, _HEADER_ROLE):   # a heading opens or closes its section
+            section = item.data(0, _SECTION_ROLE)
+            self.collapsed ^= {section}
+            self._apply_collapsed()
+            self.collapsed_changed.emit(sorted(self.collapsed))
             return
         data = self._filter_of(item)
         if data is None:

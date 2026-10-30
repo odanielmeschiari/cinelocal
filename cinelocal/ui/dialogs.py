@@ -3,13 +3,56 @@ from __future__ import annotations
 
 import os
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (QDialog, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QMessageBox, QMenu, QPushButton, QRadioButton, QVBoxLayout, QWidget)
 
 from ..service import LibraryService
 from ..utils import normalize_text
+from .advanced_search import check_icon
+
+_ON = Qt.UserRole + 2
+
+
+class CheckList(QListWidget):
+    """Rows with a box on the left: it is an icon, so it is always the same size, and a click anywhere on the row
+    (or Space) checks or unchecks it."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSpacing(3)
+        self.setSelectionMode(QListWidget.NoSelection)
+        self.setIconSize(QSize(16, 16))
+        self.itemClicked.connect(lambda item: self.mark(item, not item.data(_ON)))
+
+    def add(self, text: str, key: int, on: bool) -> None:
+        item = QListWidgetItem(text)
+        item.setData(Qt.UserRole, key)
+        item.setData(Qt.UserRole + 1, normalize_text(text))   # what the filter searches
+        self.mark(item, on)
+        self.addItem(item)
+
+    @staticmethod
+    def mark(item: QListWidgetItem, on: bool) -> None:
+        item.setData(_ON, on)
+        item.setIcon(check_icon(on))
+
+    def checked(self) -> set[int]:
+        items = (self.item(i) for i in range(self.count()))
+        return {item.data(Qt.UserRole) for item in items if item.data(_ON)}
+
+    def filter(self, text: str) -> None:
+        terms = normalize_text(text).split()
+        for i in range(self.count()):
+            item = self.item(i)
+            item.setHidden(not all(term in item.data(Qt.UserRole + 1) for term in terms))
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Space and self.currentItem() is not None:
+            self.mark(self.currentItem(), not self.currentItem().data(_ON))
+            return
+        super().keyPressEvent(event)
 
 
 class MovieSelectionDialog(QDialog):
@@ -23,23 +66,17 @@ class MovieSelectionDialog(QDialog):
         self.search = QLineEdit()
         self.search.setPlaceholderText("Filter movies…")
         self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(self._filter)
         root.addWidget(self.search)
 
-        self.movies = QListWidget()
-        self.movies.setSpacing(3)
+        self.movies = CheckList()
+        self.search.textChanged.connect(self.movies.filter)
         for movie in sorted(movies, key=lambda m: (normalize_text(m["display_title"]), m["id"])):
             title_text = movie["display_title"]
             if movie.get("display_year"):
                 title_text += f" ({movie['display_year']})"
             if movie.get("kind") == "series":
                 title_text += " [Series]"
-            item = QListWidgetItem(title_text)
-            item.setData(Qt.UserRole, movie["id"])
-            item.setData(Qt.UserRole + 1, normalize_text(title_text))
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Checked if movie["id"] in selected_ids else Qt.Unchecked)
-            self.movies.addItem(item)
+            self.movies.add(title_text, movie["id"], movie["id"] in selected_ids)
         root.addWidget(self.movies, 1)
 
         buttons = QHBoxLayout()
@@ -54,17 +91,7 @@ class MovieSelectionDialog(QDialog):
         root.addLayout(buttons)
 
     def selected_ids(self) -> set[int]:
-        return {
-            self.movies.item(index).data(Qt.UserRole)
-            for index in range(self.movies.count())
-            if self.movies.item(index).checkState() == Qt.Checked
-        }
-
-    def _filter(self, text: str) -> None:
-        terms = normalize_text(text).split()
-        for index in range(self.movies.count()):
-            item = self.movies.item(index)
-            item.setHidden(not all(term in item.data(Qt.UserRole + 1) for term in terms))
+        return self.movies.checked()
 
 
 class CollectionDialog(QDialog):

@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS collection_movies (
     collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
     movie_id INTEGER NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
     added_at REAL NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,   -- the manual order of a list (the order the movies were added, until dragged)
     PRIMARY KEY (collection_id, movie_id)
 );
 
@@ -190,6 +191,15 @@ class Database:
                     pass
             try:   # migration: databases created before the lists lack the column
                 self._conn.execute("ALTER TABLE collections ADD COLUMN kind TEXT NOT NULL DEFAULT 'collection'")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
+            try:   # migration: the manual order of the lists starts as the order the movies were added
+                self._conn.execute("ALTER TABLE collection_movies ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
+                self._conn.execute(
+                    "UPDATE collection_movies SET position = (SELECT COUNT(*) FROM collection_movies c"
+                    " WHERE c.collection_id = collection_movies.collection_id"
+                    " AND (c.added_at, c.rowid) < (collection_movies.added_at, collection_movies.rowid))")
                 self._conn.commit()
             except sqlite3.OperationalError:
                 pass
@@ -408,6 +418,16 @@ class Database:
             result.setdefault(r["collection_id"], set()).add(r["movie_id"])
         return result
 
+    def collection_order(self, collection_id: int) -> list[int]:
+        """The movies of a collection in its manual order."""
+        return [r["movie_id"] for r in self._query(
+            "SELECT movie_id FROM collection_movies WHERE collection_id = ?"
+            " ORDER BY position, added_at, movie_id", (collection_id,))]
+
+    def set_collection_order(self, collection_id: int, movie_ids: list[int]) -> None:
+        self._many("UPDATE collection_movies SET position = ? WHERE collection_id = ? AND movie_id = ?",
+                   [(n, collection_id, i) for n, i in enumerate(movie_ids)])
+
     def create_collection(self, name: str, kind: str = "collection") -> int:
         try:
             return self._run("INSERT INTO collections (name, created_at, kind) VALUES (?, ?, ?)",
@@ -427,9 +447,11 @@ class Database:
     def set_membership(self, collection_id: int, movie_ids: list[int], present: bool) -> None:
         if present:
             now = time.time()
+            last = self._query("SELECT COALESCE(MAX(position), -1) AS n FROM collection_movies"
+                               " WHERE collection_id = ?", (collection_id,))[0]["n"]
             self._many("INSERT OR IGNORE INTO collection_movies"
-                       " (collection_id, movie_id, added_at) VALUES (?, ?, ?)",
-                       [(collection_id, i, now) for i in movie_ids])
+                       " (collection_id, movie_id, added_at, position) VALUES (?, ?, ?, ?)",
+                       [(collection_id, i, now, last + 1 + n) for n, i in enumerate(movie_ids)])
         else:
             self._many("DELETE FROM collection_movies WHERE collection_id = ? AND movie_id = ?",
                        [(collection_id, i) for i in movie_ids])

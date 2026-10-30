@@ -272,6 +272,8 @@ class MainWindow(QMainWindow):
         s = self.service
         self.sidebar.filter_changed.connect(self._on_filter)
         self.sidebar.sort_requested.connect(self._sort_sidebar)
+        self.sidebar.collapsed = set(s.settings.get("collapsed_sidebar") or [])
+        self.sidebar.collapsed_changed.connect(lambda keys: s.settings.update(collapsed_sidebar=keys))
         self.sidebar.new_collection_requested.connect(lambda: ask_new_collection(self, s))
         self.sidebar.new_list_requested.connect(lambda: ask_new_collection(self, s, "list"))
         self.sidebar.rename_collection_requested.connect(lambda cid: ask_rename_collection(self, s, cid))
@@ -283,6 +285,7 @@ class MainWindow(QMainWindow):
         self.advanced_btn.clicked.connect(self._open_advanced)
         self.sort_combo.currentIndexChanged.connect(self._on_sort)
         self.grid.movie_opened.connect(self._open_from_grid)
+        self.grid.reorder_requested.connect(self._move_in_list)
         self.grid.context_requested.connect(self._context_menu)
         self.grid.metrics_changed.connect(self._sync_zoom_controls)
         self.grid.itemDelegate().progress_of = s.progress_of
@@ -453,6 +456,11 @@ class MainWindow(QMainWindow):
                                         self.query, self.service.progress_of, self.advanced,
                                         self.service.history_stamp)
         visible = filters.sort_movies(visible, self.sort_id, scores)
+        manual = (self.sort_id == "manual" and self.flt[0] == "collection"
+                  and self.service.collection_kind(self.flt[1]) == "list")   # a list in its own order: drag to move
+        if manual:
+            visible = filters.sort_by_order(visible, self.service.collection_order(self.flt[1]))
+        self.grid.set_reorderable(manual)
         if self.flt[0] == "continue":   # the one you watched last comes first
             visible.sort(key=lambda m: -self.service.last_played(m))
         elif self.flt[0] == "history":   # most recently watched first
@@ -711,6 +719,9 @@ class MainWindow(QMainWindow):
         self.advanced = criteria
         self.advanced_btn.setChecked(bool(criteria))
         self.refresh_view()
+
+    def _move_in_list(self, movie_id: int, target_id: int) -> None:
+        self.service.move_in_collection(self.flt[1], movie_id, target_id)
 
     def _on_sort(self) -> None:
         self.sort_id = self.sort_combo.currentData()
