@@ -73,7 +73,7 @@ DEFAULT_SETTINGS = {
     "group_auto_collections": False,   # also group the automatic (franchise) collections there
     "collection_covers": {},         # str(collection id) -> "cover" (own poster); anything else = stack of covers
     "separate_collections": [],      # ids of the collections that are never grouped (even with the option above)
-    "grid_zoom": 100,                # size of the posters, in percent (buttons at the bottom of the window)
+    "grid_size": 0,                  # size of the posters: 1 (smallest), 2, 3... (buttons at the bottom); 0 = not chosen
     "hidden_badges": [],             # marks not shown on the posters: "match", "rating", "user_rating", "favorite", ...
     "sidebar_sort": {},              # sidebar section ("genres", "cast", ...) -> "count" (default), "az" or "za"
     "hidden_sidebar": ["cast", "directors"],   # sidebar entries/sections not shown: "foryou", "genres", "cast", ...

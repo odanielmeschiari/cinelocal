@@ -18,7 +18,7 @@ from .advanced_search import AdvancedSearch
 from .dialogs import (CollectionDialog, MovieSelectionDialog, ask_new_collection, ask_rename_collection,
                       confirm_delete_collection, populate_collections_menu)
 from .duplicates_dialog import DuplicatesDialog
-from .grid import ZOOM_LEVELS, MovieFlow, cell_size, set_zoom
+from .grid import MovieFlow, set_zoom, size_columns, size_level
 from .home import HomeSection
 from .home_dialog import HomeDialog
 from .icons import IconButton
@@ -283,6 +283,7 @@ class MainWindow(QMainWindow):
         self.sort_combo.currentIndexChanged.connect(self._on_sort)
         self.grid.movie_opened.connect(self._open_from_grid)
         self.grid.context_requested.connect(self._context_menu)
+        self.grid.metrics_changed.connect(self._sync_zoom_controls)
         self.grid.itemDelegate().progress_of = s.progress_of
         self._apply_view_options()
         self.grid.selectionModel().currentChanged.connect(self._reveal_current)
@@ -419,7 +420,7 @@ class MainWindow(QMainWindow):
         """Keyboard navigation: scrolls the page to the current movie."""
         if index.isValid():
             center = self.grid.viewport().mapTo(self.grid_content, self.grid.visualRect(index).center())
-            self.grid_page.ensureVisible(center.x(), center.y(), 0, cell_size()[1] // 2)
+            self.grid_page.ensureVisible(center.x(), center.y(), 0, self.grid.gridSize().height() // 2)
 
     def _scope(self) -> tuple[list[dict], filters.Filter]:
         """What the current section searches in: the whole library, or just the picks of "For you"."""
@@ -586,12 +587,7 @@ class MainWindow(QMainWindow):
         self._apply_zoom()
 
     def _apply_zoom(self) -> None:
-        percent = self.service.settings.get("grid_zoom")
-        percent = percent if percent in ZOOM_LEVELS else 100
-        set_zoom(percent)
-        self.zoom_label.setText(f"{percent}%")
-        self.zoom_out.setEnabled(percent > ZOOM_LEVELS[0])
-        self.zoom_in.setEnabled(percent < ZOOM_LEVELS[-1])
+        set_zoom(self.service.settings.get("grid_size") or 0)
         bar = self.grid_page.verticalScrollBar()
         ratio = bar.value() / bar.maximum() if bar.maximum() else 0
         for grid in [self.grid] + [section.row for section in self._home_rows.values()]:
@@ -600,11 +596,18 @@ class MainWindow(QMainWindow):
             self._detail.similar.row.apply_metrics()
         QTimer.singleShot(0, lambda: bar.setValue(round(ratio * bar.maximum())))   # stays around the same movies
 
+    def _sync_zoom_controls(self) -> None:
+        """The sizes available depend on the width of the window, so this also runs when it is resized."""
+        area = self.grid.viewport().width()
+        level, count = size_level(area), len(size_columns(area))
+        self.zoom_label.setText(f"{level}/{count}")
+        self.zoom_out.setEnabled(level > 1)
+        self.zoom_in.setEnabled(level < count)
+
     def _step_zoom(self, direction: int) -> None:
-        percent = self.service.settings.get("grid_zoom")
-        index = ZOOM_LEVELS.index(percent) if percent in ZOOM_LEVELS else ZOOM_LEVELS.index(100)
-        index = max(0, min(len(ZOOM_LEVELS) - 1, index + direction))
-        self.service.settings.update(grid_zoom=ZOOM_LEVELS[index])
+        area = self.grid.viewport().width()
+        level = max(1, min(len(size_columns(area)), size_level(area) + direction))
+        self.service.settings.update(grid_size=level)
         self._apply_zoom()
 
     def _group_ids(self) -> list[int]:

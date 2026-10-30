@@ -15,30 +15,62 @@ from .icons import draw_icon
 from .theme import COLORS
 
 POSTER_W, POSTER_H = 180, 270   # poster size at 100% zoom
-CELL_PAD_W, CELL_PAD_H = 24, 76   # what a cell adds around its poster: side margins; room for the title and subtitle
-ZOOM_LEVELS = (60, 70, 80, 90, 100, 110, 120, 140, 160)   # what the "-" and "+" buttons step through (percent)
+CELL_PAD_W, CELL_PAD_H = 18, 76   # what a cell adds around its poster: the space between posters; room for the title and subtitle
+SIZE_TARGETS = (108, 126, 144, 162, 180, 198, 216, 252, 288)   # poster widths the sizes 1, 2, 3... aim for
+DEFAULT_TARGET = 180   # the size used until the user picks one
+MIN_POSTER_W, MAX_POSTER_W = 96, 320   # no size may make the posters smaller or larger than this
 GROW_SCALE = 0.05   # the poster under the mouse grows by this much (5%)
 MAX_CACHED_POSTERS = 900
 MATCH_ROLE = Qt.UserRole + 1   # model role: how much (%) the title matches the user's taste, if it is being shown
 PEEK_GAP = 10   # space (px) between the posters of a row that shows half a poster at its end (see MovieRow)
 STACK_STEP = 10   # how far (px) each cover of a collection's pile peeks out to the right of the one in front (at 100%)
 
-_zoom = 100   # shared by every grid and row, so they always match
+_size = 0   # the size picked by the user (1 = smallest); 0: not picked yet. Shared by every grid and row
 
 
-def set_zoom(percent: int) -> None:
-    global _zoom
-    _zoom = percent
+def set_zoom(size: int) -> None:
+    global _size
+    _size = size
 
 
 def poster_size() -> tuple[int, int]:
-    width = round(POSTER_W * _zoom / 100)
+    """The poster width the current size aims for (a grid adjusts it a little so that its columns fill the width)."""
+    width = SIZE_TARGETS[min(_size, len(SIZE_TARGETS)) - 1] if _size > 0 else DEFAULT_TARGET
     return width, round(width * POSTER_H / POSTER_W)
 
 
 def cell_size() -> tuple[int, int]:
     width, height = poster_size()
     return width + CELL_PAD_W, height + CELL_PAD_H
+
+
+def size_columns(area: int) -> list[int]:
+    """How many columns each size has in a width of `area` px, from size 1 (the most columns, smallest posters) up.
+    Every size has a different number of columns, so each one looks different, and the space between the posters
+    is always the same. Sizes that would make the posters too small or too large for this width are left out."""
+    options: list[int] = []
+    for target in SIZE_TARGETS:
+        columns = max(1, round(area / (target + CELL_PAD_W)))
+        if columns not in options and MIN_POSTER_W <= area // columns - CELL_PAD_W <= MAX_POSTER_W:
+            options.append(columns)
+    return options or [max(1, round(area / (DEFAULT_TARGET + CELL_PAD_W)))]
+
+
+def size_level(area: int) -> int:
+    """The size (1 = smallest) in use in a width of `area` px."""
+    options = size_columns(area)
+    if _size > 0:
+        return min(_size, len(options))
+    wanted = max(1, round(area / (DEFAULT_TARGET + CELL_PAD_W)))
+    return min(range(len(options)), key=lambda i: abs(options[i] - wanted)) + 1
+
+
+def fit_cell(area: int) -> tuple[int, int]:
+    """Cell size for the current size: the columns share the width of `area` px."""
+    if area <= 0:
+        return cell_size()
+    width = area // size_columns(area)[size_level(area) - 1]
+    return width, round((width - CELL_PAD_W) * POSTER_H / POSTER_W) + CELL_PAD_H
 
 
 class MovieModel(QAbstractListModel):
@@ -278,6 +310,7 @@ class MovieDelegate(QStyledItemDelegate):
 
 class MovieGrid(QListView):
     movie_opened = Signal(int)
+    metrics_changed = Signal()   # the size of the cells changed (zoom, or the window was resized)
     context_requested = Signal(list, QPoint)   # selected ids, global position
 
     def __init__(self, parent=None):
@@ -317,19 +350,20 @@ class MovieGrid(QListView):
 
     # -- size of the cells: the zoom, and the leftover width shared among the columns -------------------
     def apply_metrics(self) -> None:
-        """Cell size for the current zoom. Whatever width is left after the last whole column is spread over
-        the cells, so every row (and every home row above) ends exactly at the right edge of the window."""
+        """Cell size for the current size: the columns fill the width, so every row (and every home row above)
+        ends exactly at the right edge of the window, with always the same space between the posters."""
         width, height = self._cell_for(self.viewport().width())
         if self.gridSize() != QSize(width, height):
             self.setGridSize(QSize(width, height))
         self.viewport().update()
+        self.metrics_changed.emit()
 
     def _cell_for(self, available: int) -> tuple[int, int]:
-        width, height = cell_size()
-        return max(width, available // max(1, available // width)), height
+        return fit_cell(available)
 
     def poster_dims(self) -> tuple[int, int]:
-        return poster_size()
+        width = self.gridSize().width() - CELL_PAD_W
+        return width, round(width * POSTER_H / POSTER_W)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -490,9 +524,7 @@ class MovieRow(MovieGrid):
         return width, round((width - PEEK_GAP) * POSTER_H / POSTER_W) + CELL_PAD_H
 
     def poster_dims(self) -> tuple[int, int]:
-        if not self._peek:
-            return super().poster_dims()
-        width = self.gridSize().width() - PEEK_GAP
+        width = self.gridSize().width() - (PEEK_GAP if self._peek else CELL_PAD_W)
         return width, round(width * POSTER_H / POSTER_W)
 
     def apply_metrics(self) -> None:
