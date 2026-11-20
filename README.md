@@ -12,7 +12,8 @@ Get just the file for your system from the [latest release](../../releases/lates
 
 - **Windows 10/11**: `CineLocal-windows-x86_64-setup.exe` — double-click it and follow the wizard (no administrator
   rights; adds CineLocal to the Start Menu). Windows SmartScreen may warn about an unknown publisher:
-  *More info → Run anyway*.
+  *More info → Run anyway*. If Windows 11 says *"Smart App Control blocked an app that may not be safe"*, see
+  [Smart App Control](#smart-app-control-windows-11) below.
 - **Linux Mint / Ubuntu / Debian (x86_64)**: `CineLocal-linux-x86_64.deb` — double-click it (Software Manager) or run
   `sudo apt install ./CineLocal-linux-x86_64.deb`. It installs the few system libraries it needs.
 - **Portable, no installation** (other distros too): `CineLocal-windows-x86_64-portable.zip` or
@@ -22,11 +23,28 @@ Get just the file for your system from the [latest release](../../releases/lates
 The built-in player is already included. The app is a folder (not a single file) on purpose: a single file would have
 to unpack itself to a temporary folder on every launch, which makes it slow to open.
 
+### Smart App Control (Windows 11)
+
+Smart App Control only runs programs signed by a trusted publisher (or known to Microsoft) and has no "Run anyway"
+button. Releases signed by the maintainers open normally. If your copy is blocked (an unsigned build, such as one
+you built yourself), you can either:
+
+- turn it off in *Settings → Privacy & security → Windows Security → App & browser control → Smart App Control*
+  (Windows does not let you turn it back on without reinstalling Windows), or
+- run CineLocal from the source (see *Installation from source (Windows 10/11)* below).
+
 ### Publishing a release (maintainers)
 
 1. `git tag v<version> && git push --tags` — GitHub Actions builds the app with PyInstaller (`cinelocal.spec`, with
    VLC bundled) and attaches to a new release the Windows installer (`installer/cinelocal.iss`, Inno Setup), the
    Linux `.deb` (`packaging/build-deb.sh`) and the two portable archives.
+   On Windows the executables, libraries and installers are signed with
+   [Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/) (`packaging/sign-windows.ps1`), which
+   is what Smart App Control requires. One-time setup: create an Artifact Signing account and certificate profile
+   (identity validation included), register a GitHub OIDC federated credential for an app that has the *Artifact
+   Signing Certificate Profile Signer* role, then in the repository add the **variables** `SIGN_ENDPOINT`
+   (e.g. `https://eus.codesigning.azure.net/`), `SIGN_ACCOUNT` and `SIGN_PROFILE`, and the **secrets**
+   `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID`. Without them the Windows files are published unsigned.
 2. To build locally instead: install VLC (set `VLC_DIR` if it is not in the default place), then
    `pip install pyinstaller && pyinstaller --noconfirm cinelocal.spec` (the app folder is `dist/CineLocal/`).
    Then `packaging/build-deb.sh <version>` (Linux) or `iscc /DAppVersion=<version> installer\cinelocal.iss`

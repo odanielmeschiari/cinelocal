@@ -1,5 +1,6 @@
 ; Inno Setup script (https://jrsoftware.org/isinfo.php): builds dist\CineLocal-windows-x86_64-setup.exe from the
 ; PyInstaller folder dist\CineLocal.   iscc /DAppVersion=1.12.0 installer\cinelocal.iss
+; Add /DSign and /Ssigntool=<command> to sign Setup.exe and the uninstaller (the CI does it, see release.yml).
 ; Per-user install (no administrator rights). The uninstaller (Settings > Apps) asks whether to also delete the data.
 #ifndef AppVersion
   #define AppVersion "0.0.0"
@@ -23,6 +24,11 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 DisableProgramGroupPage=yes
+#ifdef Sign
+; Smart App Control blocks unsigned programs, the uninstaller included
+SignTool=signtool
+SignedUninstaller=yes
+#endif
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: unchecked

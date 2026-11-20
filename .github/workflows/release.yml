@@ -1,6 +1,9 @@
 # Builds the Windows installer (Setup.exe) and the Linux .deb, plus portable archives of both, and publishes
 # them as a GitHub Release.
 # Usage: git tag v1.12.0 && git push --tags
+# Windows signing (needed by Smart App Control, see README): set the repository variables SIGN_ENDPOINT, SIGN_ACCOUNT and
+# SIGN_PROFILE and the secrets AZURE_CLIENT_ID, AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID. Without them the build still
+# works, but the Windows files are published unsigned.
 name: Release
 
 on:
@@ -9,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write   # Azure login (OIDC) for the code signing
 
 jobs:
   build:
@@ -17,6 +21,10 @@ jobs:
       matrix:
         os: [ubuntu-22.04, windows-latest]   # the oldest Ubuntu keeps the binary working on older distros
     runs-on: ${{ matrix.os }}
+    env:
+      SIGN_ENDPOINT: ${{ vars.SIGN_ENDPOINT }}
+      SIGN_ACCOUNT: ${{ vars.SIGN_ACCOUNT }}
+      SIGN_PROFILE: ${{ vars.SIGN_PROFILE }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -33,6 +41,20 @@ jobs:
         run: choco install vlc -y --no-progress
       - run: pip install -r requirements.txt "pyinstaller>=6.9"
       - run: pyinstaller --noconfirm cinelocal.spec
+      - name: Azure login (code signing)
+        if: runner.os == 'Windows' && vars.SIGN_ACCOUNT != ''
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign the Windows executables (Azure Artifact Signing)
+        if: runner.os == 'Windows' && vars.SIGN_ACCOUNT != ''
+        run: |
+          pwsh -File packaging\sign-windows.ps1 -Setup
+          pwsh -File packaging\sign-windows.ps1 -Folder dist\CineLocal
+          $sig = Get-AuthenticodeSignature dist\CineLocal\CineLocal.exe
+          if ($sig.Status -ne "Valid") { throw "CineLocal.exe is not signed correctly: $($sig.Status)" }
       - name: Check the built-in player of the packaged app (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -54,7 +76,13 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           choco install innosetup -y --no-progress
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$($env:GITHUB_REF_NAME.TrimStart('v'))" installer\cinelocal.iss
+          $iscc = @("/DAppVersion=$($env:GITHUB_REF_NAME.TrimStart('v'))")
+          if ($env:SIGN_ACCOUNT) {
+            # Inno Setup signs Setup.exe and the uninstaller by calling this command ($f is the file, $q a quote)
+            $iscc += "/DSign", "/Ssigntool=pwsh -File $env:GITHUB_WORKSPACE\packaging\sign-windows.ps1 -Path `$q`$f`$q"
+          }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" @iscc installer\cinelocal.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
           Compress-Archive -Path dist\CineLocal -DestinationPath dist\CineLocal-windows-x86_64-portable.zip
       - uses: actions/upload-artifact@v6
         with:
